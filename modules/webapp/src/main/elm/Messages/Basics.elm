@@ -1,4 +1,14 @@
-module Messages.Basics exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Basics exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 
 type alias Texts =
@@ -32,6 +42,7 @@ type alias Texts =
     , concerning : String
     , customFields : String
     , direction : String
+    , folderNotOwnerWarning : String
     }
 
 
@@ -67,4 +78,52 @@ gb =
     , concerning = "Concerning"
     , customFields = "Custom Fields"
     , direction = "Direction"
+    , folderNotOwnerWarning =
+        """
+You are **not a member** of this folder. This item will be **hidden**
+from any search now. Use a folder where you are a member of to make this
+item visible. This message will disappear then.
+                      """
+    }
+
+
+de : Texts
+de =
+    { incoming = "Eingehend"
+    , outgoing = "Ausgehend"
+    , tags = "Tags"
+    , items = "Dokumente"
+    , submit = "Speichern"
+    , submitThisForm = "Formular abschicken"
+    , cancel = "Abbrechen"
+    , delete = "Löschen"
+    , created = "Erstellt"
+    , edit = "Ändern"
+    , back = "Zurück"
+    , backToList = "Zurück zur Liste"
+    , searchPlaceholder = "Suche…"
+    , selectPlaceholder = "Auswahl…"
+    , id = "ID"
+    , ok = "Ok"
+    , yes = "Ja"
+    , no = "Nein"
+    , chooseTag = "Wähle einen Tag…"
+    , loading = "Laden…"
+    , name = "Name"
+    , organization = "Organisation"
+    , person = "Person"
+    , equipment = "Ausstattung"
+    , folder = "Ordner"
+    , date = "Datum"
+    , correspondent = "Korrespondent"
+    , concerning = "Betreffend"
+    , customFields = "Benutzerfelder"
+    , direction = "Richtung"
+    , folderNotOwnerWarning =
+        """
+Du bist *kein* Mitglied dieses Ordners. Dokumnte, welche durch diese
+URL hochgeladen werden, sind für dich in der Suche *nicht* sichtbar.
+Nutze lieber einen Ordner, dem Du als Mitglied zugeordnet bist. Diese
+Nachricht verschwindet dann.
+                      """
     }

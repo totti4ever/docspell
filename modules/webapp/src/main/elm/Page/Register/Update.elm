@@ -1,19 +1,23 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.Register.Update exposing (update)
 
 import Api
-import Api.Model.BasicResult exposing (BasicResult)
 import Data.Flags exposing (Flags)
 import Page exposing (Page(..))
 import Page.Register.Data exposing (..)
-import Util.Http
 
 
 update : Flags -> Msg -> Model -> ( Model, Cmd Msg )
 update flags msg model =
     case msg of
         RegisterSubmit ->
-            case model.errorMsg of
-                [] ->
+            case model.formState of
+                InputValid ->
                     let
                         reg =
                             { collectiveName = model.collId
@@ -35,7 +39,7 @@ update flags msg model =
                 err =
                     validateForm m
             in
-            ( { m | errorMsg = err }, Cmd.none )
+            ( { m | formState = err }, Cmd.none )
 
         SetLogin str ->
             let
@@ -45,7 +49,7 @@ update flags msg model =
                 err =
                     validateForm m
             in
-            ( { m | errorMsg = err }, Cmd.none )
+            ( { m | formState = err }, Cmd.none )
 
         SetPass1 str ->
             let
@@ -55,7 +59,7 @@ update flags msg model =
                 err =
                     validateForm m
             in
-            ( { m | errorMsg = err }, Cmd.none )
+            ( { m | formState = err }, Cmd.none )
 
         SetPass2 str ->
             let
@@ -65,7 +69,7 @@ update flags msg model =
                 err =
                     validateForm m
             in
-            ( { m | errorMsg = err }, Cmd.none )
+            ( { m | formState = err }, Cmd.none )
 
         SetInvite str ->
             ( { model
@@ -98,29 +102,21 @@ update flags msg model =
                         Cmd.none
             in
             ( { m
-                | result =
+                | formState =
                     if r.success then
-                        Nothing
+                        RegistrationSuccessful
 
                     else
-                        Just r
+                        GenericError r.message
               }
             , cmd
             )
 
         SubmitResp (Err err) ->
-            let
-                errMsg =
-                    Util.Http.errorToString err
-
-                res =
-                    BasicResult False
-                        (errMsg ++ " Please check the form and try again.")
-            in
-            ( { model | result = Just res }, Cmd.none )
+            ( { model | formState = HttpError err }, Cmd.none )
 
 
-validateForm : Model -> List String
+validateForm : Model -> FormState
 validateForm model =
     if
         model.collId
@@ -132,10 +128,10 @@ validateForm model =
             || model.pass2
             == ""
     then
-        [ "All fields are required!" ]
+        FormEmpty
 
     else if model.pass1 /= model.pass2 then
-        [ "The passwords do not match." ]
+        PasswordMismatch
 
     else
-        []
+        InputValid

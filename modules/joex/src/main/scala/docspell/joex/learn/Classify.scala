@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.learn
 
 import java.nio.file.Path
@@ -5,6 +11,7 @@ import java.nio.file.Path
 import cats.data.OptionT
 import cats.effect._
 import cats.implicits._
+import fs2.io.file.Files
 
 import docspell.analysis.classifier.{ClassifierModel, TextClassifier}
 import docspell.common._
@@ -15,8 +22,7 @@ import bitpeace.RangeDef
 
 object Classify {
 
-  def apply[F[_]: Sync: ContextShift](
-      blocker: Blocker,
+  def apply[F[_]: Async](
       logger: Logger[F],
       workingDir: Path,
       store: Store[F],
@@ -36,7 +42,7 @@ object Classify {
       cls <- OptionT(File.withTempDir(workingDir, "classify").use { dir =>
         val modelFile = dir.resolve("model.ser.gz")
         modelData
-          .through(fs2.io.file.writeAll(modelFile, blocker))
+          .through(Files[F].writeAll(modelFile))
           .compile
           .drain
           .flatMap(_ => classifier.classify(logger, ClassifierModel(modelFile), text))

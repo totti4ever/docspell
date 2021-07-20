@@ -1,5 +1,17 @@
-module Messages.Comp.CalEventInput exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
 
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.CalEventInput exposing
+    ( Texts
+    , de
+    , gb
+    )
+
+import Http
+import Messages.Comp.HttpError
 import Messages.DateFormat as DF
 import Messages.UiLanguage
 
@@ -15,6 +27,7 @@ type alias Texts =
     , schedule : String
     , next : String
     , formatDateTime : Int -> String
+    , httpError : Http.Error -> String
     }
 
 
@@ -30,4 +43,21 @@ gb =
     , schedule = "Schedule"
     , next = "Next"
     , formatDateTime = DF.formatDateTimeLong Messages.UiLanguage.English
+    , httpError = Messages.Comp.HttpError.gb
+    }
+
+
+de : Texts
+de =
+    { weekday = "Wochentag"
+    , year = "Jahr"
+    , month = "Monat"
+    , day = "Tag"
+    , hour = "Stunde"
+    , minute = "Minute"
+    , error = "Fehler"
+    , schedule = "Zeitplan"
+    , next = "Nächste Zeiten"
+    , formatDateTime = DF.formatDateTimeLong Messages.UiLanguage.German
+    , httpError = Messages.Comp.HttpError.de
     }

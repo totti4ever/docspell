@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import cats.data.OptionT
@@ -62,7 +68,7 @@ trait OUserTask[F[_]] {
 
 object OUserTask {
 
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       store: UserTaskStore[F],
       queue: JobQueue[F],
       joex: OJoex[F]

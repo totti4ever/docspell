@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.convert
 
 import java.nio.charset.StandardCharsets
@@ -5,6 +11,7 @@ import java.nio.file.{Files, Path}
 
 import cats.data.Kleisli
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import fs2.{Pipe, Stream}
 
 import docspell.common.MimeType

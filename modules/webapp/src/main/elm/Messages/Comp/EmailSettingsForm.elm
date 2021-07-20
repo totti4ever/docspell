@@ -1,4 +1,14 @@
-module Messages.Comp.EmailSettingsForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.EmailSettingsForm exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.SSLType exposing (SSLType)
 import Messages.Basics
@@ -42,7 +52,29 @@ gb =
     , fromAddress = "From Address"
     , fromAddressPlaceholder = "Sender E-Mail address"
     , replyTo = "Reply-To"
-    , replyToPlaceholder = "Optional reply-to E-Mail address"
+    , replyToPlaceholder = "Optional Reply-To E-Mail address"
     , ssl = "SSL"
     , ignoreCertCheck = "Ignore certificate check"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , sslTypeLabel = Messages.Data.SSLType.de
+    , connectionPlaceholder = "Name der Verbindung, z.B. 'gmail.com'"
+    , connectionNameInfo = "Der Name muss eine gültige ID sein, es dürfen keine Leer- oder Sonderzeichen verwendet werden."
+    , smtpHost = "SMTP-Server"
+    , smtpHostPlaceholder = "SMTP-Server, z.B. 'mail.gmail.com'"
+    , smtpPort = "SMTP-Port"
+    , smtpUser = "SMTP-Benutzer"
+    , smtpUserPlaceholder = "SMTP-Benutzername, z.B. 'your.name@gmail.com'"
+    , smtpPassword = "SMTP-Passwort"
+    , smtpPasswordPlaceholder = "Passwort"
+    , fromAddress = "Absenderadresse"
+    , fromAddressPlaceholder = "E-Mail-Adresse des Absenders"
+    , replyTo = "Antwort an"
+    , replyToPlaceholder = "Optionale Antwortadresse"
+    , ssl = "SSL"
+    , ignoreCertCheck = "Zertifikatsprüfung ignorieren"
     }

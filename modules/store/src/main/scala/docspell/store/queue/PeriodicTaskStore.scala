@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.queue
 
 import cats.effect._
@@ -9,7 +15,6 @@ import docspell.store.queries.QPeriodicTask
 import docspell.store.records._
 import docspell.store.{AddResult, Store}
 
-import com.github.eikek.fs2calev._
 import org.log4s.getLogger
 
 trait PeriodicTaskStore[F[_]] {
@@ -83,13 +88,7 @@ object PeriodicTaskStore {
       def unmark(job: RPeriodicTask): F[Unit] =
         for {
           now <- Timestamp.current[F]
-          nextRun <-
-            CalevFs2
-              .nextElapses[F](now.atUTC)(job.timer)
-              .take(1)
-              .compile
-              .last
-              .map(_.map(Timestamp.from))
+          nextRun = job.timer.nextElapse(now.atUTC).map(Timestamp.from)
           _ <- store.transact(QPeriodicTask.unsetWorker(job.id, nextRun))
         } yield ()
 

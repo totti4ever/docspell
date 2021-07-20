@@ -1,7 +1,19 @@
-module Messages.Page.CollectiveSettings exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
 
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Page.CollectiveSettings exposing
+    ( Texts
+    , de
+    , gb
+    )
+
+import Http
 import Messages.Basics
 import Messages.Comp.CollectiveSettingsForm
+import Messages.Comp.HttpError
 import Messages.Comp.SourceManage
 import Messages.Comp.UserManage
 
@@ -11,6 +23,7 @@ type alias Texts =
     , userManage : Messages.Comp.UserManage.Texts
     , collectiveSettingsForm : Messages.Comp.CollectiveSettingsForm.Texts
     , sourceManage : Messages.Comp.SourceManage.Texts
+    , httpError : Http.Error -> String
     , collectiveSettings : String
     , insights : String
     , sources : String
@@ -19,6 +32,8 @@ type alias Texts =
     , user : String
     , collective : String
     , size : String
+    , items : String
+    , submitSuccessful : String
     }
 
 
@@ -28,6 +43,7 @@ gb =
     , userManage = Messages.Comp.UserManage.gb
     , collectiveSettingsForm = Messages.Comp.CollectiveSettingsForm.gb
     , sourceManage = Messages.Comp.SourceManage.gb
+    , httpError = Messages.Comp.HttpError.gb
     , collectiveSettings = "Collective Settings"
     , insights = "Insights"
     , sources = "Sources"
@@ -36,4 +52,26 @@ gb =
     , user = "User"
     , collective = "Collective"
     , size = "Size"
+    , items = "Items"
+    , submitSuccessful = "Settings saved."
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , userManage = Messages.Comp.UserManage.de
+    , collectiveSettingsForm = Messages.Comp.CollectiveSettingsForm.de
+    , sourceManage = Messages.Comp.SourceManage.de
+    , httpError = Messages.Comp.HttpError.de
+    , collectiveSettings = "Kollektiveinstellungen"
+    , insights = "Statistiken"
+    , sources = "Quellen"
+    , settings = "Einstellungen"
+    , users = "Benutzer"
+    , user = "Benutzer"
+    , collective = "Kollektiv"
+    , size = "Größe"
+    , items = "Dokumente"
+    , submitSuccessful = "Einstellungen gespeichert."
     }

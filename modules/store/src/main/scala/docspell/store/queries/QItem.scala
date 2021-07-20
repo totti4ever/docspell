@@ -1,10 +1,16 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.queries
 
 import java.time.LocalDate
 
 import cats.data.{NonEmptyList => Nel}
+import cats.effect.Ref
 import cats.effect.Sync
-import cats.effect.concurrent.Ref
 import cats.implicits._
 import fs2.Stream
 

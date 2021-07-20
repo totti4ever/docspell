@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.LinkTarget exposing
     ( LinkTarget(..)
     , makeConcLink
@@ -102,7 +108,7 @@ makeCustomFieldLink :
     -> (LinkTarget -> msg)
     -> Html msg
 makeCustomFieldLink cv classes tagger =
-    Util.CustomField.renderValue1
+    Util.CustomField.renderValue2
         classes
         (tagger (LinkCustomField cv) |> Just)
         cv

@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.CustomFieldInput exposing
     ( FieldResult(..)
     , Model
@@ -24,6 +30,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import Messages.Comp.CustomFieldInput exposing (Texts)
 import Styles as S
+import Util.CustomField
 import Util.Maybe
 
 
@@ -267,18 +274,11 @@ update1 forSearch msg model =
 
         ( ToggleBool, BoolField b ) ->
             let
-                notb =
-                    not b
-
                 model_ =
-                    { model | fieldModel = BoolField notb }
+                    { model | fieldModel = BoolField (not b) }
 
                 value =
-                    if notb then
-                        "true"
-
-                    else
-                        "false"
+                    Util.CustomField.boolValue (not b)
             in
             UpdateResult model_ Cmd.none (Value value)
 

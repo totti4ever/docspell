@@ -1,4 +1,14 @@
-module Messages.Comp.OrgTable exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.OrgTable exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.OrgUse exposing (OrgUse)
 import Messages.Basics
@@ -9,6 +19,7 @@ type alias Texts =
     { basics : Messages.Basics.Texts
     , address : String
     , contact : String
+    , use : String
     , orgUseLabel : OrgUse -> String
     }
 
@@ -18,5 +29,16 @@ gb =
     { basics = Messages.Basics.gb
     , address = "Address"
     , contact = "Contact"
+    , use = "Use"
     , orgUseLabel = Messages.Data.OrgUse.gb
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , address = "Addresse"
+    , contact = "Kontakt"
+    , use = "Typ"
+    , orgUseLabel = Messages.Data.OrgUse.de
     }

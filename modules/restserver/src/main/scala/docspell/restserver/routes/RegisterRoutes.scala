@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.effect._
@@ -19,7 +25,7 @@ import org.log4s._
 object RegisterRoutes {
   private[this] val logger = getLogger
 
-  def apply[F[_]: Effect](backend: BackendApp[F], cfg: Config): HttpRoutes[F] = {
+  def apply[F[_]: Async](backend: BackendApp[F], cfg: Config): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 

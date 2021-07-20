@@ -1,4 +1,14 @@
-module Messages.Page.HomeSideMenu exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Page.HomeSideMenu exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Comp.ItemDetail.MultiEditMenu
 import Messages.Comp.SearchMenu
@@ -24,4 +34,16 @@ gb =
     , multiEditHeader = "Multi-Edit"
     , multiEditInfo = "Note that a change here immediatly affects all selected items on the right!"
     , close = "Close"
+    }
+
+
+de : Texts
+de =
+    { searchMenu = Messages.Comp.SearchMenu.de
+    , multiEdit = Messages.Comp.ItemDetail.MultiEditMenu.de
+    , editMode = "Änderungsmodus"
+    , resetSearchForm = "Suchformular zurücksetzen"
+    , multiEditHeader = "Mehrere Dokumente ändern"
+    , multiEditInfo = "Beachte, dass eine Änderung hier direkt auf alle gewählten Dokumente angwendet wird!"
+    , close = "Schließen"
     }

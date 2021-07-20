@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.qb.impl
 
 import cats.data.NonEmptyList
@@ -99,6 +105,19 @@ object ConditionBuilder {
             (SelectExprBuilder.column(c1), SelectExprBuilder.column(c2))
         }
         c1Frag ++ operator(op) ++ c2Frag
+
+      case Condition.CompareSelect(col, op, subsel) =>
+        val opFrag = operator(op)
+        val colFrag = op match {
+          case Operator.LowerLike =>
+            lower(col)
+          case Operator.LowerEq =>
+            lower(col)
+          case _ =>
+            SelectExprBuilder.build(col)
+        }
+        val sub = SelectBuilder(subsel)
+        colFrag ++ opFrag ++ sql"(" ++ sub ++ sql")"
 
       case Condition.InSubSelect(col, subsel) =>
         val sub = SelectBuilder(subsel)

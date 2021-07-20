@@ -2,9 +2,26 @@ openapi: 3.0.0
 
 info:
   title: Docspell
-  version: 0.23.0-SNAPSHOT
+  version: 0.25.0-SNAPSHOT
   description: |
-    This is the remote API to Docspell, a personal document organizer.
+    This is the remote API to Docspell. Docspell is a free document
+    management system focused on small groups or families.
+
+    The routes can be divided into protected, unprotected routes and
+    admin routes. The unprotected, or open routes are at `/open/*`
+    while the protected routes are at `/sec/*` and admin routes are at
+    `/admin/*`. Open routes don't require authenticated access and can
+    be used by any user. The protected routes require an authenticated
+    user. The admin routes require a special http header with a value
+    from the config file. They are disabled by default, you need to
+    specify a secret in order to enable admin routes.
+  license:
+    name: GPLv3
+    url: https://spdx.org/licenses/GPL-3.0-or-later.html
+
+externalDocs:
+  description: Docspell Homepage
+  url: https://docspell.org
 
 servers:
   - url: /api/v1
@@ -13,6 +30,7 @@ servers:
 paths:
   /api/info/version:
     get:
+      operationId: "api-info-version"
       tags: [ Information ]
       summary: Get version information.
       description: |
@@ -26,6 +44,7 @@ paths:
                 $ref: "#/components/schemas/VersionInfo"
   /open/auth/login:
     post:
+      operationId: "open-auth-login"
       tags: [ Authentication ]
       summary: Authenticate with account name and password.
       description: |
@@ -49,8 +68,9 @@ paths:
                 $ref: "#/components/schemas/AuthResult"
   /open/checkfile/{id}/{checksum}:
     get:
+      operationId: "open-checkfile-checksum-by-id"
       tags: [ Upload ]
-      summary: Check if a file is in docspell.
+      summary: Check if a file is in docspell (via source).
       description: |
         Checks if a file with the given SHA-256 checksum is in
         docspell. The id is a *source id* configured by a collective.
@@ -69,8 +89,9 @@ paths:
                 $ref: "#/components/schemas/CheckFileResult"
   /open/upload/item/{id}:
     post:
+      operationId: "open-upload-new-item-by-source"
       tags: [ Upload ]
-      summary: Upload files to docspell.
+      summary: Upload files to docspell (via source).
       description: |
         Upload a file to docspell for processing. The id is a *source
         id* configured by a collective. Files are submitted for
@@ -111,8 +132,9 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /open/upload/item/{itemId}/{id}:
     post:
+      operationId: "open-upload-to-item-by-source"
       tags: [ Upload ]
-      summary: Upload files to docspell.
+      summary: Upload files to an existing item (via source).
       description: |
         Upload a file to docspell for processing. The id is a *source
         id* configured by a collective. Files are submitted for
@@ -153,6 +175,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /admin/fts/reIndexAll:
     post:
+      operationId: "admin-fts-reindex-all"
       tags: [Full-Text Index, Admin]
       summary: Re-creates the full-text index.
       description: |
@@ -176,6 +199,7 @@ paths:
 
   /sec/fts/reIndex:
     post:
+      operationId: "sec-fts-reindex"
       tags: [Full-Text Index]
       summary: Re-creates the full-text index for the current collective
       description: |
@@ -193,8 +217,9 @@ paths:
 
   /sec/checkfile/{checksum}:
     get:
+      operationId: "sec-checkfile-by-checksum"
       tags: [ Upload ]
-      summary: Check if a file is in docspell.
+      summary: Check if a file is in docspell (authenticated).
       description: |
         Checks if a file with the given SHA-256 checksum is in
         docspell.
@@ -214,8 +239,9 @@ paths:
                 $ref: "#/components/schemas/CheckFileResult"
   /sec/upload/item:
     post:
+      operationId: "sec-upload-new-item"
       tags: [ Upload ]
-      summary: Upload files to docspell.
+      summary: Upload files to docspell (authenticated).
       description: |
         Upload files to docspell for processing. This route is meant
         for authenticated users that upload files to their account.
@@ -255,8 +281,9 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/upload/{itemId}:
     post:
+      operationId: "sec-upload-to-item"
       tags: [ Upload ]
-      summary: Upload files to docspell.
+      summary: Upload files to an existing item (authenticated).
       description: |
         Upload files to docspell for processing. This route is meant
         for authenticated users that upload files to their account.
@@ -299,6 +326,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /open/integration/item/{id}:
     get:
+      operationId: "open-integration-item-check-collective"
       tags: [ Integration Endpoint ]
       summary: Check if integration endpoint is available.
       description: |
@@ -325,8 +353,9 @@ paths:
         401:
           description: Unauthorized
     post:
-      tags: [ Integration Endpoint ]
-      summary: Upload files to docspell.
+      operationId: "open-integration-item-upload"
+      tags: [ Integration Endpoint, Upload ]
+      summary: Upload files to docspell (Integration Endpoint).
       description: |
         Upload a file to docspell for processing. The id is a
         *collective name*. This route only exists, if enabled by an
@@ -370,8 +399,9 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /open/integration/checkfile/{id}/{checksum}:
     get:
-      tags: [ Integration Endpoint ]
-      summary: Check if a file is in docspell.
+      operationId: "open-integration-checkfile-by-checksum"
+      tags: [ Integration Endpoint, Upload ]
+      summary: Check if a file is in docspell (Integration Endpoint).
       description: |
         Checks if a file with the given SHA-256 checksum is in
         docspell. The `id` is the *collective name*. This route only
@@ -394,6 +424,7 @@ paths:
 
   /open/signup/register:
     post:
+      operationId: "open-signup-register"
       tags: [ Registration ]
       summary: Register a new account.
       description: |
@@ -412,6 +443,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /open/signup/newinvite:
     post:
+      operationId: "open-signup-newinvite"
       tags: [ Registration ]
       summary: Generate a new invite.
       description: |
@@ -434,6 +466,7 @@ paths:
                 $ref: "#/components/schemas/InviteResult"
   /sec/auth/session:
     post:
+      operationId: "sec-auth-session"
       tags: [ Authentication ]
       summary: Authentication with a token
       description: |
@@ -450,6 +483,7 @@ paths:
                 $ref: "#/components/schemas/AuthResult"
   /sec/auth/logout:
     post:
+      operationId: "sec-auth-logout"
       tags: [ Authentication ]
       summary: Logout.
       description: |
@@ -463,6 +497,7 @@ paths:
 
   /sec/tag:
     get:
+      operationId: "sec-tag-get-all"
       tags: [ Tags ]
       summary: Get a list of tags
       description: |
@@ -479,6 +514,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TagList"
     post:
+      operationId: "sec-tag-new"
       tags: [ Tags ]
       summary: Create a new tag.
       description: |
@@ -499,6 +535,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-tag-edit"
       tags: [ Tags ]
       summary: Change an existing tag.
       description: |
@@ -520,6 +557,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/tag/{id}:
     delete:
+      operationId: "sec-tag-delete-by-id"
       tags: [ Tags ]
       summary: Delete a tag.
       description: |
@@ -537,6 +575,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/organization:
     get:
+      operationId: "sec-org-get-all"
       tags: [ Organization ]
       summary: Get a list of organizations.
       description: |
@@ -556,6 +595,7 @@ paths:
                   - $ref: "#/components/schemas/ReferenceList"
                   - $ref: "#/components/schemas/OrganizationList"
     post:
+      operationId: "sec-org-new"
       tags: [ Organization ]
       summary: Create a new organization.
       description: |
@@ -576,6 +616,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-org-edit"
       tags: [ Organization ]
       summary: Change an existing organization.
       description: |
@@ -597,6 +638,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/organization/{id}:
     get:
+      operationId: "sec-org-details"
       tags: [ Organization ]
       summary: Get a list of organizations.
       description: |
@@ -613,6 +655,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Organization"
     delete:
+      operationId: "sec-org-delete-by-id"
       tags: [ Organization ]
       summary: Delete a organization by its id.
       description: |
@@ -630,6 +673,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/person:
     get:
+      operationId: "sec-persion-get-all"
       tags: [ Person ]
       summary: Get a list of persons.
       description: |
@@ -649,6 +693,7 @@ paths:
                   - $ref: "#/components/schemas/ReferenceList"
                   - $ref: "#/components/schemas/PersonList"
     post:
+      operationId: "sec-person-new"
       tags: [ Person ]
       summary: Create a new person.
       description: |
@@ -669,6 +714,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-person-edit"
       tags: [ Person ]
       summary: Change an existing person.
       description: |
@@ -690,6 +736,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/person/{id}:
     get:
+      operationId: "sec-person-details"
       tags: [ Person ]
       summary: Get person details.
       description: |
@@ -706,6 +753,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Person"
     delete:
+      operationId: "sec-person-delete-by-id"
       tags: [ Person ]
       summary: Delete a person by its id.
       description: |
@@ -723,6 +771,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/equipment:
     get:
+      operationId: "sec-equip-get-all"
       tags: [ Equipment ]
       summary: Get a list of equipments
       description: |
@@ -739,6 +788,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EquipmentList"
     post:
+      operationId: "sec-equip-new"
       tags: [ Equipment ]
       summary: Create a new equipment.
       description: |
@@ -759,6 +809,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-equip-edit"
       tags: [ Equipment ]
       summary: Change an existing equipment.
       description: |
@@ -780,6 +831,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/equipment/{id}:
     get:
+      operationId: "sec-equip-details"
       tags: [ Equipment ]
       summary: Get details about a single equipment.
       description: |
@@ -797,6 +849,7 @@ paths:
                 $ref: "#/components/schemas/Equipment"
 
     delete:
+      operationId: "sec-equip-delete-by-id"
       tags: [ Equipment ]
       summary: Delete a equipment.
       description: |
@@ -815,6 +868,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/folder:
     get:
+      operationId: "sec-folder-get-all"
       tags: [ Folder ]
       summary: Get a list of folders.
       description: |
@@ -838,6 +892,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/FolderList"
     post:
+      operationId: "sec-folder-new"
       tags: [ Folder ]
       summary: Create a new folder
       description: |
@@ -859,6 +914,7 @@ paths:
                 $ref: "#/components/schemas/IdResult"
   /sec/folder/{id}:
     get:
+      operationId: "sec-folder-details"
       tags: [ Folder ]
       summary: Get folder details.
       description: |
@@ -875,6 +931,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/FolderDetail"
     put:
+      operationId: "sec-folder-edit-name"
       tags: [ Folder ]
       summary: Change the name of a folder
       description: |
@@ -896,6 +953,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     delete:
+      operationId: "sec-folder-delete-by-id"
       tags: [ Folder ]
       summary: Delete a folder by its id.
       description: |
@@ -913,6 +971,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/folder/{id}/member/{userId}:
     put:
+      operationId: "sec-folder-add-member"
       tags: [ Folder ]
       summary: Add a member to this folder
       description: |
@@ -930,6 +989,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     delete:
+      operationId: "sec-folder-delete-member"
       tags: [ Folder ]
       summary: Removes a member from this folder.
       description: |
@@ -949,6 +1009,7 @@ paths:
 
   /sec/collective:
     get:
+      operationId: "sec-collective-get-all"
       tags: [ Collective ]
       summary: Get information about your collective
       description: |
@@ -964,6 +1025,7 @@ paths:
                 $ref: "#/components/schemas/Collective"
   /sec/collective/settings:
     get:
+      operationId: "sec-collective-get-settings"
       tags: [ Collective ]
       summary: Get collective settings
       description: |
@@ -978,6 +1040,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CollectiveSettings"
     post:
+      operationId: "sec-collective-update-settings"
       tags: [ Collective ]
       summary: Update settings for a collective
       description: |
@@ -998,6 +1061,7 @@ paths:
                 $ref: "#/components/schemas/Collective"
   /sec/collective/insights:
     get:
+      operationId: "sec-collective-get-insights"
       tags: [ Collective ]
       summary: Get some insights regarding your items.
       description: |
@@ -1014,6 +1078,7 @@ paths:
                 $ref: "#/components/schemas/ItemInsights"
   /sec/collective/tagcloud:
     get:
+      operationId: "sec-collective-tag-cloud"
       tags: [ Collective ]
       summary: Summary of used tags.
       description: |
@@ -1030,6 +1095,7 @@ paths:
 
   /sec/collective/contacts:
     get:
+      operationId: "sec-collective-contacts-get-all"
       tags: [ Collective ]
       summary: Return a list of contacts.
       description: |
@@ -1050,6 +1116,7 @@ paths:
 
   /sec/collective/classifier/startonce:
     post:
+      operationId: "sec-collective-classifier-start-now"
       tags: [ Collective ]
       summary: Starts the learn-classifier task
       description: |
@@ -1069,31 +1136,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
 
-  /sec/collective/previews:
-    post:
-      tags: [ Collective ]
-      summary: Starts the generate previews task
-      description: |
-        Submits a task that re-generates preview images of all
-        attachments of the current collective. Each existing preview
-        image will be replaced.
-
-        This can be used after changing the `preview` settings.
-
-        If only preview images of selected attachments should be
-        regenerated, see the `/sec/attachment/{id}/preview` endpoint.
-      security:
-        - authTokenHeader: []
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BasicResult"
-
   /sec/user:
     get:
+      operationId: "sec-user-get-all"
       tags: [ Collective ]
       summary: Get a list of collective users.
       description: |
@@ -1108,6 +1153,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserList"
     post:
+      operationId: "sec-user-new"
       tags: [ Collective ]
       summary: Create a new collective user.
       description: |
@@ -1128,6 +1174,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-user-edit"
       tags: [ Collective ]
       summary: Change an existing user.
       description: |
@@ -1149,6 +1196,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/user/{id}:
     delete:
+      operationId: "sec-user-delete-by-id"
       tags: [ Collective ]
       summary: Delete a user.
       description: |
@@ -1166,6 +1214,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/user/changePassword:
     post:
+      operationId: "sec-user-change-password"
       tags: [ Collective ]
       summary: Change the password.
       description: |
@@ -1185,8 +1234,74 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
 
+  /sec/clientSettings/{clientId}:
+    parameters:
+      - $ref: "#/components/parameters/clientId"
+    get:
+      operationId: "sec-clientsettings-get"
+      tags: [ Client Settings ]
+      summary: Return the current user settings
+      description: |
+        Returns the settings for the current user. The `clientId` is
+        an identifier to a client application. It returns a JSON
+        structure. The server doesn't care about the actual data,
+        since it is meant to be interpreted by clients.
+      security:
+        - authTokenHeader: []
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema: {}
+    put:
+      operationId: "sec-clientsettings-update"
+      tags: [ Client Settings ]
+      summary: Update current user settings
+      description: |
+        Updates (replaces or creates) the current user's settings with
+        the given data. The `clientId` is an identifier to a client
+        application. The request body is expected to be JSON, the
+        structure is not important to the server.
+
+        The data is stored for the current user and given `clientId`.
+
+        The data is only saved without being checked in any way
+        (besides being valid JSON). It is returned "as is" to the
+        client in the corresponding GET endpoint.
+      security:
+        - authTokenHeader: []
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResult"
+    delete:
+      operationId: "sec-clientsettings-delete"
+      tags: [ Client Settings ]
+      summary: Clears the current user settings
+      description: |
+        Removes all stored user settings for the client identified by
+        `clientId`.
+      security:
+        - authTokenHeader: []
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResult"
+
   /admin/user/resetPassword:
     post:
+      operationId: "admin-user-reset-password"
       tags: [ Collective, Admin ]
       summary: Reset a user password.
       description: |
@@ -1209,8 +1324,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResetPasswordResult"
 
+  /admin/attachments/generatePreviews:
+    post:
+      operationId: "admin-attachments-generate-previews"
+      tags: [Attachment, Admin]
+      summary: (Re)generate all preview images
+      description: |
+        Submits a task that re-generates preview images of all
+        attachments. Each existing preview image will be replaced.
+
+        This can be used after changing the `preview` settings.
+
+        If only preview images of selected attachments should be
+        regenerated, see the `/sec/attachment/{id}/preview` endpoint.
+
+        This is an admin route, you need to specify the secret from
+        the config file via a http header `Docspell-Admin-Secret`.
+      security:
+        - adminHeader: []
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResult"
+
   /sec/source:
     get:
+      operationId: "sec-source-get-all"
       tags: [ Source ]
       summary: Get a list of sources
       description: |
@@ -1225,6 +1367,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SourceList"
     post:
+      operationId: "sec-source-new"
       tags: [ Source ]
       summary: Create a new source.
       description: |
@@ -1245,6 +1388,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-source-edit"
       tags: [ Source ]
       summary: Change an existing source.
       description: |
@@ -1266,6 +1410,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/source/{id}:
     delete:
+      operationId: "sec-source-delete-by-id"
       tags: [ Source ]
       summary: Delete a source.
       description: |
@@ -1285,6 +1430,7 @@ paths:
 
   /sec/item/convertallpdfs:
     post:
+      operationId: "sec-item-convert-all-pdfs"
       tags: [ Item ]
       summary: Convert all non-converted pdfs.
       description: |
@@ -1311,6 +1457,7 @@ paths:
 
   /sec/item/search:
     get:
+      operationId: "sec-item-search-by-get"
       tags: [ Item Search ]
       summary: Search for items.
       description: |
@@ -1335,6 +1482,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ItemLightList"
     post:
+      operationId: "sec-item-search-by-post"
       tags: [ Item Search ]
       summary: Search for items.
       description: |
@@ -1361,6 +1509,7 @@ paths:
 
   /sec/item/searchIndex:
     post:
+      operationId: "sec-item-search-index"
       tags: [ Item Search ]
       summary: Search for items using full-text search only.
       description: |
@@ -1392,6 +1541,7 @@ paths:
 
   /sec/item/searchStats:
     post:
+      operationId: "sec-item-search-stats-get"
       tags: [ Item Search ]
       summary: Get basic statistics about search results.
       description: |
@@ -1412,6 +1562,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SearchStats"
     get:
+      operationId: "sec-item-search-stats-post"
       tags: [ Item Search ]
       summary: Get basic statistics about search results.
       description: |
@@ -1431,6 +1582,7 @@ paths:
 
   /sec/item/{id}:
     get:
+      operationId: "sec-item-details"
       tags: [ Item ]
       summary: Get details about an item.
       description: |
@@ -1447,6 +1599,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ItemDetail"
     delete:
+      operationId: "sec-item-delete-by-id"
       tags: [ Item ]
       summary: Delete an item.
       description: |
@@ -1464,6 +1617,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/tags:
     put:
+      operationId: "sec-item-get-tags"
       tags: [ Item ]
       summary: Set new set of tags.
       description: |
@@ -1487,6 +1641,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     post:
+      operationId: "sec-item-create-and-add-tag"
       tags: [ Item ]
       summary: Add a new tag to an item.
       description: |
@@ -1514,6 +1669,7 @@ paths:
 
   /sec/item/{id}/taglink:
     post:
+      operationId: "sec-item-link-tags"
       tags: [Item]
       summary: Link existing tags to an item.
       description: |
@@ -1539,6 +1695,7 @@ paths:
 
   /sec/item/{id}/tagtoggle:
     post:
+      operationId: "sec-item-toggle-tags"
       tags: [Item]
       summary: Toggles existing tags to an item.
       description: |
@@ -1566,6 +1723,7 @@ paths:
 
   /sec/item/{id}/direction:
     put:
+      operationId: "sec-item-set-direction"
       tags: [ Item ]
       summary: Set the direction of an item.
       description: |
@@ -1588,6 +1746,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/folder:
     put:
+      operationId: "sec-item-set-folder"
       tags: [ Item ]
       summary: Set a folder for this item.
       description: |
@@ -1613,6 +1772,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/corrOrg:
     put:
+      operationId: "sec-item-set-org"
       tags: [ Item ]
       summary: Set the correspondent organization of an item.
       description: |
@@ -1634,6 +1794,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     post:
+      operationId: "sec-item-create-and-set-org"
       tags: [ Item ]
       summary: Set a new correspondent organization of an item.
       description: |
@@ -1657,6 +1818,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/corrPerson:
     put:
+      operationId: "sec-item-set-corr-person"
       tags: [ Item ]
       summary: Set the correspondent person of an item.
       description: |
@@ -1678,6 +1840,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     post:
+      operationId: "sec-item-create-and-set-corr-person"
       tags: [ Item ]
       summary: Create and set the correspondent person of an item.
       description: |
@@ -1701,6 +1864,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/concPerson:
     put:
+      operationId: "sec-item-set-conc-person"
       tags: [ Item ]
       summary: Set the concerning person of an item.
       description: |
@@ -1722,6 +1886,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     post:
+      operationId: "sec-item-create-and-set-conc-person"
       tags: [ Item ]
       summary: Create and set the concerning person of an item.
       description: |
@@ -1745,6 +1910,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/concEquipment:
     put:
+      operationId: "sec-item-set-equip"
       tags: [ Item ]
       summary: Set the concering equipment of an item.
       description: |
@@ -1766,6 +1932,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     post:
+      operationId: "sec-item-create-and-set-equip"
       tags: [ Item ]
       summary: Create and set a new the concering equipment of an item.
       description: |
@@ -1789,6 +1956,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/notes:
     put:
+      operationId: "sec-item-set-notes"
       tags: [ Item ]
       summary: Set notes of an item.
       description: |
@@ -1811,6 +1979,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/name:
     put:
+      operationId: "sec-item-set-name"
       tags: [ Item ]
       summary: Set the name of an item.
       description: |
@@ -1833,6 +2002,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/confirm:
     post:
+      operationId: "sec-item-confirm"
       tags: [ Item ]
       summary: Confirms the current meta data of an item.
       description: |
@@ -1851,6 +2021,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/unconfirm:
     post:
+      operationId: "sec-item-unconfirm"
       tags: [ Item ]
       summary: Puts an item back to created state.
       description: |
@@ -1869,6 +2040,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/date:
     put:
+      operationId: "sec-item-set-date"
       tags: [ Item ]
       summary: Sets the item date.
       description: |
@@ -1891,6 +2063,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/duedate:
     put:
+      operationId: "sec-item-set-duedate"
       tags: [ Item ]
       summary: Sets the items due date.
       description: |
@@ -1913,6 +2086,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{id}/proposals:
     get:
+      operationId: "sec-item-get-proposals"
       tags: [ Item ]
       summary: Get a list of proposals for this item.
       description: |
@@ -1932,13 +2106,13 @@ paths:
                 $ref: "#/components/schemas/ItemProposals"
   /sec/item/{id}/preview:
     head:
+      operationId: "sec-item-check-preview"
       tags: [ Attachment ]
       summary: Get a preview image of an attachment file.
       description: |
         Checks if an image file showing a preview of the item is
         available. If not available, a 404 is returned. The preview is
-        currently the an image of the first page of the first
-        attachment.
+        an image of the first page of the first attachment.
       security:
         - authTokenHeader: []
       parameters:
@@ -1949,6 +2123,7 @@ paths:
         404:
           description: NotFound
     get:
+      operationId: "sec-item-get-preview"
       tags: [ Attachment ]
       summary: Get a preview image of an attachment file.
       description: |
@@ -1974,6 +2149,7 @@ paths:
 
   /sec/item/{id}/customfield:
     put:
+      operationId: "sec-item-set-customfield-value"
       tags: [ Item ]
       summary: Set the value of a custom field.
       description: |
@@ -1998,6 +2174,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/item/{itemId}/customfield/{id}:
     delete:
+      operationId: "sec-item-delete-customfield-value"
       tags: [ Item ]
       summary: Removes the value for a custom field
       description: |
@@ -2019,6 +2196,7 @@ paths:
 
   /sec/item/{itemId}/reprocess:
     post:
+      operationId: "sec-item-start-reprocess"
       tags: [ Item ]
       summary: Start reprocessing the files of the item.
       description: |
@@ -2048,6 +2226,7 @@ paths:
 
   /sec/item/{itemId}/attachment/movebefore:
     post:
+      operationId: "sec-item-attach-move-before"
       tags: [ Item ]
       summary: Reorder attachments within an item
       description: |
@@ -2074,6 +2253,7 @@ paths:
 
   /sec/items/deleteAll:
     post:
+      operationId: "sec-items-delete-all"
       tags:
         - Item (Multi Edit)
       summary: Delete multiple items.
@@ -2096,6 +2276,7 @@ paths:
 
   /sec/items/tags:
     post:
+      operationId: "sec-items-add-all-tags"
       tags:
         - Item (Multi Edit)
       summary: Add tags to multiple items
@@ -2118,30 +2299,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BasicResult"
-
-  /sec/items/tagsremove:
-    post:
-      tags:
-        - Item (Multi Edit)
-      summary: Remove tags from multiple items
-      description: |
-        Remove the given tags from all given items.
-      security:
-        - authTokenHeader: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ItemsAndRefs"
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BasicResult"
-
     put:
+      operationId: "sec-items-replace-all-tags"
       tags:
         - Item (Multi Edit)
       summary: Sets tags to multiple items
@@ -2163,8 +2322,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
 
+  /sec/items/tagsremove:
+    post:
+      operationId: "sec-items-remove-all-tags"
+      tags:
+        - Item (Multi Edit)
+      summary: Remove tags from multiple items
+      description: |
+        Remove the given tags from all given items.
+      security:
+        - authTokenHeader: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemsAndRefs"
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BasicResult"
+
+
   /sec/items/name:
     put:
+      operationId: "sec-items-set-name-all"
       tags:
         - Item (Multi Edit)
       summary: Change the name of multiple items
@@ -2188,6 +2372,7 @@ paths:
 
   /sec/items/folder:
     put:
+      operationId: "sec-items-set-folder-all"
       tags:
         - Item (Multi Edit)
       summary: Sets a folder to multiple items.
@@ -2212,6 +2397,7 @@ paths:
 
   /sec/items/direction:
     put:
+      operationId: "sec-items-set-direction-all"
       tags:
         - Item (Multi Edit)
       summary: Set the direction of multiple items
@@ -2235,6 +2421,7 @@ paths:
 
   /sec/items/date:
     put:
+      operationId: "sec-items-set-date-all"
       tags:
         - Item (Multi Edit)
       summary: Set the date of multiple items
@@ -2259,6 +2446,7 @@ paths:
 
   /sec/items/duedate:
     put:
+      operationId: "sec-items-set-duedate-all"
       tags:
         - Item (Multi Edit)
       summary: Set the direction of multiple items
@@ -2283,6 +2471,7 @@ paths:
 
   /sec/items/corrOrg:
     put:
+      operationId: "sec-items-set-corr-org-all"
       tags:
         - Item (Multi Edit)
       summary: Sets an organization to multiple items.
@@ -2307,6 +2496,7 @@ paths:
 
   /sec/items/corrPerson:
     put:
+      operationId: "sec-items-set-corr-person-all"
       tags:
         - Item (Multi Edit)
       summary: Sets an correspondent person to multiple items.
@@ -2331,6 +2521,7 @@ paths:
 
   /sec/items/concPerson:
     put:
+      operationId: "sec-items-set-conc-person-all"
       tags:
         - Item (Multi Edit)
       summary: Sets an concerning person to multiple items.
@@ -2355,6 +2546,7 @@ paths:
 
   /sec/items/concEquipment:
     put:
+      operationId: "sec-items-set-equip-all"
       tags:
         - Item (Multi Edit)
       summary: Sets an equipment to multiple items.
@@ -2379,6 +2571,7 @@ paths:
 
   /sec/items/confirm:
     put:
+      operationId: "sec-items-confirm-all"
       tags:
         - Item (Multi Edit)
       summary: Confirm multiple items.
@@ -2401,6 +2594,7 @@ paths:
 
   /sec/items/unconfirm:
     put:
+      operationId: "sec-items-unconfirm-all"
       tags:
         - Item (Multi Edit)
       summary: Un-confirm multiple items.
@@ -2423,6 +2617,7 @@ paths:
 
   /sec/items/reprocess:
     post:
+      operationId: "sec-items-reprocess-all"
       tags:
         - Item (Multi Edit)
       summary: Submit multiple items to re-processing
@@ -2449,6 +2644,7 @@ paths:
 
   /sec/items/customfield:
     put:
+      operationId: "sec-items-set-customfield-all"
       tags: [ Item (Multi Edit) ]
       summary: Set the value of a custom field for multiple items
       description: |
@@ -2473,6 +2669,7 @@ paths:
 
   /sec/items/customfieldremove:
     post:
+      operationId: "sec-items-remove-customfield-all"
       tags: [ Item (Multi Edit) ]
       summary: Removes the value for a custom field on multiple items
       description: |
@@ -2480,8 +2677,6 @@ paths:
         items. The field may be specified by its id or name.
       security:
         - authTokenHeader: []
-      parameters:
-        - $ref: "#/components/parameters/itemId"
       requestBody:
         content:
           application/json:
@@ -2498,6 +2693,7 @@ paths:
 
   /sec/attachment/{id}:
     delete:
+      operationId: "sec-attach-delete-by-id"
       tags: [ Attachment ]
       summary: Delete an attachment.
       description: |
@@ -2520,8 +2716,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     head:
+      operationId: "sec-attach-check"
       tags: [ Attachment ]
-      summary: Get an attachment file.
+      summary: Get headers to an attachment file.
       description: |
         Get information about the binary file belonging to the
         attachment with the given id.
@@ -2547,11 +2744,13 @@ paths:
               schema:
                 type: string
     get:
+      operationId: "sec-attach-get"
       tags: [ Attachment ]
       summary: Get an attachment file.
       description: |
         Get the binary file belonging to the attachment with the given
-        id.
+        id. The binary is a pdf file. If conversion failed, then the
+        original file is returned.
       security:
         - authTokenHeader: []
       parameters:
@@ -2566,8 +2765,9 @@ paths:
                 format: binary
   /sec/attachment/{id}/original:
     head:
+      operationId: "sec-attach-check-original"
       tags: [ Attachment ]
-      summary: Get an attachment file.
+      summary: Get headers of the original file of an attachment.
       description: |
         Get information about the original binary file of the
         attachment with the given id.
@@ -2596,8 +2796,9 @@ paths:
               schema:
                 type: string
     get:
+      operationId: "sec-attach-get-original"
       tags: [ Attachment ]
-      summary: Get an attachment file.
+      summary: Get the original file of an attachment.
       description: |
         Get the original binary file of the attachment with the given
         id.
@@ -2618,8 +2819,9 @@ paths:
                 format: binary
   /sec/attachment/{id}/archive:
     head:
+      operationId: "sec-attach-check-archive"
       tags: [ Attachment ]
-      summary: Get an attachment archive file.
+      summary: Get headers of the archive file to an attachment.
       description: |
         Get information about the archive that contains the attachment
         with the given id.
@@ -2648,8 +2850,9 @@ paths:
               schema:
                 type: string
     get:
+      operationId: "sec-attach-get-archive"
       tags: [ Attachment ]
-      summary: Get an attachment archive file.
+      summary: Get the archive file of an attachment.
       description: |
         Get the archive file that was originally uploaded that
         contains the attachment with the given id.
@@ -2670,8 +2873,9 @@ paths:
                 format: binary
   /sec/attachment/{id}/preview:
     head:
+      operationId: "sec-attach-check-preview"
       tags: [ Attachment ]
-      summary: Get a preview image of an attachment file.
+      summary: Get the headers to a preview image of an attachment file.
       description: |
         Checks if an image file showing a preview of the attachment is
         available. If not available, a 404 is returned.
@@ -2685,6 +2889,7 @@ paths:
         404:
           description: NotFound
     get:
+      operationId: "sec-attach-get-preview"
       tags: [ Attachment ]
       summary: Get a preview image of an attachment file.
       description: |
@@ -2708,6 +2913,7 @@ paths:
                 type: string
                 format: binary
     post:
+      operationId: "sec-attach-regenerate-preview"
       tags: [ Attachment ]
       summary: (Re)generate a preview image.
       description: |
@@ -2727,6 +2933,7 @@ paths:
 
   /sec/attachment/{id}/meta:
     get:
+      operationId: "sec-attach-get-meta"
       tags: [ Attachment ]
       summary: Get the attachment's meta data.
       description: |
@@ -2745,16 +2952,19 @@ paths:
                 $ref: "#/components/schemas/AttachmentMeta"
   /sec/attachment/{id}/view:
     get:
+      operationId: "sec-attach-show-viewerjs"
       tags: [ Attachment ]
-      summary: A preview of the attachment
+      summary: A javascript rendered view of the pdf attachment
       description: |
-        This provides a preview of the attachment. It currently uses a
-        third-party javascript library (viewerjs) to display the
-        preview. This works by redirecting to the viewerjs url with
-        the attachment url as parameter. Note that the resulting url
-        that is redirected to is not stable. It may change from
-        version to version. This route, however, is meant to provide a
-        stable url for the preview.
+        This provides a preview of the attachment rendered in a
+        browser.
+
+        It currently uses a third-party javascript library (viewerjs)
+        to display the preview. This works by redirecting to the
+        viewerjs url with the attachment url as parameter. Note that
+        the resulting url that is redirected to is not stable. It may
+        change from version to version. This route, however, is meant
+        to provide a stable url for the preview.
       security:
         - authTokenHeader: []
       parameters:
@@ -2766,6 +2976,7 @@ paths:
           description: Ok
   /sec/attachment/{id}/name:
     post:
+      operationId: "sec-attach-set-name"
       tags: [ Attachment ]
       summary: Changes the name of an attachment
       description: |
@@ -2791,6 +3002,7 @@ paths:
 
   /sec/attachments/delete:
     post:
+      operationId: "sec-attachs-delete-all"
       tags:
         - Attachment (Multi Edit)
       summary: Delete multiple attachments.
@@ -2813,6 +3025,7 @@ paths:
 
   /sec/queue/state:
     get:
+      operationId: "sec-jobs-get-state"
       tags: [ Job Queue ]
       summary: Get complete state of job queue.
       description: |
@@ -2830,6 +3043,7 @@ paths:
                 $ref: "#/components/schemas/JobQueueState"
   /sec/queue/{id}/cancel:
     post:
+      operationId: "sec-jobs-cancel-job"
       tags: [ Job Queue ]
       summary: Cancel a job.
       description: |
@@ -2849,6 +3063,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/queue/{id}/priority:
     post:
+      operationId: "sec-jobs-set-prio"
       tags: [ Job Queue ]
       summary: Change the priority of a waiting job.
       description: |
@@ -2873,6 +3088,7 @@ paths:
 
   /sec/email/settings/smtp:
     get:
+      operationId: "sec-email-settings-smtp-all"
       tags: [ E-Mail ]
       summary: List email settings for current user.
       description: |
@@ -2895,6 +3111,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmailSettingsList"
     post:
+      operationId: "sec-email-new-smtp-settings"
       tags: [ E-Mail ]
       summary: Create new email settings
       description: |
@@ -2917,6 +3134,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/name"
     get:
+      operationId: "sec-email-get-smtp-details"
       tags: [ E-Mail ]
       summary: Return specific email settings by name.
       description: |
@@ -2932,6 +3150,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmailSettings"
     put:
+      operationId: "sec-email-set-smtp-settings"
       tags: [ E-Mail ]
       summary: Change specific email settings.
       description: |
@@ -2951,6 +3170,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     delete:
+      operationId: "sec-email-delete-smtp-settings"
       tags: [ E-Mail ]
       summary: Delete e-mail settings.
       description: |
@@ -2966,6 +3186,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/email/settings/imap:
     get:
+      operationId: "sec-email-imap-settings-all"
       tags: [ E-Mail ]
       summary: List email settings for current user.
       description: |
@@ -2988,6 +3209,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImapSettingsList"
     post:
+      operationId: "sec-email-new-imap-settings"
       tags: [ E-Mail ]
       summary: Create new email settings
       description: |
@@ -3010,6 +3232,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/name"
     get:
+      operationId: "sec-email-get-imap-details"
       tags: [ E-Mail ]
       summary: Return specific email settings by name.
       description: |
@@ -3025,6 +3248,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImapSettings"
     put:
+      operationId: "sec-email-set-imap-settings"
       tags: [ E-Mail ]
       summary: Change specific email settings.
       description: |
@@ -3044,6 +3268,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     delete:
+      operationId: "sec-email-delete-imap-settings"
       tags: [ E-Mail ]
       summary: Delete e-mail settings.
       description: |
@@ -3060,6 +3285,7 @@ paths:
 
   /sec/email/send/{name}/{id}:
     post:
+      operationId: "sec-email-send-with-item"
       tags: [ E-Mail ]
       summary: Send an email.
       description: |
@@ -3085,6 +3311,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/email/sent/item/{id}:
     get:
+      operationId: "sec-email-get-sent-mails-to-item"
       tags: [ E-Mail ]
       summary: Get sent mail related to an item
       description: |
@@ -3105,6 +3332,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/mailId"
     get:
+      operationId: "sec-email-get-sent-mail"
       tags: [ E-Mail ]
       summary: Get sent single mail related to an item
       description: |
@@ -3119,6 +3347,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SentMail"
     delete:
+      operationId: "sec-email-delete-sent-mail"
       tags: [ E-Mail ]
       summary: Delete a sent mail.
       description: |
@@ -3134,6 +3363,7 @@ paths:
                 $ref: "#/components/schemas/BasicResult"
   /sec/calevent/check:
     post:
+      operationId: "sec-calevent-check"
       tags: [ Utility ]
       summary: Check a calendar event string
       description: |
@@ -3155,10 +3385,11 @@ paths:
                 $ref: "#/components/schemas/CalEventCheckResult"
   /sec/usertask/notifydueitems:
     get:
+      operationId: "sec-usertask-notify-all"
       tags: [ User Tasks ]
       summary: Get settings for "Notify Due Items" task
       description: |
-        Return the current notification settings of the authenticated
+        Return all current notification settings of the authenticated
         user. Users can be notified on due items via e-mail. This is
         done by periodically querying items. It is possible to have
         multiple tasks.
@@ -3172,6 +3403,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotificationSettingsList"
     post:
+      operationId: "sec-usertask-notify-new"
       tags: [ User Tasks ]
       summary: Create settings for "Notify Due Items" task
       description: |
@@ -3192,6 +3424,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-usertask-notify-edit"
       tags: [ User Tasks ]
       summary: Change settings for "Notify Due Items" task
       description: |
@@ -3215,7 +3448,9 @@ paths:
     parameters:
       - $ref: "#/components/parameters/id"
     get:
+      operationId: "sec-usertask-notify-get-details"
       tags: [ User Tasks ]
+      summary: Get notify items settings for a specific task
       description: |
         Return the current settings for a single notify-due-items task
         of the authenticated user.
@@ -3229,7 +3464,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotificationSettings"
     delete:
+      operationId: "sec-usertask-notify-delete"
       tags: [ User Tasks ]
+      summary: Delete a specific notify due items task
       description: |
         Delete the settings to a notify-due-items task of the
         authenticated user.
@@ -3245,6 +3482,7 @@ paths:
 
   /sec/usertask/notifydueitems/startonce:
     post:
+      operationId: "sec-usertask-notify-start-now"
       tags: [ User Tasks ]
       summary: Start the "Notify Due Items" task once
       description: |
@@ -3267,6 +3505,7 @@ paths:
 
   /sec/usertask/scanmailbox:
     get:
+      operationId: "sec-usertask-scanmailbox-get-all"
       tags: [ User Tasks ]
       summary: Get settings for "Scan Mailbox" task
       description: |
@@ -3284,6 +3523,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScanMailboxSettingsList"
     post:
+      operationId: "sec-usertask-scanmailbox-new"
       tags: [ User Tasks ]
       summary: Create settings for "Scan Mailbox" task
       description: |
@@ -3304,6 +3544,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     put:
+      operationId: "sec-usertask-scanmailbox-edit"
       tags: [ User Tasks ]
       summary: Change settings for a "Scan Mailbox" task
       description: |
@@ -3327,6 +3568,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/id"
     get:
+      operationId: "sec-usertask-scanmailbox-get-details"
       tags: [ User Tasks ]
       summary: Get settings for "Scan Mailbox" task
       description: |
@@ -3343,6 +3585,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScanMailboxSettings"
     delete:
+      operationId: "sec-usertask-scanmailbox-delete"
       tags: [ User Tasks ]
       summary: Delete a scan-mailbox task.
       description: |
@@ -3360,6 +3603,7 @@ paths:
 
   /sec/usertask/scanmailbox/startonce:
     post:
+      operationId: "sec-usertask-scanmailbox-start-now"
       tags: [ User Tasks ]
       summary: Start the "Scan Mailbox" task once
       description: |
@@ -3382,6 +3626,7 @@ paths:
 
   /sec/customfield:
     get:
+      operationId: "sec-customfield-get-all"
       tags: [ Custom Fields ]
       summary: Get all defined custom fields.
       description: |
@@ -3398,6 +3643,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CustomFieldList"
     post:
+      operationId: "sec-customfield-new"
       tags: [ Custom Fields ]
       summary: Create a new custom field
       description: |
@@ -3421,6 +3667,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/id"
     get:
+      operationId: "sec-customfield-get-details"
       tags: [ Custom Fields ]
       summary: Get details about a custom field.
       description: |
@@ -3435,6 +3682,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CustomField"
     put:
+      operationId: "sec-customfield-edit"
       tags: [ Custom Fields ]
       summary: Change a custom field
       description: |
@@ -3459,6 +3707,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
     delete:
+      operationId: "sec-customfield-delete"
       tags: [ Custom Fields ]
       summary: Deletes a custom field.
       description: |
@@ -4823,50 +5072,61 @@ components:
         specified, you have to specifiy whether the corresponding
         files should become one single item or if an item is created
         for each file.
-
-        A direction can be given, `Incoming` is used if not specified.
-
-        A folderId can be given, the item is placed into this folder
-        after creation.
-
-        The `fileFilter` is an optional glob for filtering files to
-        import. Only applicable if archive files are uploaded. It
-        applies to all of them. For example, to only import pdf files
-        when uploading e-mails, use `*.pdf`. If the pattern doesn't
-        contain a slash `/`, then it is applied to all file names.
-        Otherwise it is applied to the complete path in the archive
-        (useful for zip files). Note that the archive file itself is
-        always saved completely, too.
-
-        The `tags` input allows to provide tags that should be applied
-        to the item being created. This only works if the tags already
-        exist. It is possible to specify their ids or names.
-
-        The `language` of the document may be specified, otherwise the
-        one from settings is used.
       required:
         - multiple
       properties:
         multiple:
           type: boolean
           default: true
+          description: |
+            If `true` (the default) each file in the upload request
+            results in a separate item. If it is set to `false`, then
+            all files in the request are put into a single item.
         direction:
           type: string
           format: direction
+          default: "incoming"
+          description: |
+            The direction of the item, can be `Incoming` or `Outgoing`.
         folder:
           type: string
           format: ident
+          description: |
+            A folder can be specified that is attached to the new
+            item. The folder must exist and can be specified by id or
+            name.
         skipDuplicates:
           type: boolean
           default: false
+          description: |
+            If set to `true` the processing will look for the same
+            file in Docspell and will skip processing this one if one
+            is found. The check is done via the file's checksum.
         tags:
           $ref: "#/components/schemas/StringList"
+          description: |
+            The `tags` input allows to provide tags that should be
+            applied to the item being created. This only works if the
+            tags already exist. It is possible to specify their ids or
+            names.
         fileFilter:
           type: string
           format: glob
+          description: |
+            The `fileFilter` is an optional glob for filtering files
+            to import. Only applicable if archive files are uploaded.
+            It applies to all of them. For example, to only import pdf
+            files when uploading e-mails, use `*.pdf`. If the pattern
+            doesn't contain a slash `/`, then it is applied to all
+            file names. Otherwise it is applied to the complete path
+            in the archive (useful for zip files). Note that the
+            archive file itself is always saved completely, too.
         language:
           type: string
           format: language
+          description: |
+            The `language` of the document may be specified, otherwise
+            the one from settings is used.
 
     Collective:
       description: |
@@ -5240,6 +5500,7 @@ components:
         - date
         - source
         - tags
+        - attachments
       properties:
         id:
           type: string
@@ -5571,3 +5832,11 @@ components:
       required: false
       schema:
         type: boolean
+    clientId:
+      name: clientId
+      in: path
+      required: true
+      description: |
+        some identifier for a client application
+      schema:
+        type: string

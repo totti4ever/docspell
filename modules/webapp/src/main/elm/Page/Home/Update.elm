@@ -1,4 +1,13 @@
-module Page.Home.Update exposing (update)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Page.Home.Update exposing
+    ( UpdateResult
+    , update
+    )
 
 import Api
 import Api.Model.ItemLightList exposing (ItemLightList)
@@ -16,7 +25,6 @@ import Data.Items
 import Data.UiSettings exposing (UiSettings)
 import Page exposing (Page(..))
 import Page.Home.Data exposing (..)
-import Ports
 import Process
 import Scroll
 import Set exposing (Set)
@@ -28,7 +36,15 @@ import Util.ItemDragDrop as DD
 import Util.Update
 
 
-update : Maybe String -> Nav.Key -> Flags -> UiSettings -> Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+type alias UpdateResult =
+    { model : Model
+    , cmd : Cmd Msg
+    , sub : Sub Msg
+    , newSettings : Maybe UiSettings
+    }
+
+
+update : Maybe String -> Nav.Key -> Flags -> UiSettings -> Msg -> Model -> UpdateResult
 update mId key flags settings msg model =
     case msg of
         Init ->
@@ -41,11 +57,12 @@ update mId key flags settings msg model =
                     , scroll = True
                     }
             in
-            Util.Update.andThen2
-                [ update mId key flags settings (SearchMenuMsg Comp.SearchMenu.Init)
-                , doSearch searchParam
-                ]
-                model
+            makeResult <|
+                Util.Update.andThen3
+                    [ update mId key flags settings (SearchMenuMsg Comp.SearchMenu.Init)
+                    , doSearch searchParam
+                    ]
+                    model
 
         ResetSearch ->
             let
@@ -79,21 +96,21 @@ update mId key flags settings msg model =
                                 BasicSearch
                     }
 
-                ( m2, c2, s2 ) =
+                result =
                     if nextState.stateChange && not model.searchInProgress then
                         doSearch (SearchParam flags BasicSearch settings.itemSearchPageSize 0 False) newModel
 
                     else
                         withSub ( newModel, Cmd.none )
             in
-            ( m2
-            , Cmd.batch
-                [ c2
-                , Cmd.map SearchMenuMsg nextState.cmd
-                , dropCmd
-                ]
-            , s2
-            )
+            { result
+                | cmd =
+                    Cmd.batch
+                        [ result.cmd
+                        , Cmd.map SearchMenuMsg nextState.cmd
+                        , dropCmd
+                        ]
+            }
 
         SetLinkTarget lt ->
             case linkTargetMsg lt of
@@ -101,7 +118,7 @@ update mId key flags settings msg model =
                     update mId key flags settings m model
 
                 Nothing ->
-                    ( model, Cmd.none, Sub.none )
+                    makeResult ( model, Cmd.none, Sub.none )
 
         ItemCardListMsg m ->
             let
@@ -144,15 +161,16 @@ update mId key flags settings msg model =
                         , moreAvailable = list.groups /= []
                     }
             in
-            Util.Update.andThen2
-                [ update mId key flags settings (ItemCardListMsg (Comp.ItemCardList.SetResults list))
-                , if scroll then
-                    scrollToCard mId
+            makeResult <|
+                Util.Update.andThen3
+                    [ update mId key flags settings (ItemCardListMsg (Comp.ItemCardList.SetResults list))
+                    , if scroll then
+                        scrollToCard mId
 
-                  else
-                    \next -> ( next, Cmd.none, Sub.none )
-                ]
-                m
+                      else
+                        \next -> makeResult ( next, Cmd.none, Sub.none )
+                    ]
+                    m
 
         ItemSearchAddResp (Ok list) ->
             let
@@ -167,10 +185,7 @@ update mId key flags settings msg model =
                         , moreAvailable = list.groups /= []
                     }
             in
-            Util.Update.andThen2
-                [ update mId key flags settings (ItemCardListMsg (Comp.ItemCardList.AddResults list))
-                ]
-                m
+            update mId key flags settings (ItemCardListMsg (Comp.ItemCardList.AddResults list)) m
 
         ItemSearchAddResp (Err _) ->
             withSub
@@ -514,10 +529,11 @@ update mId key flags settings msg model =
                                 res.change
                                 (MultiUpdateResp res.change)
                     in
-                    ( { model | viewMode = SelectView svm_ }
-                    , Cmd.batch [ cmd_, upCmd ]
-                    , sub_
-                    )
+                    makeResult
+                        ( { model | viewMode = SelectView svm_ }
+                        , Cmd.batch [ cmd_, upCmd ]
+                        , sub_
+                        )
 
                 _ ->
                     noSub ( model, Cmd.none )
@@ -540,10 +556,11 @@ update mId key flags settings msg model =
                 noSub ( nm, Cmd.none )
 
         MultiUpdateResp change (Err _) ->
-            ( updateSelectViewNameState False model change
-            , Cmd.none
-            , Sub.none
-            )
+            makeResult
+                ( updateSelectViewNameState False model change
+                , Cmd.none
+                , Sub.none
+                )
 
         ReplaceChangedItemsResp (Ok items) ->
             noSub ( replaceItems model items, Cmd.none )
@@ -592,9 +609,23 @@ update mId key flags settings msg model =
                     { settings | cardPreviewFullWidth = not settings.cardPreviewFullWidth }
 
                 cmd =
-                    Ports.storeUiSettings flags newSettings
+                    Api.saveClientSettings flags newSettings (ClientSettingsSaveResp newSettings)
             in
             noSub ( model, cmd )
+
+        ClientSettingsSaveResp newSettings (Ok res) ->
+            if res.success then
+                { model = model
+                , cmd = Cmd.none
+                , sub = Sub.none
+                , newSettings = Just newSettings
+                }
+
+            else
+                noSub ( model, Cmd.none )
+
+        ClientSettingsSaveResp _ (Err _) ->
+            noSub ( model, Cmd.none )
 
         PowerSearchMsg lm ->
             let
@@ -609,7 +640,7 @@ update mId key flags settings msg model =
             in
             case result.action of
                 Comp.PowerSearchInput.NoAction ->
-                    ( model_, cmd_, Sub.map PowerSearchMsg result.subs )
+                    makeResult ( model_, cmd_, Sub.map PowerSearchMsg result.subs )
 
                 Comp.PowerSearchInput.SubmitSearch ->
                     update mId key flags settings (DoSearch model_.searchTypeDropdownValue) model_
@@ -703,21 +734,22 @@ loadChangedItems flags ids =
         Api.itemSearch flags search ReplaceChangedItemsResp
 
 
-scrollToCard : Maybe String -> Model -> ( Model, Cmd Msg, Sub Msg )
+scrollToCard : Maybe String -> Model -> UpdateResult
 scrollToCard mId model =
     let
         scroll id =
             Scroll.scrollElementY "item-card-list" id 0.5 0.5
     in
-    case mId of
-        Just id ->
-            ( { model | scrollToCard = mId }
-            , Task.attempt ScrollResult (scroll id)
-            , Sub.none
-            )
+    makeResult <|
+        case mId of
+            Just id ->
+                ( { model | scrollToCard = mId }
+                , Task.attempt ScrollResult (scroll id)
+                , Sub.none
+                )
 
-        Nothing ->
-            ( model, Cmd.none, Sub.none )
+            Nothing ->
+                ( model, Cmd.none, Sub.none )
 
 
 loadEditModel : Flags -> Cmd Msg
@@ -725,7 +757,7 @@ loadEditModel flags =
     Cmd.map EditMenuMsg (Comp.ItemDetail.MultiEditMenu.loadModel flags)
 
 
-doSearch : SearchParam -> Model -> ( Model, Cmd Msg, Sub Msg )
+doSearch : SearchParam -> Model -> UpdateResult
 doSearch param model =
     let
         param_ =
@@ -798,16 +830,26 @@ doSearchMore flags settings model =
     )
 
 
-withSub : ( Model, Cmd Msg ) -> ( Model, Cmd Msg, Sub Msg )
+withSub : ( Model, Cmd Msg ) -> UpdateResult
 withSub ( m, c ) =
-    ( m
-    , c
-    , Throttle.ifNeeded
-        (Time.every 500 (\_ -> UpdateThrottle))
-        m.throttle
-    )
+    makeResult
+        ( m
+        , c
+        , Throttle.ifNeeded
+            (Time.every 500 (\_ -> UpdateThrottle))
+            m.throttle
+        )
 
 
-noSub : ( Model, Cmd Msg ) -> ( Model, Cmd Msg, Sub Msg )
+noSub : ( Model, Cmd Msg ) -> UpdateResult
 noSub ( m, c ) =
-    ( m, c, Sub.none )
+    makeResult ( m, c, Sub.none )
+
+
+makeResult : ( Model, Cmd Msg, Sub Msg ) -> UpdateResult
+makeResult ( m, c, s ) =
+    { model = m
+    , cmd = c
+    , sub = s
+    , newSettings = Nothing
+    }

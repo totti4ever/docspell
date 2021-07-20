@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.Queue.View2 exposing (viewContent, viewSidebar)
 
 import Api.Model.JobDetail exposing (JobDetail)
@@ -69,7 +75,7 @@ viewSidebar texts visible _ _ model =
         ]
         [ div [ class "" ]
             [ h1 [ class S.header1 ]
-                [ text "Processing Queue"
+                [ text texts.sidebarTitle
                 ]
             ]
         , div [ class "flex flex-col my-2" ]

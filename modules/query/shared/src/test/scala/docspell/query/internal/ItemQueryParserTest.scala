@@ -1,8 +1,13 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.query.internal
 
 import cats.implicits._
 
-import docspell.query.ItemQuery
 import docspell.query.ItemQueryParser
 
 import munit._
@@ -39,9 +44,9 @@ class ItemQueryParserTest extends FunSuite {
     assertEquals(expect, q)
   }
 
-  test("return all if query is empty") {
-    val q = ItemQueryParser.parseUnsafe("")
-    assertEquals(ItemQuery.all, q)
+  test("throw if query is empty") {
+    val result = ItemQueryParser.parse("")
+    assert(result.isLeft)
   }
 
   test("splice inner and nodes") {

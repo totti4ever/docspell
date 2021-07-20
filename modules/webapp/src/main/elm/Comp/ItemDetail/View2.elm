@@ -1,13 +1,20 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.ItemDetail.View2 exposing (view)
 
 import Comp.Basic as B
-import Comp.ConfirmModal
 import Comp.DetailEdit
 import Comp.ItemDetail.AddFilesForm
+import Comp.ItemDetail.ConfirmModalView
 import Comp.ItemDetail.ItemInfoHeader
 import Comp.ItemDetail.Model
     exposing
-        ( Model
+        ( MailSendResult(..)
+        , Model
         , Msg(..)
         , NotesField(..)
         , SaveNameState(..)
@@ -26,7 +33,6 @@ import Html.Events exposing (onClick)
 import Messages.Comp.ItemDetail exposing (Texts)
 import Page exposing (Page(..))
 import Styles as S
-import Util.Time
 
 
 view : Texts -> ItemNav -> UiSettings -> Model -> Html Msg
@@ -35,15 +41,15 @@ view texts inav settings model =
         [ header texts settings model
         , menuBar texts inav settings model
         , body texts inav settings model
-        , itemModal model
+        , itemModal texts model
         ]
 
 
-itemModal : Model -> Html Msg
-itemModal model =
+itemModal : Texts -> Model -> Html Msg
+itemModal texts model =
     case model.itemModal of
         Just confirm ->
-            Comp.ConfirmModal.view confirm
+            Comp.ItemDetail.ConfirmModalView.view texts.confirmModal confirm model
 
         Nothing ->
             span [ class "hidden" ] []
@@ -257,22 +263,24 @@ sendMailForm texts settings model =
         , Html.map ItemMailMsg (Comp.ItemMail.view2 texts.itemMail settings model.itemMail)
         , div
             [ classList
-                [ ( S.errorMessage
-                  , Maybe.map .success model.mailSendResult
-                        |> Maybe.map not
-                        |> Maybe.withDefault False
-                  )
-                , ( S.successMessage
-                  , Maybe.map .success model.mailSendResult
-                        |> Maybe.withDefault False
-                  )
-                , ( "hidden", model.mailSendResult == Nothing )
+                [ ( S.errorMessage, model.mailSendResult /= MailSendSuccessful )
+                , ( S.successMessage, model.mailSendResult == MailSendSuccessful )
+                , ( "hidden", model.mailSendResult == MailSendResultInitial )
                 ]
             , class "mt-2"
             ]
-            [ Maybe.map .message model.mailSendResult
-                |> Maybe.withDefault ""
-                |> text
+            [ case model.mailSendResult of
+                MailSendSuccessful ->
+                    text texts.mailSendSuccessful
+
+                MailSendHttpError err ->
+                    text (texts.httpError err)
+
+                MailSendFailed m ->
+                    text m
+
+                MailSendResultInitial ->
+                    text ""
             ]
         ]
 
@@ -312,7 +320,7 @@ addDetailForm texts settings model =
                 [ class "flex flex-col px-2 py-2 mb-4"
                 , class S.box
                 ]
-                [ Comp.DetailEdit.formHeading S.header3 mm
+                [ Comp.DetailEdit.formHeading texts.detailEdit S.header3 mm
                 , Html.map ModalEditMsg (Comp.DetailEdit.view2 texts.detailEdit [] settings mm)
                 ]
 

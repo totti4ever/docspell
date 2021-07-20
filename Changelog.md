@@ -1,5 +1,186 @@
 # Changelog
 
+## v0.25.0
+
+*Unreleased*
+
+### Rest API Changes
+
+- Removed `sec/collective/previews` endpoint, in favor for new
+  `admin/attachments/generatePreviews` endpoint which is now an admin
+  task to generate previews for all files. The now removed enpoint did
+  this only for one collective.
+
+
+## v0.24.0
+
+*Jun 18, 2021*
+
+This time a translation of the Web-UI in German is included and the
+docker build was overhauled. The releases are now build and tested
+using Java 11.
+
+- Rework Docker setup. Images are now provided for different
+  architectures and have a new home now (see below). The images are
+  now built via a github-action from the official packages of each
+  release. (#635, #643, #840, #687)
+- Translation of the UI into German (thanks to @monnypython for proof
+  reading and applying lots of corrections!) (#292, #683, #870)
+- Improve migration of SOLR (#604)
+  - The information whether solr has been setup, is now stored inside
+    SOLR. This means when upgrading Docspell, all data will be
+    re-indexed.
+- Add `--exclude` and `--include` options to the `consumedir.sh`
+  script (#885)
+- Improved documenation of the http api (#874)
+- Removed unused libraries in the final packages to reduce file size a
+  bit (#841)
+- Bug: Searching by tag category was broken when using upper case
+  letters (#849)
+- Bug: when adding a boolean custom field, it must be applied
+  immediatly (#842)
+- Bug: when entering a space in a dropdown the menu closes (#863)
+- Bug: Some scripts didn't work with earlier versions of `jq` (#851)
+- Bug: The source form was broken in that it didn't load the language
+  correctly (#877)
+- Bug: Tag category options were wrongly populated when narrowing tags
+  via a search (#880)
+
+### Breaking Changes
+
+#### Java 11
+
+Not really a breaking change. Docspell is now build and tested using
+Java 11. Docspell has a small amount of Java source code. This is
+compiled using Java 11 but to target Java 8 JVMs. So it still can run
+under Java 8. However, it is recommended to use at least Java 11 to
+run Docspell.
+
+
+#### Docker Images
+
+The docker images are now pushed to the
+[docspell](https://hub.docker.com/u/docspell) organization at
+docker-hub! So the images are now:
+
+- `docspell/restserver`
+- `docspell/joex`
+- `docspell/tools`
+
+Tags: images are tagged with two floating tags: `nightly` and
+`latest`. The `nightly` tag always points to the latest development
+state (the master branch). The `latest` tag points to the latest
+release. Each release is also tagged with its version number, like
+`v0.24.0`.
+
+The images changed slightly in that there is no assumption on where
+the config file is placed. Now you need to pass the docspell config
+file explicitely when using the images.
+
+Multiarch: Images are now build for `amd64`, `arm64` and `armv7`.
+
+The consumedir is being replaced by the more generic `docspell/tools`
+image which contains all the scripts from the `tools/` section. That
+means it has no special entrypoint for the consumedir script anymore.
+The polling functionality is now provided by the consumedir script.
+And the docker-compose file needs now to specify the complete command
+arguments. This makes it much more flexible to use.
+
+This allows to use this image to run all the other tool scripts, too.
+The scripts are in PATH inside the image and prefixed by `ds-`, so for
+example `ds-consumedir` or `ds-export-files` etc.
+
+#### Docker Compose
+
+The docker-compose setup is now at `docker/docker-compose`. Please
+look at the new [compose
+file](https://github.com/eikek/docspell/blob/master/docker/docker-compose/docker-compose.yml)
+and do the corresponding changes at yours. Especially the consumedir
+container changed significantly. Then due to the fact that the config
+file must be given explicitely, you need to add this argument to each
+docspell component (restserver and joex) via a `command` section (see
+the compose file referenced above).
+
+The `.envrc` has been cleaned from some settings. Since the config
+files is mounted into the image, you can just edit this file instead.
+The only settings left in the .envrc file are those that need to be
+available in the docker-compose file and the application. If some
+settings need to be duplicated for joex and restserver, you can use
+the builtin variable resolution mechanism for this. An example is
+provided in the new config file.
+
+### Configuration Changes
+
+None.
+
+
+### Rest API Changes
+
+None.
+
+
+## v0.23.0
+
+*May 29, 2021*
+
+This release enables deleting multiple files at once of an item. It
+also changes how user settings are stored. Additionally several bugs
+in the ui and server have been fixed.
+
+- Feature: Central user settings (#565): user settings have been
+  stored in the browser but are now stored at the server. This means
+  that all settings are now shared across all devices. See below for
+  notes on migrating your current settings.
+- Feature: Delete multiple attachemnts at once, thanks to
+  @stefan-scheidewig (#626): multiple attachments on an item can be
+  deleted with a single click
+- Feature: Make consumedir-cleaner run on windows, thanks to
+  @JaCoB1123 (#809)
+- Bug: More work externalizing strings (#784, #760): many more strings
+  have been externalized for being translated; also dates are now
+  externalized, too
+- Bug: Better anonymous upload page (#758): the upload page for
+  anonymous users shouldn't show a form to provide any metadata
+- Bug: Tag category color (#835): the input field to specify colors
+  for tag categories didn't show the category name
+- Bug: Search in names (#822): a bug in the webui sent a broken query
+  to the server, making the "search in names" field unusable
+- Bug: Fulltext only search broken (#823): the fulltext only search
+  didn't only consult the solr index, but also the database, making it
+  a lot slower and presenting the results not in the order returned by
+  solr.
+- Bug: Ui switches to logged in state on auth failure (#814)
+- Bug: Broken search summary when tag has no category (#759)
+
+
+### Migrating UI Settings
+
+After the upgrade to this version, your current ui settings are not
+read anymore. That means docspell starts up with a light theme and tag
+colors are gone etc. If there are no settings at the server, but
+docspell finds some at your browser, the *UI Settings* page shows a
+big message and a button. Clicking this button sends your settings to
+the server. This message disappears as soon as there are some settings
+on the server.
+
+If you have multiple devices, you now need to choose one which
+settings you want to migrate to the server. It is currently not
+possible to store settings per device.
+
+***Note**: the button is only there if there are no settings at the
+server. So if you want to migrate, don't set the theme or click on
+other things that are persisted before doing the migration!*
+
+### REST Api Changes
+
+- new routes have been added to delete multiple attachments of an item
+- new routes have been added to manage client settings
+
+### Configuration Changes
+
+- none
+
+
 ## v0.22.0
 
 *Apr 11, 2021*
@@ -750,7 +931,7 @@ improvements for processing files.
   upload the file into memory for nothing if something fails (e.g. the
   source doesn't exist)
 - Re-process files. A
-  [route](https://docspell.org/openapi/docspell-openapi.html#api-Item-secItemItemIdReprocessPost)
+  [route](https://docspell.org/openapi/docspell-openapi.html#operation/sec-item-start-reprocess)
   has been added that submits files for re-processing. It is possible
   to re-process some files of an item or all. There is no UI for this
   for now. You'd need to run `curl` or something manually to trigger
@@ -833,10 +1014,9 @@ improvements for processing files.
 - Adds the [full-text
   search](https://docspell.org/docs/webapp/finding/#full-text-search)
   feature (see #69). It requires a separate
-  [Solr](https://lucene.apache.org/solr) instance. Items can be
-  searched by documents contents and item/file names. It is possible
-  to use full-text search to further confine the results via the
-  search menu.
+  [Solr](https://solr.apache.org) instance. Items can be searched by
+  documents contents and item/file names. It is possible to use
+  full-text search to further confine the results via the search menu.
 - Fixes column types for item date and due-date for MariaDB (see #158)
   and adds an upper limit for due-dates (which is configurable).
 - Fixes a bug when cancelling jobs. Stuck jobs were only removed from

@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.Register.View2 exposing (viewContent, viewSidebar)
 
 import Comp.Basic as B
@@ -239,22 +245,32 @@ viewContent texts flags _ model =
 
 resultMessage : Texts -> Model -> Html Msg
 resultMessage texts model =
-    case model.result of
-        Just r ->
-            if r.success then
-                div [ class S.successMessage ]
-                    [ text texts.registrationSuccessful
-                    ]
+    case model.formState of
+        InputValid ->
+            div [ class "hidden" ]
+                []
 
-            else
-                div [ class S.errorMessage ]
-                    [ text r.message
-                    ]
+        RegistrationSuccessful ->
+            div [ class S.successMessage ]
+                [ text texts.registrationSuccessful
+                ]
 
-        Nothing ->
-            if List.isEmpty model.errorMsg then
-                span [ class "hidden" ] []
+        PasswordMismatch ->
+            div [ class S.errorMessage ]
+                [ text texts.passwordsDontMatch
+                ]
 
-            else
-                div [ class S.errorMessage ]
-                    (List.map (\s -> div [] [ text s ]) model.errorMsg)
+        GenericError m ->
+            div [ class S.errorMessage ]
+                [ text m
+                ]
+
+        FormEmpty ->
+            div [ class S.errorMessage ]
+                [ text texts.allFieldsRequired
+                ]
+
+        HttpError err ->
+            div [ class S.errorMessage ]
+                [ text (texts.httpError err)
+                ]

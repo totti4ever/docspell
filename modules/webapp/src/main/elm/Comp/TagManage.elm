@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.TagManage exposing
     ( Model
     , Msg(..)
@@ -22,7 +28,6 @@ import Html.Events exposing (onSubmit)
 import Http
 import Messages.Comp.TagManage exposing (Texts)
 import Styles as S
-import Util.Http
 import Util.Maybe
 import Util.Tag
 import Util.Update
@@ -32,11 +37,18 @@ type alias Model =
     { tagTableModel : Comp.TagTable.Model
     , tagFormModel : Comp.TagForm.Model
     , viewMode : ViewMode
-    , formError : Maybe String
+    , formError : FormError
     , loading : Bool
     , deleteConfirm : Comp.YesNoDimmer.Model
     , query : String
     }
+
+
+type FormError
+    = FormErrorNone
+    | FormErrorHttp Http.Error
+    | FormErrorInvalid
+    | FormErrorSubmit String
 
 
 type ViewMode
@@ -49,7 +61,7 @@ emptyModel =
     { tagTableModel = Comp.TagTable.emptyModel
     , tagFormModel = Comp.TagForm.emptyModel []
     , viewMode = Table
-    , formError = Nothing
+    , formError = FormErrorNone
     , loading = False
     , deleteConfirm = Comp.YesNoDimmer.emptyModel
     , query = ""
@@ -60,7 +72,7 @@ type Msg
     = TableMsg Comp.TagTable.Msg
     | FormMsg Comp.TagForm.Msg
     | LoadTags
-    | TagResp (Result Http.Error TagList)
+    | TagResp String (Result Http.Error TagList)
     | SetViewMode ViewMode
     | InitNewTag
     | Submit
@@ -84,7 +96,7 @@ update flags msg model =
                         , viewMode = Maybe.map (\_ -> Form) tm.selected |> Maybe.withDefault Table
                         , formError =
                             if Util.Maybe.nonEmpty tm.selected then
-                                Nothing
+                                FormErrorNone
 
                             else
                                 model.formError
@@ -110,9 +122,9 @@ update flags msg model =
             ( { model | tagFormModel = m2 }, Cmd.map FormMsg c2 )
 
         LoadTags ->
-            ( { model | loading = True }, Api.getTags flags model.query TagResp )
+            ( { model | loading = True }, Api.getTags flags model.query (TagResp model.query) )
 
-        TagResp (Ok tags) ->
+        TagResp query (Ok tags) ->
             let
                 m2 =
                     { model | viewMode = Table, loading = False }
@@ -122,11 +134,15 @@ update flags msg model =
             in
             Util.Update.andThen1
                 [ update flags (TableMsg (Comp.TagTable.SetTags tags.items))
-                , update flags (FormMsg (Comp.TagForm.SetCategoryOptions cats))
+                , if query == "" then
+                    update flags (FormMsg (Comp.TagForm.SetCategoryOptions cats))
+
+                  else
+                    \m -> ( m, Cmd.none )
                 ]
                 m2
 
-        TagResp (Err _) ->
+        TagResp _ (Err _) ->
             ( { model | loading = False }, Cmd.none )
 
         SetViewMode m ->
@@ -144,7 +160,7 @@ update flags msg model =
         InitNewTag ->
             let
                 nm =
-                    { model | viewMode = Form, formError = Nothing }
+                    { model | viewMode = Form, formError = FormErrorNone }
 
                 tag =
                     Api.Model.Tag.empty
@@ -163,7 +179,7 @@ update flags msg model =
                 ( { model | loading = True }, Api.postTag flags tag SubmitResp )
 
             else
-                ( { model | formError = Just "Please correct the errors in the form." }, Cmd.none )
+                ( { model | formError = FormErrorInvalid }, Cmd.none )
 
         SubmitResp (Ok res) ->
             if res.success then
@@ -177,10 +193,10 @@ update flags msg model =
                 ( { m3 | loading = False }, Cmd.batch [ c2, c3 ] )
 
             else
-                ( { model | formError = Just res.message, loading = False }, Cmd.none )
+                ( { model | formError = FormErrorSubmit res.message, loading = False }, Cmd.none )
 
         SubmitResp (Err err) ->
-            ( { model | formError = Just (Util.Http.errorToString err), loading = False }, Cmd.none )
+            ( { model | formError = FormErrorHttp err, loading = False }, Cmd.none )
 
         RequestDelete ->
             update flags (YesNoMsg Comp.YesNoDimmer.activate) model
@@ -207,7 +223,7 @@ update flags msg model =
                 m =
                     { model | query = str }
             in
-            ( m, Api.getTags flags str TagResp )
+            ( m, Api.getTags flags str (TagResp str) )
 
 
 
@@ -322,12 +338,23 @@ viewForm2 texts model =
             }
         , div
             [ classList
-                [ ( "hidden", Util.Maybe.isEmpty model.formError )
+                [ ( "hidden", model.formError == FormErrorNone )
                 ]
             , class "my-2"
             , class S.errorMessage
             ]
-            [ Maybe.withDefault "" model.formError |> text
+            [ case model.formError of
+                FormErrorNone ->
+                    text ""
+
+                FormErrorHttp err ->
+                    text (texts.httpError err)
+
+                FormErrorInvalid ->
+                    text texts.correctFormErrors
+
+                FormErrorSubmit m ->
+                    text m
             ]
         , Html.map FormMsg (Comp.TagForm.view2 texts.tagForm model.tagFormModel)
         , B.loadingDimmer

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.data.OptionT
@@ -15,7 +21,7 @@ import bitpeace.{Mimetype, RangeDef}
 
 object TextExtraction {
 
-  def apply[F[_]: ConcurrentEffect: ContextShift](cfg: ExtractConfig, fts: FtsClient[F])(
+  def apply[F[_]: Async](cfg: ExtractConfig, fts: FtsClient[F])(
       item: ItemData
   ): Task[F, ProcessItemArgs, ItemData] =
     Task { ctx =>
@@ -60,7 +66,7 @@ object TextExtraction {
 
   case class Result(am: RAttachmentMeta, td: TextData, tags: List[String] = Nil)
 
-  def extractTextIfEmpty[F[_]: Sync: ContextShift](
+  def extractTextIfEmpty[F[_]: Async](
       ctx: Context[F, ProcessItemArgs],
       cfg: ExtractConfig,
       lang: Language,
@@ -93,7 +99,7 @@ object TextExtraction {
     }
   }
 
-  def extractTextToMeta[F[_]: Sync: ContextShift](
+  def extractTextToMeta[F[_]: Async](
       ctx: Context[F, _],
       cfg: ExtractConfig,
       lang: Language,
@@ -132,13 +138,13 @@ object TextExtraction {
     def findMime: F[Mimetype] =
       OptionT(ctx.store.transact(RFileMeta.findById(fileId)))
         .map(_.mimetype)
-        .getOrElse(Mimetype.`application/octet-stream`)
+        .getOrElse(Mimetype.applicationOctetStream)
 
     findMime
       .flatMap(mt => extr.extractText(data, DataType(mt.toLocal), lang))
   }
 
-  private def extractTextFallback[F[_]: Sync: ContextShift](
+  private def extractTextFallback[F[_]: Async](
       ctx: Context[F, _],
       cfg: ExtractConfig,
       ra: RAttachment,
@@ -149,7 +155,7 @@ object TextExtraction {
         ctx.logger.error(s"Cannot extract text").map(_ => None)
 
       case id :: rest =>
-        val extr = Extraction.create[F](ctx.blocker, ctx.logger, cfg)
+        val extr = Extraction.create[F](ctx.logger, cfg)
 
         extractText[F](ctx, extr, lang)(id)
           .flatMap({

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.scheduler
 
 import cats.effect._
@@ -24,20 +30,19 @@ trait PeriodicScheduler[F[_]] {
 
   def shutdown: F[Unit]
 
-  def periodicAwake: F[Fiber[F, Unit]]
+  def periodicAwake: F[Fiber[F, Throwable, Unit]]
 
   def notifyChange: F[Unit]
 }
 
 object PeriodicScheduler {
 
-  def create[F[_]: ConcurrentEffect](
+  def create[F[_]: Async](
       cfg: PeriodicSchedulerConfig,
       sch: Scheduler[F],
       queue: JobQueue[F],
       store: PeriodicTaskStore[F],
-      client: JoexClient[F],
-      timer: Timer[F]
+      client: JoexClient[F]
   ): Resource[F, PeriodicScheduler[F]] =
     for {
       waiter <- Resource.eval(SignallingRef(true))
@@ -49,8 +54,7 @@ object PeriodicScheduler {
         store,
         client,
         waiter,
-        state,
-        timer
+        state
       )
       _ <- Resource.eval(psch.init)
     } yield psch

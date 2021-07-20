@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.queries
 
 import cats.data.NonEmptyList
@@ -19,7 +25,7 @@ import org.log4s._
 object QJob {
   private[this] val logger = getLogger
 
-  def takeNextJob[F[_]: Effect](
+  def takeNextJob[F[_]: Async](
       store: Store[F]
   )(
       priority: Ident => F[Priority],
@@ -49,7 +55,7 @@ object QJob {
       .last
       .map(_.flatten)
 
-  private def takeNextJob1[F[_]: Effect](store: Store[F])(
+  private def takeNextJob1[F[_]: Async](store: Store[F])(
       priority: Ident => F[Priority],
       worker: Ident,
       retryPause: Duration,
@@ -60,8 +66,11 @@ object QJob {
       store.transact(for {
         n <- RJob.setScheduled(job.id, worker)
         _ <-
-          if (n == 1) RJobGroupUse.setGroup(RJobGroupUse(worker, job.group))
+          if (n == 1) RJobGroupUse.setGroup(RJobGroupUse(job.group, worker))
           else 0.pure[ConnectionIO]
+        _ <- logger.fdebug[ConnectionIO](
+          s"Scheduled job ${job.info} to worker ${worker.id}"
+        )
       } yield if (n == 1) Right(job) else Left(()))
 
     for {
@@ -98,22 +107,42 @@ object QJob {
     val stateCond =
       JC.state === JobState.waiting || (JC.state === JobState.stuck && stuckTrigger < now.toMillis)
 
+    object AllGroups extends TableDef {
+      val tableName = "allgroups"
+      val alias     = Some("ag")
+
+      val group: Column[Ident] = JC.group.copy(table = this)
+
+      val selectAll = Select(JC.group.s, from(JC), stateCond).distinct
+    }
+
     val sql1 =
       Select(
-        max(JC.group).as("g"),
-        from(JC).innerJoin(G, JC.group === G.group),
-        G.worker === worker && stateCond
+        select(min(AllGroups.group).as("g"), lit("0 as n")),
+        from(AllGroups),
+        AllGroups.group > Select(G.group.s, from(G), G.worker === worker)
       )
 
     val sql2 =
-      Select(min(JC.group).as("g"), from(JC), stateCond)
+      Select(
+        select(min(AllGroups.group).as("g"), lit("1 as n")),
+        from(AllGroups)
+      )
 
     val gcol = Column[String]("g", TableDef(""))
+    val gnum = Column[Int]("n", TableDef(""))
     val groups =
-      Select(select(gcol), from(union(sql1, sql2), "t0"), gcol.isNull.negate)
+      withCte(AllGroups -> AllGroups.selectAll)
+        .select(Select(gcol.s, from(union(sql1, sql2), "t0"), gcol.isNull.negate))
+        .orderBy(gnum.asc)
+        .limit(1)
 
-    // either 0, one or two results, but may be empty if RJob table is empty
-    groups.build.query[Ident].to[List].map(_.headOption)
+    val frag = groups.build
+    logger.trace(
+      s"nextGroupQuery: $frag  (now=${now.toMillis}, pause=${initialPause.millis})"
+    )
+
+    frag.query[Ident].option
   }
 
   private def stuckTriggerValue(t: RJob.Table, initialPause: Duration, now: Timestamp) =
@@ -147,37 +176,37 @@ object QJob {
     sql.build.query[RJob].option
   }
 
-  def setCancelled[F[_]: Effect](id: Ident, store: Store[F]): F[Unit] =
+  def setCancelled[F[_]: Async](id: Ident, store: Store[F]): F[Unit] =
     for {
       now <- Timestamp.current[F]
       _   <- store.transact(RJob.setCancelled(id, now))
     } yield ()
 
-  def setFailed[F[_]: Effect](id: Ident, store: Store[F]): F[Unit] =
+  def setFailed[F[_]: Async](id: Ident, store: Store[F]): F[Unit] =
     for {
       now <- Timestamp.current[F]
       _   <- store.transact(RJob.setFailed(id, now))
     } yield ()
 
-  def setSuccess[F[_]: Effect](id: Ident, store: Store[F]): F[Unit] =
+  def setSuccess[F[_]: Async](id: Ident, store: Store[F]): F[Unit] =
     for {
       now <- Timestamp.current[F]
       _   <- store.transact(RJob.setSuccess(id, now))
     } yield ()
 
-  def setStuck[F[_]: Effect](id: Ident, store: Store[F]): F[Unit] =
+  def setStuck[F[_]: Async](id: Ident, store: Store[F]): F[Unit] =
     for {
       now <- Timestamp.current[F]
       _   <- store.transact(RJob.setStuck(id, now))
     } yield ()
 
-  def setRunning[F[_]: Effect](id: Ident, workerId: Ident, store: Store[F]): F[Unit] =
+  def setRunning[F[_]: Async](id: Ident, workerId: Ident, store: Store[F]): F[Unit] =
     for {
       now <- Timestamp.current[F]
       _   <- store.transact(RJob.setRunning(id, workerId, now))
     } yield ()
 
-  def setFinalState[F[_]: Effect](id: Ident, state: JobState, store: Store[F]): F[Unit] =
+  def setFinalState[F[_]: Async](id: Ident, state: JobState, store: Store[F]): F[Unit] =
     state match {
       case JobState.Success =>
         setSuccess(id, store)
@@ -191,10 +220,10 @@ object QJob {
         logger.ferror[F](s"Invalid final state: $state.")
     }
 
-  def exceedsRetries[F[_]: Effect](id: Ident, max: Int, store: Store[F]): F[Boolean] =
+  def exceedsRetries[F[_]: Async](id: Ident, max: Int, store: Store[F]): F[Boolean] =
     store.transact(RJob.getRetries(id)).map(n => n.forall(_ >= max))
 
-  def runningToWaiting[F[_]: Effect](workerId: Ident, store: Store[F]): F[Unit] =
+  def runningToWaiting[F[_]: Async](workerId: Ident, store: Store[F]): F[Unit] =
     store.transact(RJob.setRunningToWaiting(workerId)).map(_ => ())
 
   def findAll[F[_]](ids: Seq[Ident], store: Store[F]): F[Vector[RJob]] =

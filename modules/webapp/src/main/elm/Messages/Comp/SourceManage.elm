@@ -1,6 +1,18 @@
-module Messages.Comp.SourceManage exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
 
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.SourceManage exposing
+    ( Texts
+    , de
+    , gb
+    )
+
+import Http
 import Messages.Basics
+import Messages.Comp.HttpError
 import Messages.Comp.SourceForm
 import Messages.Comp.SourceTable
 
@@ -9,6 +21,7 @@ type alias Texts =
     { basics : Messages.Basics.Texts
     , sourceTable : Messages.Comp.SourceTable.Texts
     , sourceForm : Messages.Comp.SourceForm.Texts
+    , httpError : Http.Error -> String
     , addSourceUrl : String
     , newSource : String
     , publicUploads : String
@@ -22,6 +35,7 @@ type alias Texts =
     , createNewSource : String
     , deleteThisSource : String
     , errorGeneratingQR : String
+    , correctFormErrors : String
     }
 
 
@@ -30,6 +44,7 @@ gb =
     { basics = Messages.Basics.gb
     , sourceTable = Messages.Comp.SourceTable.gb
     , sourceForm = Messages.Comp.SourceForm.gb
+    , httpError = Messages.Comp.HttpError.gb
     , addSourceUrl = "Add a source url"
     , newSource = "New source"
     , publicUploads = "Public Uploads"
@@ -50,4 +65,35 @@ gb =
     , createNewSource = "Create new source"
     , deleteThisSource = "Delete this source"
     , errorGeneratingQR = "Error generating QR Code"
+    , correctFormErrors = "Please correct the errors in the form."
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , sourceTable = Messages.Comp.SourceTable.de
+    , sourceForm = Messages.Comp.SourceForm.de
+    , httpError = Messages.Comp.HttpError.de
+    , addSourceUrl = "Quell-URL hinzufügen"
+    , newSource = "Neue Quelle"
+    , publicUploads = "Öffentlicher Upload"
+    , sourceInfoText =
+        "Diese Quelle definiert eine zuällige URL, die von jedem genutzt werden kann, um Dateien ins "
+            ++ "Kollektiv zu senden. Es gibt eine Webseite die Du teilen kannst oder eine API-URL, "
+            ++ "die mit anderen Programmen wie der Android App, verwendet werden kann."
+    , itemsCreatedInfo =
+        \n ->
+            "Es wurden "
+                ++ String.fromInt n
+                ++ " Dokumente durch diese Quelle erzeugt."
+    , publicUploadPage = "Öffentliche Upload-Webseite"
+    , copyToClipboard = "In die Zwischenablage kopieren"
+    , openInNewTab = "Im neuen Tab/Fenster öffnen"
+    , publicUploadUrl = "Öffentliche API-Upload-URL"
+    , reallyDeleteSource = "Diese Quelle wirklich entfernen?"
+    , createNewSource = "Neue Quelle erstellen"
+    , deleteThisSource = "Quelle löschen"
+    , errorGeneratingQR = "Fehler beim Generieren des QR-Code"
+    , correctFormErrors = "Bitte korrigiere die Fehler im Formular."
     }

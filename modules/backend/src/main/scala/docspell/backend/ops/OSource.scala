@@ -1,6 +1,12 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
-import cats.effect.{Effect, Resource}
+import cats.effect.{Async, Resource}
 import cats.implicits._
 
 import docspell.common.{AccountId, Ident}
@@ -22,7 +28,7 @@ trait OSource[F[_]] {
 
 object OSource {
 
-  def apply[F[_]: Effect](store: Store[F]): Resource[F, OSource[F]] =
+  def apply[F[_]: Async](store: Store[F]): Resource[F, OSource[F]] =
     Resource.pure[F, OSource[F]](new OSource[F] {
       def findAll(account: AccountId): F[Vector[SourceData]] =
         store

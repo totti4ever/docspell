@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.analysis
 
 import cats.Applicative
@@ -32,10 +38,7 @@ object TextAnalyser {
       labels ++ dates.map(dl => dl.label.copy(label = dl.date.toString))
   }
 
-  def create[F[_]: Concurrent: Timer: ContextShift](
-      cfg: TextAnalysisConfig,
-      blocker: Blocker
-  ): Resource[F, TextAnalyser[F]] =
+  def create[F[_]: Async](cfg: TextAnalysisConfig): Resource[F, TextAnalyser[F]] =
     Resource
       .eval(Nlp(cfg.nlpConfig))
       .map(stanfordNer =>
@@ -56,7 +59,7 @@ object TextAnalyser {
             } yield Result(spans ++ list, dates)
 
           def classifier: TextClassifier[F] =
-            new StanfordTextClassifier[F](cfg.classifier, blocker)
+            new StanfordTextClassifier[F](cfg.classifier)
 
           private def textLimit(logger: Logger[F], text: String): F[String] =
             if (cfg.maxLength <= 0)
@@ -82,7 +85,7 @@ object TextAnalyser {
 
   /** Provides the nlp pipeline based on the configuration. */
   private object Nlp {
-    def apply[F[_]: Concurrent: Timer](
+    def apply[F[_]: Async](
         cfg: TextAnalysisConfig.NlpConfig
     ): F[Input[F] => F[Vector[NerLabel]]] =
       cfg.mode match {
@@ -104,7 +107,7 @@ object TextAnalyser {
         text: String
     )
 
-    def annotate[F[_]: BracketThrow](
+    def annotate[F[_]: Async](
         cache: PipelineCache[F]
     )(input: Input[F]): F[Vector[NerLabel]] =
       cache

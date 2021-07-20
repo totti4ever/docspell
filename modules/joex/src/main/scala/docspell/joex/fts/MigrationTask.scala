@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.fts
 
 import cats.effect._
@@ -12,7 +18,7 @@ import docspell.store.records.RJob
 object MigrationTask {
   val taskName = Ident.unsafe("full-text-index")
 
-  def apply[F[_]: ConcurrentEffect](
+  def apply[F[_]: Async](
       cfg: Config.FullTextSearch,
       fts: FtsClient[F]
   ): Task[F, Unit, Unit] =
@@ -20,8 +26,10 @@ object MigrationTask {
       .log[F, Unit](_.info(s"Running full-text-index migrations now"))
       .flatMap(_ =>
         Task(ctx =>
-          Migration[F](cfg, fts, ctx.store, ctx.logger)
-            .run(migrationTasks[F](fts))
+          for {
+            migs <- migrationTasks[F](fts)
+            res  <- Migration[F](cfg, fts, ctx.store, ctx.logger).run(migs)
+          } yield res
         )
       )
 
@@ -44,7 +52,7 @@ object MigrationTask {
       Some(DocspellSystem.migrationTaskTracker)
     )
 
-  def migrationTasks[F[_]: Effect](fts: FtsClient[F]): List[Migration[F]] =
-    fts.initialize.map(fm => Migration.from(fm))
+  def migrationTasks[F[_]: Async](fts: FtsClient[F]): F[List[Migration[F]]] =
+    fts.initialize.map(_.map(fm => Migration.from(fm)))
 
 }

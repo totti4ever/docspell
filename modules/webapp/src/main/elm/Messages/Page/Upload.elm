@@ -1,4 +1,14 @@
-module Messages.Page.Upload exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Page.Upload exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.Language exposing (Language)
 import Messages.Basics
@@ -58,4 +68,34 @@ gb =
         }
     , selectedFiles = "Selected Files"
     , languageLabel = Messages.Data.Language.gb
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , dropzone = Messages.Comp.Dropzone.de
+    , reset = "Zurücksetzen"
+    , allFilesOneItem = "Alle Dateien sind ein Dokument"
+    , skipExistingFiles = "Lasse Dateien aus, die schon in Docspell sind"
+    , language = "Sprache"
+    , languageInfo =
+        "Wird für Texterkennung und -analyse verwendet. Die Standardsprache des Kollektivs "
+            ++ "wird verwendet, falls hier nicht angegeben."
+    , uploadErrorMessage = "Es gab Fehler beim Hochladen der Dateien."
+    , successBox =
+        { allFilesUploaded = "Alle Dateien hochgeladen"
+        , line1 =
+            "Deine Dateien wurden erfolgreich hochgeladen und sie werden nun verarbeitet. "
+                ++ "Gehe nachher zur "
+        , itemsPage = "Hauptseite"
+        , line2 = " wo die Dateien als Dokumente erscheinen werden oder gehe zur "
+        , processingPage = "Verarbeitungsseite,"
+        , line3 = " welche einen Einblick in den aktuellen Status gibt."
+        , resetLine1 = " Klicke "
+        , reset = "Zurücksetzen"
+        , resetLine2 = " um weitere Dateien hochzuladen."
+        }
+    , selectedFiles = "Ausgewählte Dateien"
+    , languageLabel = Messages.Data.Language.de
     }

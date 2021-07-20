@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import scala.concurrent.ExecutionContext
@@ -36,7 +42,7 @@ object OJoex {
         } yield cancel.success).getOrElse(false)
     })
 
-  def create[F[_]: ConcurrentEffect](
+  def create[F[_]: Async](
       ec: ExecutionContext,
       store: Store[F]
   ): Resource[F, OJoex[F]] =

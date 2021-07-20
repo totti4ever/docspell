@@ -1,6 +1,12 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
-import cats.effect.{Effect, Resource}
+import cats.effect.{Async, Resource}
 import cats.implicits._
 import fs2.Stream
 
@@ -126,7 +132,7 @@ object OCollective {
     }
   }
 
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       store: Store[F],
       uts: UserTaskStore[F],
       queue: JobQueue[F],

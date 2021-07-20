@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import cats.data.NonEmptyList
@@ -18,6 +24,9 @@ object Condition {
   case class CompareFVal[A](sel: SelectExpr, op: Operator, value: A)(implicit
       val P: Put[A]
   ) extends Condition
+
+  case class CompareSelect(sel: SelectExpr, op: Operator, subSelect: Select)
+      extends Condition
 
   case class CompareCol[A](col1: Column[A], op: Operator, col2: Column[A])
       extends Condition

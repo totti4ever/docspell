@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import cats.implicits._
@@ -52,6 +58,37 @@ trait JsonCodec {
       ie: Encoder[TextData.Item]
   ): Encoder[TextData] =
     Encoder(_.fold(ae.apply, ie.apply))
+
+  implicit def versionDocEncoder: Encoder[VersionDoc] =
+    new Encoder[VersionDoc] {
+      final def apply(d: VersionDoc): Json =
+        Json.fromFields(
+          List(
+            (VersionDoc.Fields.id.name, d.id.asJson),
+            (
+              VersionDoc.Fields.currentVersion.name,
+              Map("set" -> d.currentVersion.asJson).asJson
+            )
+          )
+        )
+    }
+
+  implicit def decoderVersionDoc: Decoder[VersionDoc] =
+    new Decoder[VersionDoc] {
+      final def apply(c: HCursor): Decoder.Result[VersionDoc] =
+        for {
+          id      <- c.get[String](VersionDoc.Fields.id.name)
+          version <- c.get[Int](VersionDoc.Fields.currentVersion.name)
+        } yield VersionDoc(id, version)
+    }
+
+  implicit def versionDocDecoder: Decoder[Option[VersionDoc]] =
+    new Decoder[Option[VersionDoc]] {
+      final def apply(c: HCursor): Decoder.Result[Option[VersionDoc]] =
+        c.downField("response")
+          .get[List[VersionDoc]]("docs")
+          .map(_.headOption)
+    }
 
   implicit def docIdResultsDecoder: Decoder[DocIdResult] =
     new Decoder[DocIdResult] {

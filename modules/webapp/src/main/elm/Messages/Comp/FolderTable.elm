@@ -1,4 +1,14 @@
-module Messages.Comp.FolderTable exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.FolderTable exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 import Messages.DateFormat as DF
@@ -17,4 +27,12 @@ gb =
     { basics = Messages.Basics.gb
     , memberCount = "#Member"
     , formatDateShort = DF.formatDateShort Messages.UiLanguage.English
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , memberCount = "#Mitglieder"
+    , formatDateShort = DF.formatDateShort Messages.UiLanguage.German
     }

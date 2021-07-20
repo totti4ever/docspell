@@ -397,7 +397,7 @@ in {
                     description = ''
                       The defType parameter to lucene that defines the parser to
                       use. You might want to try "edismax" or look here:
-                      https://lucene.apache.org/solr/guide/8_4/query-syntax-and-parsing.html#query-syntax-and-parsing
+                      https://solr.apache.org/guide/8_4/query-syntax-and-parsing.html#query-syntax-and-parsing
                     '';
                   };
                   q-op = mkOption {
@@ -546,7 +546,7 @@ in {
 
     users.users."${user}" = mkIf (cfg.runAs == null) {
       name = user;
-      isSystemUser = false;
+      isSystemUser = true;
       createHome = true;
       home = "/var/docspell";
       description = "Docspell user";

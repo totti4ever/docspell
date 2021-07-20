@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.data.OptionT
@@ -28,7 +34,7 @@ object ItemHandler {
       }
     )
 
-  def newItem[F[_]: ConcurrentEffect: ContextShift](
+  def newItem[F[_]: Async](
       cfg: Config,
       itemOps: OItem[F],
       fts: FtsClient[F],
@@ -62,7 +68,7 @@ object ItemHandler {
   def isLastRetry[F[_]: Sync]: Task[F, Args, Boolean] =
     Task(_.isLastRetry)
 
-  def safeProcess[F[_]: ConcurrentEffect: ContextShift](
+  def safeProcess[F[_]: Async](
       cfg: Config,
       itemOps: OItem[F],
       fts: FtsClient[F],

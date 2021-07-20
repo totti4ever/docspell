@@ -1,6 +1,10 @@
-package docspell.store
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-import scala.concurrent.ExecutionContext
+package docspell.store
 
 import cats.effect._
 
@@ -8,26 +12,31 @@ import docspell.common.LenientUri
 import docspell.store.impl.StoreImpl
 
 import doobie._
+import munit._
 import org.h2.jdbcx.JdbcConnectionPool
 
-trait StoreFixture {
-  def withStore(db: String)(code: Store[IO] => IO[Unit]): Unit = {
-    //StoreFixture.store(StoreFixture.memoryDB(db)).use(code).unsafeRunSync()
-    val jdbc  = StoreFixture.memoryDB(db)
-    val xa    = StoreFixture.globalXA(jdbc)
-    val store = new StoreImpl[IO](jdbc, xa)
-    store.migrate.unsafeRunSync()
-    code(store).unsafeRunSync()
+trait StoreFixture extends CatsEffectFunFixtures { self: CatsEffectSuite =>
+
+  val xa = ResourceFixture {
+    val cfg = StoreFixture.memoryDB("test")
+    for {
+      xa <- StoreFixture.makeXA(cfg)
+      store = new StoreImpl[IO](cfg, xa)
+      _ <- Resource.eval(store.migrate)
+    } yield xa
   }
 
-  def withXA(db: String)(code: Transactor[IO] => IO[Unit]): Unit =
-    StoreFixture.makeXA(StoreFixture.memoryDB(db)).use(code).unsafeRunSync()
-
+  val store = ResourceFixture {
+    val cfg = StoreFixture.memoryDB("test")
+    for {
+      xa <- StoreFixture.makeXA(cfg)
+      store = new StoreImpl[IO](cfg, xa)
+      _ <- Resource.eval(store.migrate)
+    } yield store
+  }
 }
 
 object StoreFixture {
-  implicit def contextShift: ContextShift[IO] =
-    IO.contextShift(ExecutionContext.global)
 
   def memoryDB(dbname: String): JdbcConfig =
     JdbcConfig(
@@ -53,10 +62,9 @@ object StoreFixture {
     val makePool = Resource.make(IO(jdbcConnPool))(cp => IO(cp.dispose()))
 
     for {
-      ec      <- ExecutionContexts.cachedThreadPool[IO]
-      blocker <- Blocker[IO]
-      pool    <- makePool
-      xa = Transactor.fromDataSource[IO].apply(pool, ec, blocker)
+      ec   <- ExecutionContexts.cachedThreadPool[IO]
+      pool <- makePool
+      xa = Transactor.fromDataSource[IO].apply(pool, ec)
     } yield xa
   }
 

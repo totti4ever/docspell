@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Data.ItemQuery exposing
     ( AttrMatch(..)
     , ItemQuery(..)
@@ -176,7 +182,7 @@ render q =
             "name" ++ attrMatch m ++ quoteStr str
 
         AllNames str ->
-            "$names:" ++ quoteStr str
+            "names:" ++ quoteStr str
 
         Contents str ->
             "content:" ++ quoteStr str

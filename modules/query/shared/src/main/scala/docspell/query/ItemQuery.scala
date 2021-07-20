@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.query
 
 import cats.data.{NonEmptyList => Nel}
@@ -17,7 +23,6 @@ final case class ItemQuery(expr: ItemQuery.Expr, raw: Option[String]) {
 }
 
 object ItemQuery {
-  val all = ItemQuery(Expr.Exists(Attr.ItemId), Some(""))
 
   sealed trait Operator
   object Operator {

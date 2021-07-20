@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.fts
 
 import cats.effect._
@@ -14,7 +20,7 @@ object ReIndexTask {
   val taskName = ReIndexTaskArgs.taskName
   val tracker  = DocspellSystem.migrationTaskTracker
 
-  def apply[F[_]: ConcurrentEffect](
+  def apply[F[_]: Async](
       cfg: Config.FullTextSearch,
       fts: FtsClient[F]
   ): Task[F, Args, Unit] =
@@ -27,7 +33,7 @@ object ReIndexTask {
   def onCancel[F[_]]: Task[F, Args, Unit] =
     Task.log[F, Args](_.warn("Cancelling full-text re-index task"))
 
-  private def clearData[F[_]: ConcurrentEffect](collective: Option[Ident]): FtsWork[F] =
+  private def clearData[F[_]: Async](collective: Option[Ident]): FtsWork[F] =
     FtsWork.log[F](_.info("Clearing index data")) ++
       (collective match {
         case Some(_) =>
@@ -40,12 +46,7 @@ object ReIndexTask {
             FtsWork.insertAll[F](collective)
 
         case None =>
-          FtsWork
-            .clearIndex(None)
-            .recoverWith(
-              FtsWork.log[F](_.info("Clearing data failed. Continue re-indexing."))
-            ) ++
-            FtsWork.log[F](_.info("Running index initialize")) ++
+          FtsWork.log[F](_.info("Running re-create index")) ++
             FtsWork.reInitializeTasks[F]
       })
 }

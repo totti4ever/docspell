@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.Functor
@@ -33,7 +39,7 @@ import bitpeace.{Mimetype, MimetypeHint, RangeDef}
   */
 object ConvertPdf {
 
-  def apply[F[_]: Sync: ContextShift](
+  def apply[F[_]: Async](
       cfg: ConvertConfig,
       item: ItemData
   ): Task[F, ProcessItemArgs, ItemData] =
@@ -69,15 +75,15 @@ object ConvertPdf {
   def findMime[F[_]: Functor](ctx: Context[F, _])(ra: RAttachment): F[Mimetype] =
     OptionT(ctx.store.transact(RFileMeta.findById(ra.fileId)))
       .map(_.mimetype)
-      .getOrElse(Mimetype.`application/octet-stream`)
+      .getOrElse(Mimetype.applicationOctetStream)
 
-  def convertSafe[F[_]: Sync: ContextShift](
+  def convertSafe[F[_]: Async](
       cfg: ConvertConfig,
       sanitizeHtml: SanitizeHtml,
       ctx: Context[F, ProcessItemArgs],
       item: ItemData
   )(ra: RAttachment, mime: Mimetype): F[(RAttachment, Option[RAttachmentMeta])] =
-    Conversion.create[F](cfg, sanitizeHtml, ctx.blocker, ctx.logger).use { conv =>
+    Conversion.create[F](cfg, sanitizeHtml, ctx.logger).use { conv =>
       mime.toLocal match {
         case mt =>
           val data = ctx.store.bitpeace

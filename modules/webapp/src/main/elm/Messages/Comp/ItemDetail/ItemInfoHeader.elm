@@ -1,4 +1,14 @@
-module Messages.Comp.ItemDetail.ItemInfoHeader exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.ItemDetail.ItemInfoHeader exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 import Messages.DateFormat as DF
@@ -23,4 +33,15 @@ gb =
     , source = "Source"
     , new = "New"
     , formatDate = DF.formatDateLong Messages.UiLanguage.English
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , itemDate = "Datum"
+    , dueDate = "Fälligkeitsdatum"
+    , source = "Quelle"
+    , new = "Neu"
+    , formatDate = DF.formatDateLong Messages.UiLanguage.German
     }

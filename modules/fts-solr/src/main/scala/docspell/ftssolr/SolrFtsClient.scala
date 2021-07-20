@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import cats.effect._
@@ -11,14 +17,17 @@ import org.http4s.client.Client
 import org.http4s.client.middleware.Logger
 import org.log4s.getLogger
 
-final class SolrFtsClient[F[_]: Effect](
+final class SolrFtsClient[F[_]: Async](
     solrUpdate: SolrUpdate[F],
     solrSetup: SolrSetup[F],
     solrQuery: SolrQuery[F]
 ) extends FtsClient[F] {
 
-  def initialize: List[FtsMigration[F]] =
-    solrSetup.setupSchema
+  def initialize: F[List[FtsMigration[F]]] =
+    solrSetup.remainingSetup.map(_.map(_.value))
+
+  def initializeNew: List[FtsMigration[F]] =
+    solrSetup.setupSchema.map(_.value)
 
   def search(q: FtsQuery): F[FtsResult] =
     solrQuery.query(q)
@@ -74,7 +83,7 @@ final class SolrFtsClient[F[_]: Effect](
 object SolrFtsClient {
   private[this] val logger = getLogger
 
-  def apply[F[_]: ConcurrentEffect](
+  def apply[F[_]: Async](
       cfg: SolrConfig,
       httpClient: Client[F]
   ): Resource[F, FtsClient[F]] = {
@@ -88,7 +97,7 @@ object SolrFtsClient {
     )
   }
 
-  private def loggingMiddleware[F[_]: Concurrent](
+  private def loggingMiddleware[F[_]: Async](
       cfg: SolrConfig,
       client: Client[F]
   ): Client[F] =

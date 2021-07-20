@@ -1,4 +1,14 @@
-module Messages.Comp.PersonForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.PersonForm exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.ContactType exposing (ContactType)
 import Data.PersonUse exposing (PersonUse)
@@ -40,4 +50,22 @@ gb =
     , contacts = "Contacts"
     , contactTypeLabel = Messages.Data.ContactType.gb
     , notes = "Notes"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , addressForm = Messages.Comp.AddressForm.de
+    , personUseLabel = Messages.Data.PersonUse.de
+    , useOfPerson = "Wie diese Person verwendet werden soll"
+    , useAsConcerningOnly = "Nur als betreffende Person verwenden"
+    , useAsCorrespondentOnly = "Nur als Korrespondent verwenden"
+    , useAsBoth = "Als Betreffend und Korrespondent verwenden"
+    , dontUseForSuggestions = "Nicht für Vorschläge verwenden"
+    , chooseAnOrg = "Wähle eine Organisation"
+    , address = "Addresse"
+    , contacts = "Kontakte"
+    , contactTypeLabel = Messages.Data.ContactType.de
+    , notes = "Notizen"
     }

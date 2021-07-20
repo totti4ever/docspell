@@ -1,4 +1,14 @@
-module Messages.Comp.TagTable exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.TagTable exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 
@@ -13,4 +23,11 @@ gb : Texts
 gb =
     { basics = Messages.Basics.gb
     , category = "Category"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , category = "Kategorie"
     }

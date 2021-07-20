@@ -1,4 +1,14 @@
-module Messages.Comp.SentMails exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.SentMails exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.DateFormat as DF
 import Messages.UiLanguage
@@ -24,4 +34,16 @@ gb =
     , sent = "Sent"
     , sender = "Sender"
     , formatDateTime = DF.formatDateTimeLong Messages.UiLanguage.English
+    }
+
+
+de : Texts
+de =
+    { from = "Von"
+    , date = "Datum"
+    , recipients = "Empfänger"
+    , subject = "Betreff"
+    , sent = "Gesendet"
+    , sender = "Absender"
+    , formatDateTime = DF.formatDateTimeLong Messages.UiLanguage.German
     }

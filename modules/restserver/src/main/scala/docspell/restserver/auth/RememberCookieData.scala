@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.auth
 
 import docspell.backend.auth._
@@ -33,7 +39,7 @@ object RememberCookieData {
 
   def fromCookie[F[_]](req: Request[F]): Option[String] =
     for {
-      header <- headers.Cookie.from(req.headers)
+      header <- req.headers.get[headers.Cookie]
       cookie <- header.values.toList.find(_.name == cookieName)
     } yield cookie.content
 

@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.CollectiveSettings.View2 exposing (viewContent, viewSidebar)
 
 import Api.Model.TagCount exposing (TagCount)
@@ -14,7 +20,6 @@ import Html.Events exposing (onClick)
 import Messages.Page.CollectiveSettings exposing (Texts)
 import Page.CollectiveSettings.Data exposing (..)
 import Styles as S
-import Util.Maybe
 import Util.Size
 
 
@@ -159,7 +164,7 @@ viewInsights texts flags model =
         [ class "py-2"
         ]
         [ h4 [ class S.header3 ]
-            [ text "Items"
+            [ text texts.items
             ]
         , div [ class "flex px-4 flex-wrap" ]
             [ stats (String.fromInt (model.insights.incomingCount + model.insights.outgoingCount)) texts.basics.items
@@ -249,6 +254,27 @@ viewSettings texts flags settings model =
             [ text texts.collectiveSettings
             ]
         ]
+    , div
+        [ classList
+            [ ( "hidden", model.formState == InitialState )
+            , ( S.successMessage, model.formState == SubmitSuccessful )
+            , ( S.errorMessage, model.formState /= SubmitSuccessful )
+            ]
+        , class "mb-2"
+        ]
+        [ case model.formState of
+            SubmitSuccessful ->
+                text texts.submitSuccessful
+
+            SubmitError err ->
+                text (texts.httpError err)
+
+            SubmitFailed m ->
+                text m
+
+            InitialState ->
+                text ""
+        ]
     , Html.map SettingsFormMsg
         (Comp.CollectiveSettingsForm.view2
             flags
@@ -256,23 +282,4 @@ viewSettings texts flags settings model =
             settings
             model.settingsModel
         )
-    , div
-        [ classList
-            [ ( "hidden", Util.Maybe.isEmpty model.submitResult )
-            , ( S.successMessage
-              , Maybe.map .success model.submitResult
-                    |> Maybe.withDefault False
-              )
-            , ( S.errorMessage
-              , Maybe.map .success model.submitResult
-                    |> Maybe.map not
-                    |> Maybe.withDefault False
-              )
-            ]
-        , class "mt-2"
-        ]
-        [ Maybe.map .message model.submitResult
-            |> Maybe.withDefault ""
-            |> text
-        ]
     ]

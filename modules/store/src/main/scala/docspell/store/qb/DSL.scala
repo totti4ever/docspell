@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import cats.data.{NonEmptyList => Nel}
@@ -147,6 +153,15 @@ trait DSL extends DoobieMeta {
     if (cs.isEmpty) c
     else and(c, cs: _*)
 
+  implicit final class StringColumnOps(col: Column[String]) {
+    def lowerEq(value: String): Condition =
+      Condition.CompareVal(col, Operator.LowerEq, value.toLowerCase)
+
+    def like(value: String): Condition =
+      Condition.CompareVal(col, Operator.LowerLike, value.toLowerCase)
+
+  }
+
   implicit final class ColumnOps[A](col: Column[A]) {
     def s: SelectExpr =
       SelectExpr.SelectColumn(col, None)
@@ -176,13 +191,13 @@ trait DSL extends DoobieMeta {
     def ===(value: A)(implicit P: Put[A]): Condition =
       Condition.CompareVal(col, Operator.Eq, value)
 
-    def lowerEq(value: A)(implicit P: Put[A]): Condition =
+    def lowerEqA(value: A)(implicit P: Put[A]): Condition =
       Condition.CompareVal(col, Operator.LowerEq, value)
 
     def ====(value: String): Condition =
       Condition.CompareVal(col.cast[String], Operator.Eq, value)
 
-    def like(value: A)(implicit P: Put[A]): Condition =
+    def likeA(value: A)(implicit P: Put[A]): Condition =
       Condition.CompareVal(col, Operator.LowerLike, value)
 
     def likes(value: String): Condition =
@@ -206,6 +221,19 @@ trait DSL extends DoobieMeta {
     def in(subsel: Select): Condition =
       Condition.InSubSelect(col, subsel)
 
+    def >(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Gt, subsel)
+    def <(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Lt, subsel)
+    def >=(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Gte, subsel)
+    def <=(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Lte, subsel)
+    def ===(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Eq, subsel)
+    def !==(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Neq, subsel)
+
     def notIn(subsel: Select): Condition =
       in(subsel).negate
 
@@ -215,10 +243,16 @@ trait DSL extends DoobieMeta {
     def notIn(values: Nel[A])(implicit P: Put[A]): Condition =
       in(values).negate
 
-    def inLower(values: Nel[A])(implicit P: Put[A]): Condition =
+    def inLower(values: Nel[String]): Condition =
+      Condition.InValues(col.s, values.map(_.toLowerCase), true)
+
+    def inLowerA(values: Nel[A])(implicit P: Put[A]): Condition =
       Condition.InValues(col.s, values, true)
 
-    def notInLower(values: Nel[A])(implicit P: Put[A]): Condition =
+    def notInLower(values: Nel[String]): Condition =
+      Condition.InValues(col.s, values.map(_.toLowerCase), true).negate
+
+    def notInLowerA(values: Nel[A])(implicit P: Put[A]): Condition =
       Condition.InValues(col.s, values, true).negate
 
     def isNull: Condition =

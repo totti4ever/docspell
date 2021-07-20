@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import cats.data.OptionT
@@ -141,7 +147,7 @@ object OMail {
       )
   }
 
-  def apply[F[_]: Effect](store: Store[F], emil: Emil[F]): Resource[F, OMail[F]] =
+  def apply[F[_]: Async](store: Store[F], emil: Emil[F]): Resource[F, OMail[F]] =
     Resource.pure[F, OMail[F]](new OMail[F] {
       def getSmtpSettings(
           accId: AccountId,

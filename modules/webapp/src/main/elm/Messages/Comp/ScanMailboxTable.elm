@@ -1,4 +1,14 @@
-module Messages.Comp.ScanMailboxTable exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.ScanMailboxTable exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 
@@ -19,4 +29,14 @@ gb =
     , connection = "Connection"
     , folders = "Folders"
     , receivedSince = "Received Since"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , summary = "Kurzbeschreibung"
+    , connection = "Verbindung"
+    , folders = "Ordner"
+    , receivedSince = "Empfangen seit"
     }

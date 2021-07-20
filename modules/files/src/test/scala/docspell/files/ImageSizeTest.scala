@@ -1,16 +1,20 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.files
 
-import scala.concurrent.ExecutionContext
 import scala.util.Using
 
-import cats.effect.{Blocker, IO}
+import cats.effect._
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 
 import munit._
 
 class ImageSizeTest extends FunSuite {
-  val blocker     = Blocker.liftExecutionContext(ExecutionContext.global)
-  implicit val CS = IO.contextShift(ExecutionContext.global)
 
   //tiff files are not supported on the jdk by default
   //requires an external library
@@ -37,7 +41,7 @@ class ImageSizeTest extends FunSuite {
 
   test("get sizes from stream") {
     files.foreach { case (uri, expect) =>
-      val stream = uri.readURL[IO](8192, blocker)
+      val stream = uri.readURL[IO](8192)
       val dim    = ImageSize.get(stream).unsafeRunSync()
       assertEquals(dim, expect.some)
     }

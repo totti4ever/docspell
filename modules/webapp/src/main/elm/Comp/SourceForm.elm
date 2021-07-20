@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.SourceForm exposing
     ( Model
     , Msg(..)
@@ -155,6 +161,7 @@ update flags msg model =
                         , enabled = t.source.enabled
                         , folder = t.source.folder
                         , fileFilter = t.source.fileFilter
+                        , language = t.source.language
                     }
 
                 newModel =
@@ -168,6 +175,7 @@ update flags msg model =
                         , enabled = t.source.enabled
                         , folderId = t.source.folder
                         , fileFilter = t.source.fileFilter
+                        , language = t.source.language
                     }
 
                 mkIdName id =
@@ -189,12 +197,21 @@ update flags msg model =
                         Nothing ->
                             []
 
+                langSel =
+                    case Maybe.andThen Data.Language.fromString t.source.language of
+                        Just lang ->
+                            [ lang ]
+
+                        Nothing ->
+                            []
+
                 tags =
                     Comp.Dropdown.SetSelection t.tags.items
             in
             Util.Update.andThen1
                 [ update flags (FolderDropdownMsg (Comp.Dropdown.SetSelection sel))
                 , update flags (TagDropdownMsg tags)
+                , update flags (LanguageMsg (Comp.Dropdown.SetSelection langSel))
                 ]
                 newModel
 
@@ -442,7 +459,7 @@ view2 flags texts settings model =
                     ]
                 , class S.message
                 ]
-                [ Markdown.toHtml [] texts.folderForbiddenText
+                [ Markdown.toHtml [] texts.basics.folderNotOwnerWarning
                 ]
             ]
         , div [ class "mb-4" ]

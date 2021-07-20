@@ -1,4 +1,14 @@
-module Messages.Comp.CustomFieldManage exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.CustomFieldManage exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 import Messages.Comp.CustomFieldForm
@@ -21,4 +31,14 @@ gb =
     , fieldTable = Messages.Comp.CustomFieldTable.gb
     , addCustomField = "Add a new custom field"
     , newCustomField = "New custom field"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , fieldForm = Messages.Comp.CustomFieldForm.de
+    , fieldTable = Messages.Comp.CustomFieldTable.de
+    , addCustomField = "Ein neues Benutzerfeld anlegen"
+    , newCustomField = "Neues Benutzerfeld"
     }

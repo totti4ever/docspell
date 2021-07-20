@@ -1,4 +1,14 @@
-module Messages.Comp.AddressForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.AddressForm exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 
 type alias Texts =
@@ -17,4 +27,14 @@ gb =
     , zipCode = "Zip Code"
     , city = "City"
     , country = "Country"
+    }
+
+
+de : Texts
+de =
+    { selectCountry = "Land auswählen"
+    , street = "Straße"
+    , zipCode = "Postleitzahl"
+    , city = "Stadt"
+    , country = "Land"
     }

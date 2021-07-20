@@ -1,4 +1,14 @@
-module Messages.Comp.CustomFieldInput exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.CustomFieldInput exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 
 type alias Texts =
@@ -15,4 +25,13 @@ gb =
     , errorNoNumber = "No number given"
     , errorNoAmount = "No amount given"
     , errorNotANumber = \str -> "Not a number: " ++ str
+    }
+
+
+de : Texts
+de =
+    { errorNoValue = "Bitte gib einen Wert an"
+    , errorNoNumber = "Keine Zahl angegeben"
+    , errorNoAmount = "Kein Betrag angegeben"
+    , errorNotANumber = \str -> "Keine Zahl: " ++ str
     }

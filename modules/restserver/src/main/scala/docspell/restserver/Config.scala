@@ -1,11 +1,17 @@
-package docspell.restserver
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-import java.net.InetAddress
+package docspell.restserver
 
 import docspell.backend.auth.Login
 import docspell.backend.{Config => BackendConfig}
 import docspell.common._
 import docspell.ftssolr.SolrConfig
+
+import com.comcast.ip4s.IpAddress
 
 case class Config(
     appName: String,
@@ -42,7 +48,8 @@ object Config {
     case class HttpHeader(enabled: Boolean, headerName: String, headerValue: String)
     case class AllowedIps(enabled: Boolean, ips: Set[String]) {
 
-      def containsAddress(inet: InetAddress): Boolean = {
+      def containsAddress(ipa: IpAddress): Boolean = {
+        val inet         = ipa.toInetAddress
         val ip           = inet.getHostAddress
         lazy val ipParts = ip.split('.')
 

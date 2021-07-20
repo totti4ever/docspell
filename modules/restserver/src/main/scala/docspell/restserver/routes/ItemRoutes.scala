@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.data.NonEmptyList
@@ -15,7 +21,6 @@ import docspell.common._
 import docspell.common.syntax.all._
 import docspell.query.FulltextExtract.Result.TooMany
 import docspell.query.FulltextExtract.Result.UnsupportedPosition
-import docspell.query.ItemQuery.Expr
 import docspell.restapi.model._
 import docspell.restserver.Config
 import docspell.restserver.conv.Conversions
@@ -33,9 +38,8 @@ import org.log4s._
 object ItemRoutes {
   private[this] val logger = getLogger
 
-  def apply[F[_]: Effect: ContextShift](
+  def apply[F[_]: Async](
       cfg: Config,
-      blocker: Blocker,
       backend: BackendApp[F],
       user: AuthToken
   ): HttpRoutes[F] = {
@@ -62,12 +66,12 @@ object ItemRoutes {
           detailFlag.getOrElse(false),
           cfg.maxNoteLength
         )
-        val fixQuery = Query.Fix(user.account, Some(Expr.ValidItemStates), None)
+        val fixQuery = Query.Fix(user.account, None, None)
         searchItems(backend, dsl)(settings, fixQuery, itemQuery)
 
       case GET -> Root / "searchStats" :? QP.Query(q) =>
         val itemQuery = ItemQueryString(q)
-        val fixQuery  = Query.Fix(user.account, Some(Expr.ValidItemStates), None)
+        val fixQuery  = Query.Fix(user.account, None, None)
         searchItemStats(backend, dsl)(cfg.fullTextSearch.enabled, fixQuery, itemQuery)
 
       case req @ POST -> Root / "search" =>
@@ -86,7 +90,7 @@ object ItemRoutes {
             userQuery.withDetails.getOrElse(false),
             cfg.maxNoteLength
           )
-          fixQuery = Query.Fix(user.account, Some(Expr.ValidItemStates), None)
+          fixQuery = Query.Fix(user.account, None, None)
           resp <- searchItems(backend, dsl)(settings, fixQuery, itemQuery)
         } yield resp
 
@@ -94,7 +98,7 @@ object ItemRoutes {
         for {
           userQuery <- req.as[ItemQuery]
           itemQuery = ItemQueryString(userQuery.query)
-          fixQuery  = Query.Fix(user.account, Some(Expr.ValidItemStates), None)
+          fixQuery  = Query.Fix(user.account, None, None)
           resp <- searchItemStats(backend, dsl)(
             cfg.fullTextSearch.enabled,
             fixQuery,
@@ -332,7 +336,7 @@ object ItemRoutes {
           NotFound(BasicResult(false, "Not found"))
         for {
           preview <- backend.itemSearch.findItemPreview(id, user.account.collective)
-          inm      = req.headers.get(`If-None-Match`).flatMap(_.tags)
+          inm      = req.headers.get[`If-None-Match`].flatMap(_.tags)
           matches  = BinaryUtil.matchETag(preview.map(_.meta), inm)
           fallback = flag.getOrElse(false)
           resp <-
@@ -342,7 +346,7 @@ object ItemRoutes {
                 else BinaryUtil.makeByteResp(dsl)(data).map(Responses.noCache)
               }
               .getOrElse(
-                if (fallback) BinaryUtil.noPreview(blocker, req.some).getOrElseF(notFound)
+                if (fallback) BinaryUtil.noPreview(req.some).getOrElseF(notFound)
                 else notFound
               )
         } yield resp

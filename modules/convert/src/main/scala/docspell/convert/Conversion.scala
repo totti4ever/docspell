@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.convert
 
 import java.nio.charset.StandardCharsets
@@ -12,6 +18,8 @@ import docspell.convert.extern._
 import docspell.convert.flexmark.Markdown
 import docspell.files.{ImageSize, TikaMimetype}
 
+import scodec.bits.ByteVector
+
 trait Conversion[F[_]] {
 
   def toPDF[A](dataType: DataType, lang: Language, handler: Handler[F, A])(
@@ -22,10 +30,9 @@ trait Conversion[F[_]] {
 
 object Conversion {
 
-  def create[F[_]: Sync: ContextShift](
+  def create[F[_]: Async](
       cfg: ConvertConfig,
       sanitizeHtml: SanitizeHtml,
-      blocker: Blocker,
       logger: Logger[F]
   ): Resource[F, Conversion[F]] =
     Resource.pure[F, Conversion[F]](new Conversion[F] {
@@ -36,12 +43,12 @@ object Conversion {
         TikaMimetype.resolve(dataType, in).flatMap {
           case MimeType.PdfMatch(_) =>
             OcrMyPdf
-              .toPDF(cfg.ocrmypdf, lang, cfg.chunkSize, blocker, logger)(in, handler)
+              .toPDF(cfg.ocrmypdf, lang, cfg.chunkSize, logger)(in, handler)
 
           case MimeType.HtmlMatch(mt) =>
             val cs = mt.charsetOrUtf8
             WkHtmlPdf
-              .toPDF(cfg.wkhtmlpdf, cfg.chunkSize, cs, sanitizeHtml, blocker, logger)(
+              .toPDF(cfg.wkhtmlpdf, cfg.chunkSize, cs, sanitizeHtml, logger)(
                 in,
                 handler
               )
@@ -50,14 +57,15 @@ object Conversion {
             val cs = mt.charsetOrUtf8
             Markdown.toHtml(in, cfg.markdown, cs).flatMap { html =>
               val bytes = Stream
-                .chunk(Chunk.bytes(html.getBytes(StandardCharsets.UTF_8)))
+                .chunk(
+                  Chunk.byteVector(ByteVector.view(html.getBytes(StandardCharsets.UTF_8)))
+                )
                 .covary[F]
               WkHtmlPdf.toPDF(
                 cfg.wkhtmlpdf,
                 cfg.chunkSize,
                 StandardCharsets.UTF_8,
                 sanitizeHtml,
-                blocker,
                 logger
               )(bytes, handler)
             }
@@ -77,7 +85,7 @@ object Conversion {
                       )
                     )
                 else
-                  Tesseract.toPDF(cfg.tesseract, lang, cfg.chunkSize, blocker, logger)(
+                  Tesseract.toPDF(cfg.tesseract, lang, cfg.chunkSize, logger)(
                     in,
                     handler
                   )
@@ -86,14 +94,14 @@ object Conversion {
                 logger.info(
                   s"Cannot read image when determining size for ${mt.asString}. Converting anyways."
                 ) *>
-                  Tesseract.toPDF(cfg.tesseract, lang, cfg.chunkSize, blocker, logger)(
+                  Tesseract.toPDF(cfg.tesseract, lang, cfg.chunkSize, logger)(
                     in,
                     handler
                   )
             }
 
           case Office(_) =>
-            Unoconv.toPDF(cfg.unoconv, cfg.chunkSize, blocker, logger)(in, handler)
+            Unoconv.toPDF(cfg.unoconv, cfg.chunkSize, logger)(in, handler)
 
           case mt =>
             handler.run(ConversionResult.unsupportedFormat(mt))

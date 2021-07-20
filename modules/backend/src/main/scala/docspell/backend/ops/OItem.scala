@@ -1,7 +1,13 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import cats.data.{NonEmptyList, OptionT}
-import cats.effect.{Effect, Resource}
+import cats.effect.{Async, Resource}
 import cats.implicits._
 
 import docspell.backend.JobFactory
@@ -187,11 +193,19 @@ trait OItem[F[_]] {
       account: AccountId,
       notifyJoex: Boolean
   ): F[UpdateResult]
+
+  /** Submits a task that (re)generates the preview images for all
+    * attachments.
+    */
+  def generateAllPreviews(
+      storeMode: MakePreviewArgs.StoreMode,
+      notifyJoex: Boolean
+  ): F[UpdateResult]
 }
 
 object OItem {
 
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       store: Store[F],
       fts: FtsClient[F],
       queue: JobQueue[F],
@@ -689,6 +703,16 @@ object OItem {
         ): F[UpdateResult] =
           for {
             job <- JobFactory.makePreview[F](args, account.some)
+            _   <- queue.insertIfNew(job)
+            _   <- if (notifyJoex) joex.notifyAllNodes else ().pure[F]
+          } yield UpdateResult.success
+
+        def generateAllPreviews(
+            storeMode: MakePreviewArgs.StoreMode,
+            notifyJoex: Boolean
+        ): F[UpdateResult] =
+          for {
+            job <- JobFactory.allPreviews[F](AllPreviewsArgs(None, storeMode), None)
             _   <- queue.insertIfNew(job)
             _   <- if (notifyJoex) joex.notifyAllNodes else ().pure[F]
           } yield UpdateResult.success

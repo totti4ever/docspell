@@ -1,4 +1,14 @@
-module Messages.Comp.SearchStatsView exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.SearchStatsView exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 
 type alias Texts =
@@ -19,4 +29,15 @@ gb =
     , avg = "Avg"
     , min = "Min"
     , max = "Max"
+    }
+
+
+de : Texts
+de =
+    { items = "Dokumente"
+    , count = "Anzahl"
+    , sum = "Summe"
+    , avg = "Durchschnitt"
+    , min = "Minimum"
+    , max = "Maximum"
     }

@@ -1,4 +1,14 @@
-module Messages.Comp.EquipmentForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.EquipmentForm exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.EquipmentUse exposing (EquipmentUse)
 import Messages.Basics
@@ -23,4 +33,15 @@ gb =
     , useNotSuggestions = "Do not use for suggestions."
     , equipmentUseLabel = Messages.Data.EquipmentUse.gb
     , notes = "Notes"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , use = "Art"
+    , useAsConcerning = "Als betreffende Ausstattung verwenden"
+    , useNotSuggestions = "Nicht für Vorschläge verwenden"
+    , equipmentUseLabel = Messages.Data.EquipmentUse.de
+    , notes = "Notizen"
     }

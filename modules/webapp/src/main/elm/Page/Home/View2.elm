@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.Home.View2 exposing (viewContent, viewSidebar)
 
 import Comp.Basic as B
@@ -100,7 +106,7 @@ itemsBar texts flags settings model =
 
 
 defaultMenuBar : Texts -> Flags -> UiSettings -> Model -> Html Msg
-defaultMenuBar texts _ settings model =
+defaultMenuBar texts flags settings model =
     let
         btnStyle =
             S.secondaryBasicButton ++ " text-sm"
@@ -127,12 +133,20 @@ defaultMenuBar texts _ settings model =
                     , Maybe.map value searchInput
                         |> Maybe.withDefault (value "")
                     , class (String.replace "rounded" "" S.textInput)
-                    , class "py-1 text-sm border-r-0 rounded-l"
+                    , class "py-2 text-sm"
+                    , if flags.config.fullTextSearchEnabled then
+                        class " border-r-0 rounded-l"
+
+                      else
+                        class "border rounded"
                     ]
                     []
                 , a
                     [ class S.secondaryBasicButtonPlain
                     , class "text-sm px-4 py-2 border rounded-r"
+                    , classList
+                        [ ( "hidden", not flags.config.fullTextSearchEnabled )
+                        ]
                     , href "#"
                     , onClick ToggleSearchType
                     ]
@@ -196,7 +210,7 @@ defaultMenuBar texts _ settings model =
                         texts.fullHeightPreviewTitle
 
                     else
-                        texts.fullHeightPreviewTitle
+                        texts.fullWidthPreviewTitle
                 , inputClass =
                     [ ( btnStyle, True )
                     , ( "hidden sm:inline-block", False )

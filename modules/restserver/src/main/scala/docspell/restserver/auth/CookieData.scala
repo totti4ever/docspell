@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.auth
 
 import docspell.backend.auth._
@@ -5,7 +11,7 @@ import docspell.common.AccountId
 import docspell.common.LenientUri
 
 import org.http4s._
-import org.http4s.util._
+import org.typelevel.ci.CIString
 
 case class CookieData(auth: AuthToken) {
   def accountId: AccountId = auth.account
@@ -37,7 +43,7 @@ object CookieData {
 
   def fromCookie[F[_]](req: Request[F]): Either[String, String] =
     for {
-      header <- headers.Cookie.from(req.headers).toRight("Cookie parsing error")
+      header <- req.headers.get[headers.Cookie].toRight("Cookie parsing error")
       cookie <-
         header.values.toList
           .find(_.name == cookieName)
@@ -46,8 +52,8 @@ object CookieData {
 
   def fromHeader[F[_]](req: Request[F]): Either[String, String] =
     req.headers
-      .get(CaseInsensitiveString(headerName))
-      .map(_.value)
+      .get(CIString(headerName))
+      .map(_.head.value)
       .toRight("Couldn't find an authenticator")
 
   def deleteCookie(baseUrl: LenientUri): ResponseCookie =

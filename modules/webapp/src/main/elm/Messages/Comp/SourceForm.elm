@@ -1,4 +1,14 @@
-module Messages.Comp.SourceForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.SourceForm exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.Language exposing (Language)
 import Messages.Basics
@@ -14,7 +24,6 @@ type alias Texts =
     , metadata : String
     , metadataInfoText : String
     , folderInfo : String
-    , folderForbiddenText : String
     , tagsInfo : String
     , fileFilter : String
     , fileFilterInfo : String
@@ -37,13 +46,6 @@ gb =
             ++ "through this source, unless it is overriden in the upload request meta data. "
             ++ "Tags from the request are added to those defined here."
     , folderInfo = "Choose a folder to automatically put items into."
-    , folderForbiddenText =
-        """
-You are **not a member** of this folder. Items created through this
-link will be **hidden** from any search results. Use a folder where
-you are a member of to make items visible. This message will
-disappear then.
-                      """
     , tagsInfo = "Choose tags that should be applied to items."
     , fileFilter = "File Filter"
     , fileFilterInfo = """
@@ -58,4 +60,36 @@ Specify a file glob to filter files when uploading archives
         "Used for text extraction and analysis. The collective's "
             ++ "default language is used if not specified here."
     , languageLabel = Messages.Data.Language.gb
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , description = "Beschreibung"
+    , enabled = "Aktiviert"
+    , priority = "Priorität"
+    , priorityInfo = "Die Priorität, die für die Hintergrundaufgabe zur Verarbeitung verwendet wird."
+    , metadata = "Metadaten"
+    , metadataInfoText =
+        "Die hier definierten Metadaten werden automatisch an das Dokument angefügt, welches durch diese "
+            ++ "Quelle hochgeladen wurde. Es kann im Hochladeformular direkt nochmals überschrieben "
+            ++ "oder (bei Tags) erweitert werden."
+    , folderInfo = "Wähle einen Ordner mit dem die Dokumente automatisch verknüpft werden sollen."
+    , tagsInfo = "Wähle Tags, die automatisch angefügt werden sollen."
+    , fileFilter = "Dateifilter"
+    , fileFilterInfo = """
+
+Hier kann ein "glob" definiert werden, um nur bestimmte Dateien *aus
+Archiven* (zip oder E-Mail) zu importieren und die anderen zu
+ignorieren. Zum Beispiel: um nur PDF-Dateien aus E-Mails zu
+importieren: `*.pdf`. Globs können auch mittels OR kombiniert werden:
+`*.pdf|mail.html`.
+
+"""
+    , language = "Sprache"
+    , languageInfo =
+        "Wird für die Texterkennung und -analyse verwendet. Die Standardsprache des Kollektivs "
+            ++ "wird verwendet, falls hier nicht angegeben."
+    , languageLabel = Messages.Data.Language.de
     }

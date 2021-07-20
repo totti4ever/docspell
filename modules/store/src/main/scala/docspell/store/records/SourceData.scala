@@ -1,6 +1,12 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.records
 
-import cats.effect.concurrent.Ref
+import cats.effect.Ref
 import cats.implicits._
 import fs2.Stream
 

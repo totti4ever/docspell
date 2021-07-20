@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.UiSettingsForm exposing
     ( Model
     , Msg
@@ -463,9 +469,13 @@ update sett msg model =
 tagColorViewOpts2 : Texts -> Comp.ColorTagger.ViewOpts
 tagColorViewOpts2 texts =
     { renderItem =
-        \( _, v ) ->
-            span [ class (" label " ++ Data.Color.toString2 v) ]
-                [ text (texts.colorLabel v) ]
+        \( name, v ) ->
+            span [ class "flex inline-flex items-center" ]
+                [ span [ class "mr-2" ] [ text name ]
+                , span [ class (" label " ++ Data.Color.toString2 v) ]
+                    [ text (texts.colorLabel v)
+                    ]
+                ]
     , colorLabel = texts.colorLabel
     , label = texts.chooseTagColorLabel
     , description = Just texts.tagColorDescription
@@ -625,9 +635,10 @@ settingFormTabs texts flags _ model =
                 ]
             , Markdown.toHtml
                 [ classList
-                    [ ( S.message, True )
-                    , ( "hidden", not model.showPatternHelp )
+                    [ ( "hidden", not model.showPatternHelp )
                     ]
+                , class S.message
+                , class "markdown-preview"
                 ]
                 texts.templateHelpMessage
             ]

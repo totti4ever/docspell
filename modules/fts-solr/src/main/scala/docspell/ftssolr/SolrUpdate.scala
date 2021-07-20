@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import cats.effect._
@@ -23,12 +29,14 @@ trait SolrUpdate[F[_]] {
 
   def updateFolder(itemId: Ident, collective: Ident, folder: Option[Ident]): F[Unit]
 
+  def updateVersionDoc(doc: VersionDoc): F[Unit]
+
   def delete(q: String, commitWithin: Option[Int]): F[Unit]
 }
 
 object SolrUpdate {
 
-  def apply[F[_]: ConcurrentEffect](cfg: SolrConfig, client: Client[F]): SolrUpdate[F] = {
+  def apply[F[_]: Async](cfg: SolrConfig, client: Client[F]): SolrUpdate[F] = {
     val dsl = new Http4sClientDsl[F] {}
     import dsl._
 
@@ -45,6 +53,11 @@ object SolrUpdate {
 
       def update(tds: List[TextData]): F[Unit] = {
         val req = Method.POST(tds.filter(minOneChange).map(SetFields).asJson, url)
+        client.expect[Unit](req)
+      }
+
+      def updateVersionDoc(doc: VersionDoc): F[Unit] = {
+        val req = Method.POST(List(doc).asJson, url)
         client.expect[Unit](req)
       }
 

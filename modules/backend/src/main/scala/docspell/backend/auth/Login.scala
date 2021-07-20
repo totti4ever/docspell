@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.auth
 
 import cats.data.OptionT
@@ -69,7 +75,7 @@ object Login {
     def invalidTime: Result = InvalidTime
   }
 
-  def apply[F[_]: Effect](store: Store[F]): Resource[F, Login[F]] =
+  def apply[F[_]: Async](store: Store[F]): Resource[F, Login[F]] =
     Resource.pure[F, Login[F]](new Login[F] {
 
       private val logF = Logger.log4s(logger)

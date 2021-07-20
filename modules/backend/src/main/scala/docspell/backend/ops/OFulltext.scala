@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import cats.data.NonEmptyList
@@ -77,7 +83,7 @@ object OFulltext {
   case class FtsItem(item: ListItem, ftsData: FtsData)
   case class FtsItemWithTags(item: ListItemWithTags, ftsData: FtsData)
 
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       itemSearch: OItemSearch[F],
       fts: FtsClient[F],
       store: Store[F],

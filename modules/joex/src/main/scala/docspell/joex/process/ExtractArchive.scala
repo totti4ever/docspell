@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.Functor
@@ -32,12 +38,12 @@ import emil.Mail
   */
 object ExtractArchive {
 
-  def apply[F[_]: ConcurrentEffect: ContextShift](
+  def apply[F[_]: Async](
       item: ItemData
   ): Task[F, ProcessItemArgs, ItemData] =
     multiPass(item, None).map(_._2)
 
-  def multiPass[F[_]: ConcurrentEffect: ContextShift](
+  def multiPass[F[_]: Async](
       item: ItemData,
       archive: Option[RAttachmentArchive]
   ): Task[F, ProcessItemArgs, (Option[RAttachmentArchive], ItemData)] =
@@ -46,7 +52,7 @@ object ExtractArchive {
       else multiPass(t._2, t._1)
     }
 
-  def singlePass[F[_]: ConcurrentEffect: ContextShift](
+  def singlePass[F[_]: Async](
       item: ItemData,
       archive: Option[RAttachmentArchive]
   ): Task[F, ProcessItemArgs, (Option[RAttachmentArchive], ItemData)] =
@@ -85,9 +91,9 @@ object ExtractArchive {
   def findMime[F[_]: Functor](ctx: Context[F, _])(ra: RAttachment): F[Mimetype] =
     OptionT(ctx.store.transact(RFileMeta.findById(ra.fileId)))
       .map(_.mimetype)
-      .getOrElse(Mimetype.`application/octet-stream`)
+      .getOrElse(Mimetype.applicationOctetStream)
 
-  def extractSafe[F[_]: ConcurrentEffect: ContextShift](
+  def extractSafe[F[_]: Async](
       ctx: Context[F, ProcessItemArgs],
       archive: Option[RAttachmentArchive]
   )(ra: RAttachment, pos: Int, mime: Mimetype): F[Extracted] =
@@ -131,7 +137,7 @@ object ExtractArchive {
         } yield extracted.copy(files = extracted.files.filter(_.id != ra.id))
     }
 
-  def extractZip[F[_]: ConcurrentEffect: ContextShift](
+  def extractZip[F[_]: Async](
       ctx: Context[F, ProcessItemArgs],
       archive: Option[RAttachmentArchive]
   )(ra: RAttachment, pos: Int): F[Extracted] = {
@@ -142,7 +148,7 @@ object ExtractArchive {
     val glob = ctx.args.meta.fileFilter.getOrElse(Glob.all)
     ctx.logger.debug(s"Filtering zip entries with '${glob.asString}'") *>
       zipData
-        .through(Zip.unzipP[F](8192, ctx.blocker, glob))
+        .through(Zip.unzipP[F](8192, glob))
         .zipWithIndex
         .flatMap(handleEntry(ctx, ra, pos, archive, None))
         .foldMonoid
@@ -150,7 +156,7 @@ object ExtractArchive {
         .lastOrError
   }
 
-  def extractMail[F[_]: ConcurrentEffect](
+  def extractMail[F[_]: Async](
       ctx: Context[F, ProcessItemArgs],
       archive: Option[RAttachmentArchive]
   )(ra: RAttachment, pos: Int): F[Extracted] = {

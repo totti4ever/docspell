@@ -1,4 +1,14 @@
-module Messages.Comp.UserTable exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.UserTable exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 import Messages.DateFormat as DF
@@ -25,4 +35,16 @@ gb =
     , logins = "Logins"
     , lastLogin = "Last Login"
     , formatDateTime = DF.formatDateTimeLong Messages.UiLanguage.English
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , login = "Benutzername"
+    , state = "Status"
+    , email = "E-Mail"
+    , logins = "Anmeldungen"
+    , lastLogin = "Letzte Anmeldung"
+    , formatDateTime = DF.formatDateTimeLong Messages.UiLanguage.German
     }

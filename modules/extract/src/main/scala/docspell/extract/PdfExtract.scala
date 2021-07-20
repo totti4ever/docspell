@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.extract
 
 import cats.effect._
@@ -17,9 +23,8 @@ object PdfExtract {
       Result(t._1, t._2)
   }
 
-  def get[F[_]: Sync: ContextShift](
+  def get[F[_]: Async](
       in: Stream[F, Byte],
-      blocker: Blocker,
       lang: Language,
       stripMinLen: Int,
       ocrCfg: OcrConfig,
@@ -27,7 +32,7 @@ object PdfExtract {
   ): F[Either[Throwable, Result]] = {
 
     val runOcr =
-      TextExtract.extractOCR(in, blocker, logger, lang.iso3, ocrCfg).compile.lastOrError
+      TextExtract.extractOCR(in, logger, lang.iso3, ocrCfg).compile.lastOrError
 
     def chooseResult(ocrStr: Text, strippedRes: (Text, Option[PdfMetaData])) =
       if (ocrStr.length > strippedRes._1.length)

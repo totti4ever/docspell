@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store
 
 import scala.concurrent.ExecutionContext
@@ -24,10 +30,9 @@ trait Store[F[_]] {
 
 object Store {
 
-  def create[F[_]: Effect: ContextShift](
+  def create[F[_]: Async](
       jdbc: JdbcConfig,
-      connectEC: ExecutionContext,
-      blocker: Blocker
+      connectEC: ExecutionContext
   ): Resource[F, Store[F]] = {
 
     val hxa = HikariTransactor.newHikariTransactor[F](
@@ -35,8 +40,7 @@ object Store {
       jdbc.url.asString,
       jdbc.user,
       jdbc.password,
-      connectEC,
-      blocker
+      connectEC
     )
 
     for {

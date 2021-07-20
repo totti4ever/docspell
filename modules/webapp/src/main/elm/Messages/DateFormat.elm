@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Messages.DateFormat exposing
     ( format
     , formatDateLong
@@ -29,6 +35,9 @@ get lang =
     case lang of
         English ->
             gb
+
+        German ->
+            de
 
 
 format : UiLanguage -> (DateTimeMsg -> List Token) -> Int -> String

@@ -1,4 +1,14 @@
-module Messages.Page.ItemDetail exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Page.ItemDetail exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Comp.ItemDetail
 import Messages.Comp.ItemDetail.EditForm
@@ -18,4 +28,13 @@ gb =
     , editForm = Messages.Comp.ItemDetail.EditForm.gb
     , editMetadata = "Edit Metadata"
     , collapseExpand = "Collapse/Expand"
+    }
+
+
+de : Texts
+de =
+    { itemDetail = Messages.Comp.ItemDetail.de
+    , editForm = Messages.Comp.ItemDetail.EditForm.de
+    , editMetadata = "Metadaten ändern"
+    , collapseExpand = "Aus-/Einklappen"
     }

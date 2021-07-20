@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.mail
 
 import cats.effect._
@@ -15,7 +21,7 @@ import emil.{MimeType => _, _}
 
 object ReadMail {
 
-  def readBytesP[F[_]: ConcurrentEffect](
+  def readBytesP[F[_]: Async](
       logger: Logger[F],
       glob: Glob
   ): Pipe[F, Byte, Binary[F]] =
@@ -26,7 +32,7 @@ object ReadMail {
       Stream.eval(logger.debug(s"Converting e-mail file...")) >>
         s.through(Mail.readBytes[F])
 
-  def mailToEntries[F[_]: ConcurrentEffect](
+  def mailToEntries[F[_]: Async](
       logger: Logger[F],
       glob: Glob
   )(mail: Mail[F]): Stream[F, Binary[F]] = {

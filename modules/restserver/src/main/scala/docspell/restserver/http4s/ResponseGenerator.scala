@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.http4s
 
 import cats.Applicative
@@ -10,7 +16,7 @@ trait ResponseGenerator[F[_]] {
   self: Http4sDsl[F] =>
 
   implicit final class EitherResponses[A, B](e: Either[A, B]) {
-    def toResponse(headers: Header*)(implicit
+    def toResponse(headers: Header.ToRaw*)(implicit
         F: Applicative[F],
         w0: EntityEncoder[F, A],
         w1: EntityEncoder[F, B]
@@ -23,7 +29,7 @@ trait ResponseGenerator[F[_]] {
 
   implicit final class OptionResponse[A](o: Option[A]) {
     def toResponse(
-        headers: Header*
+        headers: Header.ToRaw*
     )(implicit F: Applicative[F], w0: EntityEncoder[F, A]): F[Response[F]] =
       o.map(a => Ok(a)).getOrElse(NotFound()).map(_.withHeaders(headers: _*))
   }

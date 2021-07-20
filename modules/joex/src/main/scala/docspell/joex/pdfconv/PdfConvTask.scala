@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.pdfconv
 
 import cats.data.Kleisli
@@ -35,7 +41,7 @@ object PdfConvTask {
 
   val taskName = Ident.unsafe("pdf-files-migration")
 
-  def apply[F[_]: Sync: ContextShift](cfg: Config): Task[F, Args, Unit] =
+  def apply[F[_]: Async](cfg: Config): Task[F, Args, Unit] =
     Task { ctx =>
       for {
         _    <- ctx.logger.info(s"Converting pdf file ${ctx.args} using ocrmypdf")
@@ -62,7 +68,7 @@ object PdfConvTask {
     val existsPdf =
       for {
         meta <- ctx.store.transact(RAttachment.findMeta(ctx.args.attachId))
-        res = meta.filter(_.mimetype.matches(Mimetype.`application/pdf`))
+        res = meta.filter(_.mimetype.matches(Mimetype.applicationPdf))
         _ <-
           if (res.isEmpty)
             ctx.logger.info(
@@ -83,7 +89,7 @@ object PdfConvTask {
     else none.pure[F]
   }
 
-  def convert[F[_]: Sync: ContextShift](
+  def convert[F[_]: Async](
       cfg: Config,
       ctx: Context[F, Args],
       in: FileMeta
@@ -118,7 +124,6 @@ object PdfConvTask {
         cfg.convert.ocrmypdf,
         lang,
         in.chunksize,
-        ctx.blocker,
         ctx.logger
       )(data, storeResult)
 

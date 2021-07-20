@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.effect._
@@ -22,8 +28,7 @@ import org.http4s.headers._
 
 object AttachmentRoutes {
 
-  def apply[F[_]: Effect: ContextShift](
-      blocker: Blocker,
+  def apply[F[_]: Async](
       backend: BackendApp[F],
       user: AuthToken
   ): HttpRoutes[F] = {
@@ -51,7 +56,7 @@ object AttachmentRoutes {
       case req @ GET -> Root / Ident(id) =>
         for {
           fileData <- backend.itemSearch.findAttachment(id, user.account.collective)
-          inm     = req.headers.get(`If-None-Match`).flatMap(_.tags)
+          inm     = req.headers.get[`If-None-Match`].flatMap(_.tags)
           matches = BinaryUtil.matchETag(fileData.map(_.meta), inm)
           resp <-
             fileData
@@ -74,7 +79,7 @@ object AttachmentRoutes {
       case req @ GET -> Root / Ident(id) / "original" =>
         for {
           fileData <- backend.itemSearch.findAttachmentSource(id, user.account.collective)
-          inm     = req.headers.get(`If-None-Match`).flatMap(_.tags)
+          inm     = req.headers.get[`If-None-Match`].flatMap(_.tags)
           matches = BinaryUtil.matchETag(fileData.map(_.meta), inm)
           resp <-
             fileData
@@ -99,7 +104,7 @@ object AttachmentRoutes {
         for {
           fileData <-
             backend.itemSearch.findAttachmentArchive(id, user.account.collective)
-          inm     = req.headers.get(`If-None-Match`).flatMap(_.tags)
+          inm     = req.headers.get[`If-None-Match`].flatMap(_.tags)
           matches = BinaryUtil.matchETag(fileData.map(_.meta), inm)
           resp <-
             fileData
@@ -116,7 +121,7 @@ object AttachmentRoutes {
         for {
           fileData <-
             backend.itemSearch.findAttachmentPreview(id, user.account.collective)
-          inm      = req.headers.get(`If-None-Match`).flatMap(_.tags)
+          inm      = req.headers.get[`If-None-Match`].flatMap(_.tags)
           matches  = BinaryUtil.matchETag(fileData.map(_.meta), inm)
           fallback = flag.getOrElse(false)
           resp <-
@@ -126,7 +131,7 @@ object AttachmentRoutes {
                 else makeByteResp(data)
               }
               .getOrElse(
-                if (fallback) BinaryUtil.noPreview(blocker, req.some).getOrElseF(notFound)
+                if (fallback) BinaryUtil.noPreview(req.some).getOrElseF(notFound)
                 else notFound
               )
         } yield resp
@@ -158,7 +163,7 @@ object AttachmentRoutes {
         // it redirects currently to viewerjs
         val attachUrl = s"/api/v1/sec/attachment/${id.id}"
         val path      = s"/app/assets${Webjars.viewerjs}/ViewerJS/index.html#$attachUrl"
-        SeeOther(Location(Uri(path = path)))
+        SeeOther(Location(Uri(path = Uri.Path.unsafeFromString(path))))
 
       case GET -> Root / Ident(id) / "meta" =>
         for {
@@ -184,4 +189,19 @@ object AttachmentRoutes {
         } yield resp
     }
   }
+
+  def admin[F[_]: Async](backend: BackendApp[F]): HttpRoutes[F] = {
+    val dsl = Http4sDsl[F]
+    import dsl._
+
+    HttpRoutes.of { case POST -> Root / "generatePreviews" =>
+      for {
+        res <- backend.item.generateAllPreviews(MakePreviewArgs.StoreMode.Replace, true)
+        resp <- Ok(
+          Conversions.basicResult(res, "Generate all previews task submitted.")
+        )
+      } yield resp
+    }
+  }
+
 }

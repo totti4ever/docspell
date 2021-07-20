@@ -1,6 +1,13 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Util.Update exposing
     ( andThen1
     , andThen2
+    , andThen3
     , cmdUnit
     )
 
@@ -42,6 +49,21 @@ andThen2 fs m =
     in
     List.foldl update init fs
         |> combine
+
+
+andThen3 :
+    List (model -> { x | model : model, cmd : Cmd msg, sub : Sub msg })
+    -> model
+    -> ( model, Cmd msg, Sub msg )
+andThen3 list m =
+    let
+        mkTuple r =
+            ( r.model, r.cmd, r.sub )
+
+        list2 =
+            List.map (\e -> e >> mkTuple) list
+    in
+    andThen2 list2 m
 
 
 cmdUnit : a -> Cmd a

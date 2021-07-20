@@ -7,40 +7,41 @@ object Dependencies {
 
   val BcryptVersion           = "0.4"
   val BetterMonadicForVersion = "0.3.1"
-  val BitpeaceVersion         = "0.7.0"
-  val CalevVersion            = "0.4.2"
-  val CatsParseVersion        = "0.3.2"
-  val CirceVersion            = "0.13.0"
+  val BitpeaceVersion         = "0.9.0-M1"
+  val CalevVersion            = "0.5.4"
+  val CatsParseVersion        = "0.3.4"
+  val CirceVersion            = "0.14.1"
   val ClipboardJsVersion      = "2.0.6"
-  val DoobieVersion           = "0.13.0"
-  val EmilVersion             = "0.9.1"
+  val DoobieVersion           = "1.0.0-M5"
+  val EmilVersion             = "0.10.0-M1"
   val FlexmarkVersion         = "0.62.2"
-  val FlywayVersion           = "7.8.1"
-  val Fs2Version              = "2.5.4"
+  val FlywayVersion           = "7.11.3"
+  val Fs2Version              = "3.0.6"
+  val Fs2CronVersion          = "0.7.1"
   val H2Version               = "1.4.200"
-  val Http4sVersion           = "0.21.22"
+  val Http4sVersion           = "0.23.0-RC1"
   val Icu4jVersion            = "69.1"
-  val JsoupVersion            = "1.13.1"
+  val JsoupVersion            = "1.14.1"
   val KindProjectorVersion    = "0.10.3"
-  val KittensVersion          = "2.2.2"
+  val KittensVersion          = "2.3.2"
   val LevigoJbig2Version      = "2.0"
-  val Log4sVersion            = "1.9.0"
-  val LogbackVersion          = "1.2.3"
-  val MariaDbVersion          = "2.7.2"
-  val MiniTestVersion         = "2.9.3"
-  val MUnitVersion            = "0.7.25"
+  val Log4sVersion            = "1.10.0"
+  val LogbackVersion          = "1.2.4"
+  val MariaDbVersion          = "2.7.3"
+  val MUnitVersion            = "0.7.27"
+  val MUnitCatsEffectVersion  = "1.0.5"
   val OrganizeImportsVersion  = "0.5.0"
-  val PdfboxVersion           = "2.0.23"
+  val PdfboxVersion           = "2.0.24"
   val PoiVersion              = "4.1.2"
-  val PostgresVersion         = "42.2.20"
-  val PureConfigVersion       = "0.15.0"
-  val ScalaJavaTimeVersion    = "2.2.2"
-  val Slf4jVersion            = "1.7.30"
-  val StanfordNlpVersion      = "4.2.0"
-  val TikaVersion             = "1.26"
-  val YamuscaVersion          = "0.8.0"
-  val SwaggerUIVersion        = "3.47.1"
-  val TwelveMonkeysVersion    = "3.6.4"
+  val PostgresVersion         = "42.2.23"
+  val PureConfigVersion       = "0.16.0"
+  val ScalaJavaTimeVersion    = "2.3.0"
+  val Slf4jVersion            = "1.7.32"
+  val StanfordNlpVersion      = "4.2.2"
+  val TikaVersion             = "1.27"
+  val YamuscaVersion          = "0.8.1"
+  val SwaggerUIVersion        = "3.51.1"
+  val TwelveMonkeysVersion    = "3.7.0"
   val JQueryVersion           = "3.5.1"
   val ViewerJSVersion         = "0.5.8"
 
@@ -66,7 +67,7 @@ object Dependencies {
     "com.github.eikek" %% "calev-core" % CalevVersion
   )
   val calevFs2 = Seq(
-    "com.github.eikek" %% "calev-fs2" % CalevVersion
+    "eu.timepit" %% "fs2-cron-calev" % Fs2CronVersion
   )
   val calevCirce = Seq(
     "com.github.eikek" %% "calev-circe" % CalevVersion
@@ -179,7 +180,7 @@ object Dependencies {
     "org.apache.tika" % "tika-core" % TikaVersion
   )
   val commonsIO = Seq(
-    "commons-io" % "commons-io" % "2.8.0"
+    "commons-io" % "commons-io" % "2.11.0"
   )
   val tikaParser = Seq(
     "org.apache.tika" % "tika-parsers" % TikaVersion
@@ -264,16 +265,10 @@ object Dependencies {
     "com.github.eikek" %% "yamusca-core" % YamuscaVersion
   )
 
-  val miniTest = Seq(
-    // https://github.com/monix/minitest
-    // Apache 2.0
-    "io.monix" %% "minitest"      % MiniTestVersion,
-    "io.monix" %% "minitest-laws" % MiniTestVersion
-  ).map(_ % Test)
-
   val munit = Seq(
-    "org.scalameta" %% "munit"            % MUnitVersion,
-    "org.scalameta" %% "munit-scalacheck" % MUnitVersion
+    "org.scalameta" %% "munit"               % MUnitVersion,
+    "org.scalameta" %% "munit-scalacheck"    % MUnitVersion,
+    "org.typelevel" %% "munit-cats-effect-3" % MUnitCatsEffectVersion
   )
 
   val kindProjectorPlugin = "org.typelevel" %% "kind-projector"     % KindProjectorVersion

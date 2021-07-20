@@ -1,12 +1,25 @@
-module Messages.Comp.ScanMailboxForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
 
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.ScanMailboxForm exposing
+    ( Texts
+    , de
+    , gb
+    )
+
+import Http
 import Messages.Basics
 import Messages.Comp.CalEventInput
+import Messages.Comp.HttpError
 
 
 type alias Texts =
     { basics : Messages.Basics.Texts
     , calEventInput : Messages.Comp.CalEventInput.Texts
+    , httpError : Http.Error -> String
     , reallyDeleteTask : String
     , startOnce : String
     , startNow : String
@@ -47,13 +60,15 @@ type alias Texts =
     , itemDirectionInfo : String
     , itemFolder : String
     , itemFolderInfo : String
-    , folderOwnerWarning : String
     , tagsInfo : String
     , documentLanguage : String
     , documentLanguageInfo : String
     , schedule : String
     , scheduleClickForHelp : String
     , scheduleInfo : String
+    , connectionMissing : String
+    , noProcessingFolders : String
+    , invalidCalEvent : String
     }
 
 
@@ -61,6 +76,7 @@ gb : Texts
 gb =
     { basics = Messages.Basics.gb
     , calEventInput = Messages.Comp.CalEventInput.gb
+    , httpError = Messages.Comp.HttpError.gb
     , reallyDeleteTask = "Really delete this scan mailbox task?"
     , startOnce = "Start Once"
     , startNow = "Start this task now"
@@ -81,7 +97,7 @@ gb =
     , mailbox = "Mailbox"
     , summary = "Summary"
     , summaryInfo = "Some human readable name, only for displaying"
-    , connectionInfo = "The IMAP connection to use when sending notification mails."
+    , connectionInfo = "The IMAP connection to use for fetching mails."
     , folders = "Folders"
     , foldersInfo = "The folders to look for mails."
     , receivedHoursInfo = "Select mails newer than `now - receivedHours`"
@@ -117,12 +133,6 @@ gb =
             ++ "at sender and receiver."
     , itemFolder = "Item Folder"
     , itemFolderInfo = "Put all items from this mailbox into the selected folder"
-    , folderOwnerWarning = """
-You are **not a member** of this folder. Items created from mails in
-this mailbox will be **hidden** from any search results. Use a folder
-where you are a member of to make items visible. This message will
-disappear then.
-                      """
     , tagsInfo = "Choose tags that should be applied to items."
     , documentLanguage = "Language"
     , documentLanguageInfo =
@@ -135,4 +145,81 @@ disappear then.
             ++ "Use English 3-letter weekdays. Either a single value, "
             ++ "a list (ex. 1,2,3), a range (ex. 1..3) or a '*' (meaning all) "
             ++ "is allowed for each part."
+    , connectionMissing = "No E-Mail connections configured. Goto E-Mail Settings to add one."
+    , noProcessingFolders = "No processing folders given."
+    , invalidCalEvent = "The calendar event is not valid."
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , calEventInput = Messages.Comp.CalEventInput.de
+    , httpError = Messages.Comp.HttpError.de
+    , reallyDeleteTask = "Den Auftrag wirklich löschen?"
+    , startOnce = "Jetzt starten"
+    , startNow = "Den Auftrag sofort starten"
+    , deleteThisTask = "Den Auftrag löschen"
+    , generalTab = "Allgemein"
+    , processingTab = "E-Mails abholen"
+    , additionalFilterTab = "Zusätzliche Filter"
+    , postProcessingTab = "Nachverarbeitung"
+    , metadataTab = "Metadaten"
+    , scheduleTab = "Zeitplan"
+    , processingTabInfo = "Diese Einstellungen legen fest, welche E-Mails aus dem Postfach heruntergeladen werden."
+    , additionalFilterTabInfo = "Diese Filter werden auf die bereits heruntergeladenen E-Mails angewendet und können nochmals E-Mails von der Verarbeitung ausschließen."
+    , postProcessingTabInfo = "Hier wird definiert was mit den E-Mails passiert, die heruntergeladen wurden."
+    , metadataTabInfo = "Welche Metadaten sollen den Dokumenten hinzugefügt werden."
+    , scheduleTabInfo = "Wann und wie oft sollen die E-Mails abgerufen werden."
+    , selectConnection = "Verbindung wählen…"
+    , enableDisable = "Den Auftrag aktivieren oder deaktivieren"
+    , mailbox = "Postfach"
+    , summary = "Kurzbeschreibung"
+    , summaryInfo = "Eine kurze, lesbare Zusammenfassung, nur für die Anzeige"
+    , connectionInfo = "Die IMAP-Verbindung, die zum Abholen der E-Mails verwendet werden soll."
+    , folders = "Postfachordner"
+    , foldersInfo = "In diesem Ordner nach E-Mails suchen."
+    , receivedHoursInfo = "E-Mails suchen, die neuer sind als `heute - empfangenSeit`"
+    , receivedHoursLabel = "Empfangen seit (Stunden)"
+    , fileFilter = "Dateifilter"
+    , fileFilterInfo =
+        "Verwende eine Glob zum Filtern von Anhängen. Zum Beispiel, um nur PDF-Anhänge aus den E-Mails zu holen: "
+            ++ "`*.pdf`. Wenn auch der E-Mail-Inhalt verwendet werden soll, erlaube alle HTML-Dateien oder "
+            ++ "`mail.html`. Globs können kombiniert werden mit ODER, wie z.B.: "
+            ++ "`*.pdf|mail.html`. Wird kein Glob angegeben, ist es `*`, es werden alle Dateien verwendet."
+    , subjectFilter = "Betrefffilter"
+    , subjectFilterInfo =
+        "Verwende einen Glob, um E-Mails anhand des Betreffs zu filtern. Zum Beispiel: "
+            ++ "`*Scanned Document*`. Kein Filter bedeutet `*`, was jeden Betreff zulässt."
+    , postProcessingLabel = "Wende die Nachverarbeitung auf alle heruntergeladenen E-Mails an."
+    , postProcessingInfo = """
+Heruntergeladene E-Mails, die aber durch die Filter nicht importiert wurden, können durch diese Option von der gesamten Nachverarbeitung ein- oder ausgeschlossen werden. Aktiviert: Die Nachbearbeitung wird bei allen E-Mails durchgeführt. Deaktiviert: Die Nachbearbeitung wird nur bei importierten E-Mails druchgeführt.
+"""
+    , targetFolder = "Zielordner"
+    , targetFolderInfo = "E-Mails nach der Verarbeitung in diesen Ordner verschieben."
+    , deleteMailLabel = "Importierte E-Mails löschen"
+    , deleteMailInfo =
+        "Importierte E-Mails aus dem Postfach löschen. E-Mails werden nur gelöscht falls *kein* Zielordner angegeben ist."
+    , itemDirection = "Richtung"
+    , automatic = "Automatisch"
+    , itemDirectionInfo = """
+Setzt die Senderichtung. Falls sie für alle E-Mails schon feststeht,
+kann hier ein Wert für alle festgelegt werden. Bei 'Automatisch' wird auf den Sender und Empfänger geschaut, um eine Richtung zu erraten."""
+    , itemFolder = "Ordner"
+    , itemFolderInfo = "Alle Dokumente aus diesem Auftrag in den Ordner verschieben"
+    , tagsInfo = "Wähle Tags, die den Dokumenten zugordnet werden"
+    , documentLanguage = "Sprache"
+    , documentLanguageInfo =
+        "Wird für Texterkennung und -analyse verwendet. Die Standardsprache des Kollektivs "
+            ++ "wird verwendet, falls hier nicht angegeben."
+    , schedule = "Zeitplan"
+    , scheduleClickForHelp = "Klicke für Hilfe"
+    , scheduleInfo =
+        "Gib an, wie oft und wann der Auftrag laufen soll. "
+            ++ "Verwende englische 3-Buchstaben Wochentage. Entweder ein einzelner Wert, "
+            ++ "eine Liste (wie `1,2,3`), eine Bereich (wie `1..3`) oder ein '*' (für alle) "
+            ++ "ist mögich für jeden Teil."
+    , connectionMissing = "Keine E-Mail-Verbindung definiert. Gehe zu den E-Mail-Einstellungen und füge eine hinzu."
+    , noProcessingFolders = "Keine Postfachordner ausgewählt."
+    , invalidCalEvent = "Das Kalenderereignis ist ungültig."
     }

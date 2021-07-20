@@ -1,5 +1,12 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Messages.App exposing
     ( Texts
+    , de
     , gb
     )
 
@@ -33,17 +40,16 @@ gb =
     }
 
 
-
--- de : Texts
--- de =
---     { collectiveProfile = "Kollektiv-Profil"
---     , userProfile = "Benutzer-Profil"
---     , lightDark = "Hell/Dunkel"
---     , logout = "Abmelden"
---     , items = "Dokumente"
---     , manageData = "Daten verwalten"
---     , uploadFiles = "Dateien hochladen"
---     , processingQueue = "Verarbeitung"
---     , newInvites = "Neue Einladung"
---     , help = "Hilfe (English)"
---     }
+de : Texts
+de =
+    { collectiveProfile = "Kollektivprofil"
+    , userProfile = "Benutzerprofil"
+    , lightDark = "Hell/Dunkel"
+    , logout = "Abmelden"
+    , items = "Dokumente"
+    , manageData = "Daten verwalten"
+    , uploadFiles = "Dateien hochladen"
+    , processingQueue = "Verarbeitung"
+    , newInvites = "Neue Einladung"
+    , help = "Hilfe (English)"
+    }

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.effect._
@@ -17,7 +23,7 @@ import org.http4s.dsl.Http4sDsl
 
 object LoginRoutes {
 
-  def login[F[_]: Effect](S: Login[F], cfg: Config): HttpRoutes[F] = {
+  def login[F[_]: Async](S: Login[F], cfg: Config): HttpRoutes[F] = {
     val dsl: Http4sDsl[F] = new Http4sDsl[F] {}
     import dsl._
 
@@ -32,7 +38,7 @@ object LoginRoutes {
     }
   }
 
-  def session[F[_]: Effect](S: Login[F], cfg: Config, token: AuthToken): HttpRoutes[F] = {
+  def session[F[_]: Async](S: Login[F], cfg: Config, token: AuthToken): HttpRoutes[F] = {
     val dsl: Http4sDsl[F] = new Http4sDsl[F] {}
     import dsl._
 
@@ -56,7 +62,7 @@ object LoginRoutes {
   private def getBaseUrl[F[_]](cfg: Config, req: Request[F]): LenientUri =
     ClientRequestInfo.getBaseUrl(cfg, req)
 
-  private def makeResponse[F[_]: Effect](
+  private def makeResponse[F[_]: Async](
       dsl: Http4sDsl[F],
       cfg: Config,
       req: Request[F],

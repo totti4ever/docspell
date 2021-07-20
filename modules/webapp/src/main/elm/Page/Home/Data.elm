@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.Home.Data exposing
     ( ConfirmModalValue(..)
     , Model
@@ -193,6 +199,7 @@ type Msg
     | KeyUpPowerSearchbarMsg (Maybe KeyCode)
     | RequestReprocessSelected
     | ReprocessSelectedConfirmed
+    | ClientSettingsSaveResp UiSettings (Result Http.Error BasicResult)
 
 
 type SearchType

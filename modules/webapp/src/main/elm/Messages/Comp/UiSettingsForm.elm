@@ -1,4 +1,14 @@
-module Messages.Comp.UiSettingsForm exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.UiSettingsForm exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Data.Color exposing (Color)
 import Data.Fields exposing (Field)
@@ -115,5 +125,81 @@ combine multiple variables with `|` to use the first non-empty one,
 for example `{{corrOrg|corrPerson|-}}` would render the organization
 and if that is not present the person. If both are absent a dash `-`
 is rendered.
+"""
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , general = "Allgemein"
+    , showSideMenuByDefault = "Menü an der linken Seite standardmäßig anzeigen"
+    , uiLanguage = "Sprache der Oberfläche"
+    , itemSearch = "Suchansicht"
+    , maxResultsPerPageInfo =
+        \max ->
+            "Maximale Anzahl von Resultaten in einer Seite. Maximal "
+                ++ String.fromInt max
+                ++ "."
+    , maxResultsPerPage = "Anzahl pro Seite"
+    , showBasicSearchStatsByDefault = "Zeige einfache Statistiken zum Suchresultat an"
+    , enablePowerSearch = "Die 'Power-Suche' aktivieren"
+    , itemCards = "Kachelansicht"
+    , maxNoteSize = "Max. Länge der Notizen"
+    , maxNoteSizeInfo =
+        \max ->
+            "Maximale Länge der Notizen, die in der Kachel dargestellt werden. Zwischen 0 - "
+                ++ String.fromInt max
+                ++ "."
+    , sizeOfItemPreview = "Größe der Vorschau (kann bei Feldern unten ganz ausgeschaltet werden)"
+    , cardTitlePattern = "Titelvorlage der Kachel"
+    , togglePatternHelpText = "Hilfe anzeigen/ausblenden"
+    , cardSubtitlePattern = "Untertitelvorlage der Kachel"
+    , searchMenu = "Suchmenü"
+    , searchMenuTagCount = "Anzahl von Tags"
+    , searchMenuTagCountInfo = "So viele Tags werden im Suchmenü gleichzeitig dargestellt. Weitere können ausgeklappt werden. Verwende 0, um alle anzuzeigen."
+    , searchMenuCatCount = "Anzahl Tag-Kategorien"
+    , searchMenuCatCountInfo = "So viele Tag-Kategorien werden gleichzeitig im Suchmenü dargestellt. Weitere können ausgeklappt werden. Verwende 0, um alle anzuzeigen."
+    , searchMenuFolderCount = "Anzahl von Ordnern"
+    , searchMenuFolderCountInfo = "So viele Ordner werden gleichzeitig im Suchmenü dargestellt. Weitere können ausgeklappt werden. Verwende 0, um alle anzuzeigen."
+    , itemDetail = "Detailansicht"
+    , browserNativePdfView = "Browsereigene PDF-Vorschau"
+    , keyboardShortcutLabel = "Aktivere Tastenkürzel zur Navigation und zum Bestätigen der Metadaten"
+    , tagCategoryColors = "Tag-Kategoriefarben"
+    , colorLabel = Messages.Data.Color.de
+    , chooseTagColorLabel = "Wähle eine Farbe für eine Tag-Kategorie"
+    , tagColorDescription = "Tags können anhand ihrer Kategorie verschieden dargestellt werden."
+    , fields = "Felder"
+    , fieldsInfo = "Wähle welche Felder angezeigt werden sollen und welche nicht"
+    , fieldLabel = Messages.Data.Fields.de
+    , templateHelpMessage =
+        """
+Eine Vorlage erlaubt es, den Titel und Untertitel einer Kachel
+individuell anzupassen. Dabei werden Variablen innerhalb `{{` und `}}`
+verwendet. Anderer Text wird wörtlich dargestellt. Die folgenden
+Variablen sind verfügbar:
+
+- `{{name}}` Der Name
+- `{{source}}` die Quelle durch welche das Dokument entstand
+- `{{folder}}` der Ordner
+- `{{corrOrg}}` die korrespondierende Organisation
+- `{{corrPerson}}` die korrespondierende Person
+- `{{correspondent}}` Organisation und Person, getrennt durch ein Komma
+- `{{concPerson}}` die betreffende Person
+- `{{concEquip}}` die betreffende Aussstattung
+- `{{concerning}}` Person und Ausstattung, getrennt durch ein Komma
+- `{{fileCount}}` die Anzahl von Anhängen
+- `{{dateLong}}` das Datum lang formatiert
+- `{{dateShort}}` das Datum kurz formatiert (yyyy/mm/dd)
+- `{{dueDateLong}}` das Fälligkeitsdatum lang formatiert
+- `{{dueDateShort}}` das Fälligkeitsdatum kurz formatiert (yyyy/mm/dd)
+- `{{direction}}` die Richtung
+
+Wenn eine Variable nicht vorhanden ist, wird eine leere Zeichenkette
+geschrieben. Mit einem `|` können mehrere Variablen hintereinander
+verknüpft werden, bis zur ersten die einen Wert enthält. Zum Beispiel:
+`{{corrOrg|corrPerson|-}}` würde entweder die Organisation darstellen
+oder, wenn diese leer ist, die Person. Sind beide leer wird ein `-`
+dargestellt.
 """
     }

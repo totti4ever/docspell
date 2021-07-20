@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex
 
 import java.nio.file.{Files, Paths}
@@ -57,9 +63,8 @@ object Main extends IOApp {
     val pools = for {
       cec <- connectEC
       bec <- blockingEC
-      blocker = Blocker.liftExecutorService(bec)
       rec <- restserverEC
-    } yield Pools(cec, bec, blocker, rec)
+    } yield Pools(cec, bec, rec)
     pools.use(p =>
       JoexServer
         .stream[IO](cfg, p)

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.data.OptionT
@@ -20,7 +26,7 @@ import org.log4s._
 object UploadRoutes {
   private[this] val logger = getLogger
 
-  def secured[F[_]: Effect](
+  def secured[F[_]: Async](
       backend: BackendApp[F],
       cfg: Config,
       user: AuthToken
@@ -39,7 +45,7 @@ object UploadRoutes {
     }
   }
 
-  def open[F[_]: Effect](backend: BackendApp[F], cfg: Config): HttpRoutes[F] = {
+  def open[F[_]: Async](backend: BackendApp[F], cfg: Config): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 
@@ -62,7 +68,7 @@ object UploadRoutes {
     }
   }
 
-  private def submitFiles[F[_]: Effect](
+  private def submitFiles[F[_]: Async](
       backend: BackendApp[F],
       cfg: Config,
       accOrSrc: Either[Ident, AccountId]

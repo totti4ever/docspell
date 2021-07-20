@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.NewInvite.View2 exposing (viewContent, viewSidebar)
 
 import Data.Flags exposing (Flags)
@@ -40,10 +46,14 @@ viewContent texts flags _ model =
                         [ for "invitekey"
                         , class "mb-1 text-xs sm:text-sm tracking-wide "
                         ]
-                        [ text texts.invitationKey
+                        [ text texts.password
                         ]
                     , div [ class "relative" ]
-                        [ div [ class "inline-flex items-center justify-center absolute left-0 top-0 h-full w-10 text-gray-400 dark:text-bluegray-400  " ]
+                        [ div
+                            [ class "inline-flex items-center justify-center"
+                            , class "absolute left-0 top-0 h-full w-10"
+                            , class "text-gray-400 dark:text-bluegray-400"
+                            ]
                             [ i [ class "fa fa-key" ] []
                             ]
                         , input
@@ -93,13 +103,16 @@ resultMessage texts model =
             ]
         ]
         [ case model.result of
-            Failed m ->
-                p [] [ text m ]
+            Failed err ->
+                text (texts.httpError err)
+
+            GenericFail m ->
+                text m
 
             Success r ->
                 div [ class "" ]
                     [ p []
-                        [ text r.message
+                        [ text texts.newInvitationCreated
                         , text (" " ++ texts.invitationKey ++ ":")
                         ]
                     , pre [ class "text-center font-mono mt-4" ]
@@ -115,7 +128,8 @@ resultMessage texts model =
 inviteMessage : Texts -> Flags -> Html Msg
 inviteMessage texts flags =
     div
-        [ class (S.message ++ "text-sm")
+        [ class S.message
+        , class "markdown-preview"
         , classList
             [ ( "hidden", flags.config.signupMode /= "invite" )
             ]

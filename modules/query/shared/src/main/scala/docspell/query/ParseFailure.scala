@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.query
 
 import cats.data.{NonEmptyList => Nel}
@@ -10,6 +16,7 @@ import cats.parse.Parser.Expectation.InRange
 import cats.parse.Parser.Expectation.Length
 import cats.parse.Parser.Expectation.OneOfStr
 import cats.parse.Parser.Expectation.StartOfString
+import cats.parse.Parser.Expectation.WithContext
 
 final case class ParseFailure(
     input: String,
@@ -101,5 +108,8 @@ object ParseFailure {
       case OneOfStr(offset, strs) =>
         val options = strs.take(8)
         ExpectMessage(offset, options.take(7), options.size < 8)
+
+      case WithContext(ctx, expect) =>
+        ExpectMessage(expect.offset, s"Failed to parse near: $ctx" :: Nil, true)
     }
 }

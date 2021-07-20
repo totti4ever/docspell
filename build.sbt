@@ -1,13 +1,16 @@
 import com.github.eikek.sbt.openapi._
 import scala.sys.process._
-import com.typesafe.sbt.site.SitePlugin
 import com.typesafe.sbt.SbtGit.GitKeys._
 import docspell.build._
+import de.heikoseeberger.sbtheader.CommentBlockCreator
 
 val toolsPackage   = taskKey[Seq[File]]("Package the scripts/extension tools")
 val elmCompileMode = settingKey[ElmCompileMode]("How to compile elm sources")
 
 // --- Settings
+
+def inTest(d0: Seq[ModuleID], ds: Seq[ModuleID]*) =
+  ds.fold(d0)(_ ++ _).map(_ % Test)
 
 val scalafixSettings = Seq(
   semanticdbEnabled := true,                        // enable SemanticDB
@@ -17,7 +20,14 @@ val scalafixSettings = Seq(
 
 val sharedSettings = Seq(
   organization := "com.github.eikek",
-  scalaVersion := "2.13.5",
+  scalaVersion := "2.13.6",
+  organizationName := "Docspell Contributors",
+  licenses += ("GPL-3.0-or-later", url(
+    "https://spdx.org/licenses/GPL-3.0-or-later.html"
+  )),
+  startYear := Some(2020),
+  headerLicenseStyle := HeaderLicenseStyle.SpdxSyntax,
+  headerSources / excludeFilter := HiddenFileFilter || "*.java" || "StringUtil.scala",
   scalacOptions ++= Seq(
     "-deprecation",
     "-encoding",
@@ -33,6 +43,7 @@ val sharedSettings = Seq(
     "-Wvalue-discard",
     "-Wnumeric-widen"
   ),
+  javacOptions ++= Seq("-target", "1.8", "-source", "1.8"),
   LocalRootProject / toolsPackage := {
     val v      = version.value
     val logger = streams.value.log
@@ -46,7 +57,7 @@ val sharedSettings = Seq(
 ) ++ scalafixSettings
 
 val testSettingsMUnit = Seq(
-  libraryDependencies ++= Dependencies.munit.map(_ % Test),
+  libraryDependencies ++= inTest(Dependencies.munit, Dependencies.logging),
   testFrameworks += new TestFramework("munit.Framework")
 )
 
@@ -73,7 +84,13 @@ val elmSettings = Seq(
     (Compile / sourceDirectory).value / "elm",
     FileFilter.globFilter("*.elm"),
     HiddenFileFilter
-  )
+  ),
+  Compile / unmanagedSourceDirectories += (Compile / sourceDirectory).value / "elm",
+  headerSources / includeFilter := "*.elm",
+  headerMappings := headerMappings.value + (HeaderFileType("elm") -> HeaderCommentStyle(
+    new CommentBlockCreator("{-", " ", "-}"),
+    HeaderPattern.commentBetween("\\{\\-", " ", "\\-\\}")
+  ))
 )
 val stylesSettings = Seq(
   stylesMode := StylesMode.Dev,
@@ -111,7 +128,7 @@ def webjarSettings(queryJS: Project) = Seq(
 
 def debianSettings(cfgFile: String) =
   Seq(
-    maintainer := "Eike Kettner <eike.kettner@posteo.de>",
+    maintainer := "Eike Kettner <eikek@posteo.de>",
     Universal / mappings += {
       val conf = (Compile / resourceDirectory).value / "reference.conf"
       if (!conf.exists)
@@ -413,7 +430,7 @@ val restapi = project
     openapiTargetLanguage := Language.Scala,
     openapiPackage := Pkg("docspell.restapi.model"),
     openapiSpec := (Compile / resourceDirectory).value / "docspell-openapi.yml",
-    openapiStaticArgs := Seq("-l", "html2")
+    openapiStaticGen := OpenApiDocGenerator.Redoc
   )
   .dependsOn(common)
 
@@ -432,7 +449,8 @@ val joexapi = project
         Dependencies.http4sClient,
     openapiTargetLanguage := Language.Scala,
     openapiPackage := Pkg("docspell.joexapi.model"),
-    openapiSpec := (Compile / resourceDirectory).value / "joex-openapi.yml"
+    openapiSpec := (Compile / resourceDirectory).value / "joex-openapi.yml",
+    openapiStaticGen := OpenApiDocGenerator.Redoc
   )
   .dependsOn(common)
 
@@ -556,7 +574,14 @@ val restserver = project
       "-Xmx150M",
       "-XX:+UseG1GC"
     ),
-    Revolver.enableDebugging(port = 5050, suspend = false)
+    Revolver.enableDebugging(port = 5050, suspend = false),
+    Universal / mappings := {
+      val allMappings = (Universal / mappings).value
+      allMappings.filter {
+        //scalajs artifacts are not needed at runtime
+        case (file, name) => !name.contains("_sjs1_")
+      }
+    }
   )
   .dependsOn(restapi, joexapi, backend, webapp, ftssolr)
 
@@ -565,18 +590,15 @@ val restserver = project
 val website = project
   .in(file("website"))
   .disablePlugins(RevolverPlugin, ReleasePlugin)
-  .enablePlugins(ZolaPlugin, GhpagesPlugin)
+  .enablePlugins(ZolaPlugin, GitHubPagesPlugin)
   .settings(sharedSettings)
   .settings(
     name := "docspell-website",
     publishArtifact := false,
     publish / skip := true,
-    ghpagesNoJekyll := true,
-    // the ghpages plugins works together with the site plugin (its a dependency)
-    // to make it publish the zola generated site, override their mappings with the zola output
-    SitePlugin.autoImport.makeSite / mappings :=
-      Path.selectSubpaths(zolaOutputDir.value, _ => true).toSeq,
-    git.remoteRepo := "git@github.com:eikek/docspell",
+    gitHubPagesOrgName := "eikek",
+    gitHubPagesRepoName := "docspell",
+    gitHubPagesSiteDir := zolaOutputDir.value,
     Compile / resourceGenerators += Def.task {
       val templateOut = baseDirectory.value / "site" / "templates" / "shortcodes"
       val staticOut   = baseDirectory.value / "site" / "static" / "openapi"
@@ -771,16 +793,21 @@ def packageTools(logger: Logger, dir: File, version: String): Seq[File] = {
 
 addCommandAlias(
   "make",
-  ";set webapp/elmCompileMode := ElmCompileMode.Production; set webapp/stylesMode := StylesMode.Prod ;root/openapiCodegen ;root/test:compile"
+  ";set webapp/elmCompileMode := ElmCompileMode.Production; set webapp/stylesMode := StylesMode.Prod ;root/openapiCodegen ;root/Test/compile"
 )
-addCommandAlias("make-zip", ";restserver/universal:packageBin ;joex/universal:packageBin")
-addCommandAlias("make-deb", ";restserver/debian:packageBin ;joex/debian:packageBin")
+addCommandAlias("make-zip", ";restserver/Universal/packageBin ;joex/Universal/packageBin")
+addCommandAlias("make-deb", ";restserver/Debian/packageBin ;joex/Debian/packageBin")
 addCommandAlias("make-tools", ";root/toolsPackage")
 addCommandAlias("make-pkg", ";clean ;make ;make-zip ;make-deb ;make-tools")
 
 addCommandAlias("ci", "make; lint; test")
 addCommandAlias(
   "lint",
-  "scalafmtSbtCheck; scalafmtCheckAll; Compile/scalafix --check; Test/scalafix --check"
+  "restapi/openapiLint; joexapi/openapiLint; headerCheck; scalafmtSbtCheck; scalafmtCheckAll; Compile/scalafix --check; Test/scalafix --check"
 )
-addCommandAlias("fix", "Compile/scalafix; Test/scalafix; scalafmtSbt; scalafmtAll")
+addCommandAlias(
+  "fix",
+  "headerCreateAll; Compile/scalafix; Test/scalafix; scalafmtSbt; scalafmtAll"
+)
+addCommandAlias("make-website", ";website/clean ;website/zolaBuild ;website/zolaCheck")
+addCommandAlias("publish-website", "website/publishToGitHubPages")

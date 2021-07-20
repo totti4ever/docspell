@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.data.OptionT
@@ -20,7 +26,7 @@ import docspell.store.records.RItem
 object ReProcessItem {
   type Args = ReProcessItemArgs
 
-  def apply[F[_]: ConcurrentEffect: ContextShift](
+  def apply[F[_]: Async](
       cfg: Config,
       fts: FtsClient[F],
       itemOps: OItem[F],
@@ -84,7 +90,7 @@ object ReProcessItem {
       )
     }
 
-  def processFiles[F[_]: ConcurrentEffect: ContextShift](
+  def processFiles[F[_]: Async](
       cfg: Config,
       fts: FtsClient[F],
       itemOps: OItem[F],
@@ -133,7 +139,7 @@ object ReProcessItem {
   def isLastRetry[F[_]: Sync]: Task[F, Args, Boolean] =
     Task(_.isLastRetry)
 
-  def safeProcess[F[_]: ConcurrentEffect: ContextShift](
+  def safeProcess[F[_]: Async](
       cfg: Config,
       fts: FtsClient[F],
       itemOps: OItem[F],

@@ -1,6 +1,12 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
-import cats.effect.Effect
+import cats.effect.Async
 import cats.implicits._
 
 import docspell.backend.BackendApp
@@ -15,7 +21,7 @@ import org.http4s.dsl.Http4sDsl
 
 object AttachmentMultiRoutes extends MultiIdSupport {
 
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       backend: BackendApp[F],
       user: AuthToken
   ): HttpRoutes[F] = {

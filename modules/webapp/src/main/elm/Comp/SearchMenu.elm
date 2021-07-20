@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.SearchMenu exposing
     ( Model
     , Msg(..)
@@ -1120,7 +1126,7 @@ searchTabs texts ddd flags settings model =
         directionCfg =
             { makeOption =
                 \entry ->
-                    { text = Data.Direction.toString entry
+                    { text = texts.direction entry
                     , additional = ""
                     }
             , placeholder = texts.chooseDirection
@@ -1223,6 +1229,7 @@ searchTabs texts ddd flags settings model =
       , body =
             [ Html.map TagSelectMsg
                 (Comp.TagSelect.viewCats2
+                    texts.tagSelect
                     settings
                     tagSelectWM
                     model.tagSelectModel
@@ -1235,7 +1242,8 @@ searchTabs texts ddd flags settings model =
       , info = Nothing
       , body =
             [ Html.map FolderSelectMsg
-                (Comp.FolderSelect.viewDrop2 ddd.model
+                (Comp.FolderSelect.viewDrop2 texts.folderSelect
+                    ddd.model
                     settings.searchMenuFolderCount
                     model.folderList
                 )

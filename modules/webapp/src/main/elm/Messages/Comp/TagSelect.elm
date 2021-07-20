@@ -1,8 +1,21 @@
-module Messages.Comp.TagSelect exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.TagSelect exposing
+    ( Texts
+    , de
+    , gb
+    )
+
+import Messages.Comp.ExpandCollapse
 
 
 type alias Texts =
-    { hideEmpty : String
+    { expandCollapse : Messages.Comp.ExpandCollapse.Texts
+    , hideEmpty : String
     , showEmpty : String
     , filterPlaceholder : String
     }
@@ -10,7 +23,17 @@ type alias Texts =
 
 gb : Texts
 gb =
-    { hideEmpty = "Hide empty"
+    { expandCollapse = Messages.Comp.ExpandCollapse.gb
+    , hideEmpty = "Hide empty"
     , showEmpty = "Show empty"
+    , filterPlaceholder = "Filter …"
+    }
+
+
+de : Texts
+de =
+    { expandCollapse = Messages.Comp.ExpandCollapse.de
+    , hideEmpty = "Leere ausblenden"
+    , showEmpty = "Leere anzeigen"
     , filterPlaceholder = "Filter …"
     }

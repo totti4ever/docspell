@@ -1,4 +1,14 @@
-module Messages.Comp.EmailSettingsTable exposing (Texts, gb)
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
+module Messages.Comp.EmailSettingsTable exposing
+    ( Texts
+    , de
+    , gb
+    )
 
 import Messages.Basics
 
@@ -15,4 +25,12 @@ gb =
     { basics = Messages.Basics.gb
     , hostPort = "Host/Port"
     , from = "From"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , hostPort = "Server/Port"
+    , from = "Absender"
     }

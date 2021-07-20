@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module App.View2 exposing (view)
 
 import Api.Model.AuthResult exposing (AuthResult)
@@ -36,7 +42,11 @@ topNavbar : Model -> Html Msg
 topNavbar model =
     case model.flags.account of
         Just acc ->
-            topNavUser acc model
+            if acc.success then
+                topNavUser acc model
+
+            else
+                topNavAnon model
 
         Nothing ->
             topNavAnon model

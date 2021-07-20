@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.ItemDetail.MultiEditMenu exposing
     ( Model
     , Msg
@@ -46,7 +52,7 @@ import Styles as S
 import Task
 import Throttle exposing (Throttle)
 import Time
-import Util.Folder exposing (mkFolderOption)
+import Util.Folder
 import Util.List
 import Util.Maybe
 import Util.Tag
@@ -688,7 +694,7 @@ renderEditForm2 texts flags cfg settings model =
         directionCfg =
             { makeOption =
                 \entry ->
-                    { text = Data.Direction.toString entry
+                    { text = texts.direction entry
                     , additional = ""
                     }
             , placeholder = texts.chooseDirection
@@ -765,7 +771,7 @@ renderEditForm2 texts flags cfg settings model =
                             , ( "hidden", isFolderMember model )
                             ]
                         ]
-                        [ Markdown.toHtml [] texts.folderNotOwnerWarning
+                        [ Markdown.toHtml [] texts.basics.folderNotOwnerWarning
                         ]
                     ]
               }

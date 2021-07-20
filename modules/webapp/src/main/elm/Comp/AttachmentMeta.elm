@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.AttachmentMeta exposing
     ( Model
     , Msg
@@ -17,7 +23,6 @@ import Html.Attributes exposing (..)
 import Http
 import Messages.Comp.AttachmentMeta exposing (Texts)
 import Styles as S
-import Util.Http
 
 
 type alias Model =
@@ -29,7 +34,7 @@ type alias Model =
 type DataResult a
     = NotAvailable
     | Success a
-    | Failure String
+    | HttpFailure Http.Error
 
 
 emptyModel : Model
@@ -57,7 +62,7 @@ update msg model =
             { model | meta = Success am }
 
         MetaResp (Err err) ->
-            { model | meta = Failure (Util.Http.errorToString err) }
+            { model | meta = HttpFailure err }
 
 
 
@@ -77,9 +82,9 @@ view2 texts attrs model =
                     , label = texts.basics.loading
                     }
 
-            Failure msg ->
+            HttpFailure err ->
                 div [ class S.errorMessage ]
-                    [ text msg
+                    [ text (texts.httpError err)
                     ]
 
             Success data ->

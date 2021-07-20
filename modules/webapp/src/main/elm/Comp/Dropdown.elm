@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.Dropdown exposing
     ( Model
     , Msg(..)
@@ -359,7 +365,7 @@ update msg model =
 
                 Just Util.Html.ESC ->
                     if model.menuOpen then
-                        ( model, Cmd.none )
+                        update ToggleMenu model
 
                     else
                         case model.selected of
@@ -374,7 +380,11 @@ update msg model =
                                 ( model, Cmd.none )
 
                 Just Util.Html.Space ->
-                    update ToggleMenu model
+                    if model.menuOpen then
+                        ( model, Cmd.none )
+
+                    else
+                        update ToggleMenu model
 
                 Just Util.Html.Enter ->
                     let
@@ -569,7 +579,7 @@ viewMultiple2 cfg settings model =
                 (List.map renderSelectMultiple model.selected)
             , input
                 [ type_ "text"
-                , placeholder "Search…"
+                , placeholder cfg.placeholder
                 , onInput (Filter (cfg.makeOption >> .text))
                 , value model.filterString
                 , class "inline-flex w-16 border-0 px-0 focus:ring-0 h-6"

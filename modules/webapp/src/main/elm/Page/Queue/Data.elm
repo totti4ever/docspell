@@ -1,5 +1,12 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Page.Queue.Data exposing
-    ( Model
+    ( FormState(..)
+    , Model
     , Msg(..)
     , QueueView(..)
     , emptyModel
@@ -20,7 +27,7 @@ import Util.Maybe
 
 type alias Model =
     { state : JobQueueState
-    , error : String
+    , formState : FormState
     , pollingInterval : Float
     , init : Bool
     , stopRefresh : Bool
@@ -30,6 +37,11 @@ type alias Model =
     , cancelJobRequest : Maybe String
     , queueView : QueueView
     }
+
+
+type FormState
+    = InitialForm
+    | HttpError Http.Error
 
 
 type QueueView
@@ -44,7 +56,7 @@ type QueueView
 emptyModel : Model
 emptyModel =
     { state = Api.Model.JobQueueState.empty
-    , error = ""
+    , formState = InitialForm
     , pollingInterval = 1200
     , init = False
     , stopRefresh = False

@@ -1,3 +1,9 @@
+{-
+  Copyright 2020 Docspell Contributors
+
+  SPDX-License-Identifier: GPL-3.0-or-later
+-}
+
 module Comp.ItemDetail.FormChange exposing
     ( FormChange(..)
     , multiUpdate
@@ -104,7 +110,7 @@ multiUpdate flags ids change receive =
         DirectionChange dir ->
             let
                 data =
-                    ItemsAndDirection items (Data.Direction.toString dir)
+                    ItemsAndDirection items (Data.Direction.asString dir)
             in
             Api.setDirectionMultiple flags data receive
 

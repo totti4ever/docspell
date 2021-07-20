@@ -1,7 +1,13 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import cats.data.OptionT
-import cats.effect.{Effect, Resource}
+import cats.effect.{Async, Resource}
 import cats.implicits._
 import fs2.Stream
 
@@ -49,7 +55,7 @@ trait OItemSearch[F[_]] {
 
   def findByFileCollective(checksum: String, collective: Ident): F[Vector[RItem]]
 
-  def findByFileSource(checksum: String, sourceId: Ident): F[Vector[RItem]]
+  def findByFileSource(checksum: String, sourceId: Ident): F[Option[Vector[RItem]]]
 
 }
 
@@ -118,7 +124,7 @@ object OItemSearch {
     val fileId = rs.fileId
   }
 
-  def apply[F[_]: Effect](store: Store[F]): Resource[F, OItemSearch[F]] =
+  def apply[F[_]: Async](store: Store[F]): Resource[F, OItemSearch[F]] =
     Resource.pure[F, OItemSearch[F]](new OItemSearch[F] {
 
       def findItem(id: Ident, collective: Ident): F[Option[ItemData]] =
@@ -274,11 +280,11 @@ object OItemSearch {
       def findByFileCollective(checksum: String, collective: Ident): F[Vector[RItem]] =
         store.transact(QItem.findByChecksum(checksum, collective, Set.empty))
 
-      def findByFileSource(checksum: String, sourceId: Ident): F[Vector[RItem]] =
+      def findByFileSource(checksum: String, sourceId: Ident): F[Option[Vector[RItem]]] =
         store.transact((for {
           coll  <- OptionT(RSource.findCollective(sourceId))
           items <- OptionT.liftF(QItem.findByChecksum(checksum, coll, Set.empty))
-        } yield items).getOrElse(Vector.empty))
+        } yield items).value)
 
     })
 }

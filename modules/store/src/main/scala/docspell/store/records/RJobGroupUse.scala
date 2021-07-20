@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -36,4 +42,7 @@ object RJobGroupUse {
 
   def findGroup(workerId: Ident): ConnectionIO[Option[Ident]] =
     run(select(T.group), from(T), T.worker === workerId).query[Ident].option
+
+  def deleteAll: ConnectionIO[Int] =
+    DML.delete(T, T.group.isNotNull)
 }

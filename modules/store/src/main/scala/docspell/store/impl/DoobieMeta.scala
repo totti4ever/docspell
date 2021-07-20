@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Docspell Contributors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package docspell.store.impl
 
 import java.time.format.DateTimeFormatter
@@ -11,6 +17,7 @@ import doobie._
 import doobie.implicits.legacy.instant._
 import doobie.util.log.Success
 import emil.doobie.EmilDoobieMeta
+import io.circe.Json
 import io.circe.{Decoder, Encoder}
 
 trait DoobieMeta extends EmilDoobieMeta {
@@ -112,10 +119,18 @@ trait DoobieMeta extends EmilDoobieMeta {
 
   implicit val metaOrgUse: Meta[OrgUse] =
     Meta[String].timap(OrgUse.unsafeFromString)(_.name)
+
+  implicit val metaJsonString: Meta[Json] =
+    Meta[String].timap(DoobieMeta.parseJsonUnsafe)(_.noSpaces)
 }
 
 object DoobieMeta extends DoobieMeta {
   import org.log4s._
   private val logger = getLogger
+
+  private def parseJsonUnsafe(str: String): Json =
+    io.circe.parser
+      .parse(str)
+      .fold(throw _, identity)
 
 }
