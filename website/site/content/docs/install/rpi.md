@@ -1,16 +1,19 @@
 +++
-title = "Raspberry-Pi and Similiar"
+title = "Raspberry-Pi"
 weight = 40
 +++
 
-# Raspberry Pi, and similiar
+# Raspberry Pi
 
-Both component can run next to each other on a raspberry pi or
+Both components can run next to each other on a raspberry pi or
 similiar device.
 
 There is a [project on
 github](https://github.com/docspell/rpi-scripts) that can help with
 setting up a raspberry pi with docspell.
+
+The docker images are built for arm64 and armv7, these can also be
+used on the pi.
 
 
 ## REST Server
@@ -27,10 +30,10 @@ result in long processing times for OCR and text analysis. The board
 should provide 4G of RAM (like the current RPi4), especially if also a
 database and solr are running next to it. The memory required by joex
 depends on the config and document language. Please pick a value that
-suits your setup from [here](@/docs/configure/_index.md#memory-usage).
-For boards like the RPi, it might be necessary to use
-`nlp.mode=basic`, rather than `nlp.mode=full`. You should also set the
-joex pool size to 1.
+suits your setup from
+[here](@/docs/configure/file-processing.md#memory-usage). For boards
+like the RPi, it might be necessary to use `nlp.mode=basic`, rather
+than `nlp.mode=full`. You should also set the joex pool size to 1.
 
 An example: on this [UP
 board](https://up-board.org/up/specifications/) with an Intel Atom

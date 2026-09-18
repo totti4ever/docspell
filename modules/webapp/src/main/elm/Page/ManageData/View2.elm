@@ -1,5 +1,15 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.ManageData.View2 exposing (viewContent, viewSidebar)
 
+import Comp.AddonArchiveManage
+import Comp.AddonRunConfigManage
+import Comp.BookmarkManage
 import Comp.CustomFieldManage
 import Comp.EquipmentManage
 import Comp.FolderManage
@@ -19,7 +29,7 @@ import Styles as S
 
 
 viewSidebar : Texts -> Bool -> Flags -> UiSettings -> Model -> Html Msg
-viewSidebar texts visible _ settings model =
+viewSidebar texts visible flags settings model =
     div
         [ id "sidebar"
         , class S.sidebar
@@ -38,7 +48,7 @@ viewSidebar texts visible _ settings model =
                 , class S.sidebarLink
                 , menuEntryActive model TagTab
                 ]
-                [ Icons.tagIcon2 ""
+                [ Icons.tagIcon ""
                 , span
                     [ class "ml-3" ]
                     [ text texts.basics.tags
@@ -50,7 +60,7 @@ viewSidebar texts visible _ settings model =
                 , menuEntryActive model EquipTab
                 , class S.sidebarLink
                 ]
-                [ Icons.equipmentIcon2 ""
+                [ Icons.equipmentIcon ""
                 , span
                     [ class "ml-3" ]
                     [ text texts.basics.equipment
@@ -62,7 +72,7 @@ viewSidebar texts visible _ settings model =
                 , menuEntryActive model OrgTab
                 , class S.sidebarLink
                 ]
-                [ Icons.organizationIcon2 ""
+                [ Icons.organizationIcon ""
                 , span
                     [ class "ml-3" ]
                     [ text texts.basics.organization
@@ -74,7 +84,7 @@ viewSidebar texts visible _ settings model =
                 , menuEntryActive model PersonTab
                 , class S.sidebarLink
                 ]
-                [ Icons.personIcon2 ""
+                [ Icons.personIcon ""
                 , span
                     [ class "ml-3" ]
                     [ text texts.basics.person
@@ -91,7 +101,7 @@ viewSidebar texts visible _ settings model =
                 , menuEntryActive model FolderTab
                 , class S.sidebarLink
                 ]
-                [ Icons.folderIcon2 ""
+                [ Icons.folderIcon ""
                 , span
                     [ class "ml-3" ]
                     [ text texts.basics.folder
@@ -114,6 +124,44 @@ viewSidebar texts visible _ settings model =
                     [ text texts.basics.customFields
                     ]
                 ]
+            , a
+                [ href "#"
+                , onClick (SetTab BookmarkTab)
+                , menuEntryActive model BookmarkTab
+                , class S.sidebarLink
+                ]
+                [ i [ class "fa fa-bookmark" ] []
+                , span
+                    [ class "ml-3" ]
+                    [ text texts.bookmarks
+                    ]
+                ]
+            , a
+                [ href "#"
+                , onClick (SetTab AddonArchiveTab)
+                , menuEntryActive model AddonArchiveTab
+                , class S.sidebarLink
+                , classList [ ( "hidden", not flags.config.addonsEnabled ) ]
+                ]
+                [ Icons.addonIcon ""
+                , span
+                    [ class "ml-3" ]
+                    [ text texts.addonArchives
+                    ]
+                ]
+            , a
+                [ href "#"
+                , onClick (SetTab AddonRunConfigTab)
+                , menuEntryActive model AddonRunConfigTab
+                , class S.sidebarLink
+                , classList [ ( "hidden", not flags.config.addonsEnabled ) ]
+                ]
+                [ Icons.addonRunConfigIcon ""
+                , span
+                    [ class "ml-3" ]
+                    [ text texts.addonRunConfigs
+                    ]
+                ]
             ]
         ]
 
@@ -126,7 +174,7 @@ viewContent texts flags settings model =
         ]
         (case model.currentTab of
             Just TagTab ->
-                viewTags texts model
+                viewTags texts settings model
 
             Just EquipTab ->
                 viewEquip texts model
@@ -143,6 +191,23 @@ viewContent texts flags settings model =
             Just CustomFieldTab ->
                 viewCustomFields texts flags settings model
 
+            Just BookmarkTab ->
+                viewBookmarks texts flags settings model
+
+            Just AddonArchiveTab ->
+                if flags.config.addonsEnabled then
+                    viewAddonArchives texts flags settings model
+
+                else
+                    []
+
+            Just AddonRunConfigTab ->
+                if flags.config.addonsEnabled then
+                    viewAddonRunConfigs texts flags settings model
+
+                else
+                    []
+
             Nothing ->
                 []
         )
@@ -157,13 +222,13 @@ menuEntryActive model tab =
         class ""
 
 
-viewTags : Texts -> Model -> List (Html Msg)
-viewTags texts model =
+viewTags : Texts -> UiSettings -> Model -> List (Html Msg)
+viewTags texts settings model =
     [ h2
         [ class S.header1
         , class "inline-flex items-center"
         ]
-        [ Icons.tagIcon2 ""
+        [ Icons.tagIcon ""
         , div [ class "ml-2" ]
             [ text texts.basics.tags
             ]
@@ -171,6 +236,7 @@ viewTags texts model =
     , Html.map TagManageMsg
         (Comp.TagManage.view2
             texts.tagManage
+            settings
             model.tagManageModel
         )
     ]
@@ -182,7 +248,7 @@ viewEquip texts model =
         [ class S.header1
         , class "inline-flex items-center"
         ]
-        [ Icons.equipmentIcon2 ""
+        [ Icons.equipmentIcon ""
         , div [ class "ml-2" ]
             [ text texts.basics.equipment
             ]
@@ -200,7 +266,7 @@ viewOrg texts settings model =
         [ class S.header1
         , class "inline-flex items-center"
         ]
-        [ Icons.organizationIcon2 ""
+        [ Icons.organizationIcon ""
         , div [ class "ml-2" ]
             [ text texts.basics.organization
             ]
@@ -219,7 +285,7 @@ viewPerson texts settings model =
         [ class S.header1
         , class "inline-flex items-center"
         ]
-        [ Icons.personIcon2 ""
+        [ Icons.personIcon ""
         , div [ class "ml-2" ]
             [ text texts.basics.person
             ]
@@ -238,7 +304,7 @@ viewFolder texts flags _ model =
         [ class S.header1
         , class "inline-flex items-center"
         ]
-        [ Icons.folderIcon2 ""
+        [ Icons.folderIcon ""
         , div
             [ class "ml-2"
             ]
@@ -266,4 +332,49 @@ viewCustomFields texts flags _ model =
             flags
             model.fieldManageModel
         )
+    ]
+
+
+viewBookmarks : Texts -> Flags -> UiSettings -> Model -> List (Html Msg)
+viewBookmarks texts flags settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ i [ class "fa fa-bookmark" ] []
+        , div [ class "ml-2" ]
+            [ text texts.bookmarks
+            ]
+        ]
+    , Html.map BookmarkMsg (Comp.BookmarkManage.view texts.bookmarkManage settings flags model.bookmarkModel)
+    ]
+
+
+viewAddonArchives : Texts -> Flags -> UiSettings -> Model -> List (Html Msg)
+viewAddonArchives texts flags settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ Icons.addonIcon ""
+        , div [ class "ml-2" ]
+            [ text texts.addonArchives
+            ]
+        ]
+    , Html.map AddonArchiveMsg (Comp.AddonArchiveManage.view texts.addonArchiveManage settings flags model.addonArchiveModel)
+    ]
+
+
+viewAddonRunConfigs : Texts -> Flags -> UiSettings -> Model -> List (Html Msg)
+viewAddonRunConfigs texts flags settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ Icons.addonRunConfigIcon "mr-4"
+        , div [ class "ml-2" ]
+            [ text texts.addonRunConfigs
+            ]
+        ]
+    , Html.map AddonRunConfigMsg (Comp.AddonRunConfigManage.view texts.addonRunConfigManage settings flags model.addonRunConfigModel)
     ]

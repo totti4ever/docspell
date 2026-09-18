@@ -1,30 +1,36 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.convert.extern
 
 import java.nio.charset.Charset
-import java.nio.file.Path
 
 import cats.effect._
 import cats.implicits._
+import fs2.io.file.{Files, Path}
 import fs2.{Chunk, Stream}
 
 import docspell.common._
 import docspell.convert.ConversionResult.Handler
 import docspell.convert.{ConversionResult, SanitizeHtml}
+import docspell.logging.Logger
 
 object WkHtmlPdf {
 
-  def toPDF[F[_]: Sync: ContextShift, A](
+  def toPDF[F[_]: Async: Files, A](
       cfg: WkHtmlPdfConfig,
       chunkSize: Int,
       charset: Charset,
       sanitizeHtml: SanitizeHtml,
-      blocker: Blocker,
       logger: Logger[F]
   )(in: Stream[F, Byte], handler: Handler[F, A]): F[A] = {
-    val reader: (Path, SystemCommand.Result) => F[ConversionResult[F]] =
-      ExternConv.readResult[F](blocker, chunkSize, logger)
+    val reader: (Path, Int) => F[ConversionResult[F]] =
+      ExternConv.readResult[F](chunkSize, logger)
 
-    val cmdCfg = cfg.command.replace(Map("{{encoding}}" -> charset.name()))
+    val cmdCfg = cfg.command.withVars(Map("encoding" -> charset.name()))
 
     // html sanitize should (among other) remove links to invalid
     // protocols like cid: which is not supported by further
@@ -40,10 +46,16 @@ object WkHtmlPdf {
     )
 
     ExternConv
-      .toPDF[F, A]("wkhtmltopdf", cmdCfg, cfg.workingDir, true, blocker, logger, reader)(
+      .toPDF[F, A](
+        "wkhtmltopdf",
+        cmdCfg,
+        cfg.workingDir,
+        useStdin = true,
+        logger,
+        reader
+      )(
         inSane,
         handler
       )
   }
-
 }

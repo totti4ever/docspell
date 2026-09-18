@@ -1,26 +1,41 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex
 
-import java.nio.file.Path
-
 import cats.data.NonEmptyList
+import fs2.io.file.Path
 
 import docspell.analysis.TextAnalysisConfig
 import docspell.analysis.classifier.TextClassifierConfig
 import docspell.backend.Config.Files
+import docspell.backend.joex.AddonEnvConfig
 import docspell.common._
+import docspell.config.{FtsType, PgFtsConfig}
 import docspell.convert.ConvertConfig
 import docspell.extract.ExtractConfig
 import docspell.ftssolr.SolrConfig
 import docspell.joex.analysis.RegexNerFile
 import docspell.joex.hk.HouseKeepingConfig
-import docspell.joex.scheduler.{PeriodicSchedulerConfig, SchedulerConfig}
-import docspell.store.JdbcConfig
+import docspell.joex.routes.InternalHeader
+import docspell.joex.updatecheck.UpdateCheckConfig
+import docspell.logging.LogConfig
+import docspell.pubsub.naive.PubSubConfig
+import docspell.scheduler.{PeriodicSchedulerConfig, SchedulerConfig}
+import docspell.store.{JdbcConfig, SchemaMigrateConfig}
+
+import com.comcast.ip4s.{Host, Port}
 
 case class Config(
     appId: Ident,
     baseUrl: LenientUri,
+    logging: LogConfig,
     bind: Config.Bind,
     jdbc: JdbcConfig,
+    databaseSchema: SchemaMigrateConfig,
     scheduler: SchedulerConfig,
     periodicScheduler: PeriodicSchedulerConfig,
     userTasks: Config.UserTasks,
@@ -31,11 +46,22 @@ case class Config(
     sendMail: MailSendConfig,
     files: Files,
     mailDebug: Boolean,
-    fullTextSearch: Config.FullTextSearch
-)
+    fullTextSearch: Config.FullTextSearch,
+    updateCheck: UpdateCheckConfig,
+    addons: AddonEnvConfig
+) {
+
+  def pubSubConfig(headerValue: Ident): PubSubConfig =
+    PubSubConfig(
+      appId,
+      baseUrl / "internal" / "pubsub",
+      100,
+      InternalHeader.header(headerValue.id)
+    )
+}
 
 object Config {
-  case class Bind(address: String, port: Int)
+  case class Bind(address: Host, port: Port)
 
   case class ScanMailbox(maxFolders: Int, mailChunkSize: Int, maxMails: Int) {
     def mailBatchSize: Int =
@@ -45,9 +71,25 @@ object Config {
 
   case class FullTextSearch(
       enabled: Boolean,
+      backend: FtsType,
       migration: FullTextSearch.Migration,
-      solr: SolrConfig
-  )
+      solr: SolrConfig,
+      postgresql: PgFtsConfig
+  ) {
+
+    def info: String =
+      if (!enabled) "Disabled."
+      else
+        backend match {
+          case FtsType.Solr =>
+            s"Solr(${solr.url.asString})"
+          case FtsType.PostgreSQL =>
+            if (postgresql.useDefaultConnection)
+              "PostgreSQL(default)"
+            else
+              s"PostgreSQL(${postgresql.jdbc.url.asString})"
+        }
+  }
 
   object FullTextSearch {
 

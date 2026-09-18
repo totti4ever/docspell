@@ -1,6 +1,12 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.queries
 
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList => Nel}
 import cats.implicits._
 import fs2._
 
@@ -14,14 +20,14 @@ import doobie._
 import doobie.implicits._
 
 object QOrganization {
-  private val p   = RPerson.as("p")
-  private val c   = RContact.as("c")
+  private val p = RPerson.as("p")
+  private val c = RContact.as("c")
   private val org = ROrganization.as("o")
 
   def findOrgAndContact(
-      coll: Ident,
+      coll: CollectiveId,
       query: Option[String],
-      order: ROrganization.Table => Column[_]
+      order: ROrganization.Table => Nel[OrderBy]
   ): Stream[ConnectionIO, (ROrganization, Vector[RContact])] = {
     val valFilter = query.map { q =>
       val v = s"%$q%"
@@ -37,14 +43,14 @@ object QOrganization {
       .query[(ROrganization, Option[RContact])]
       .stream
       .groupAdjacentBy(_._1)
-      .map({ case (ro, chunk) =>
+      .map { case (ro, chunk) =>
         val cs = chunk.toVector.flatMap(_._2)
         (ro, cs)
-      })
+      }
   }
 
   def getOrgAndContact(
-      coll: Ident,
+      coll: CollectiveId,
       orgId: Ident
   ): ConnectionIO[Option[(ROrganization, Vector[RContact])]] = {
     val sql = run(
@@ -57,43 +63,43 @@ object QOrganization {
       .query[(ROrganization, Option[RContact])]
       .stream
       .groupAdjacentBy(_._1)
-      .map({ case (ro, chunk) =>
+      .map { case (ro, chunk) =>
         val cs = chunk.toVector.flatMap(_._2)
         (ro, cs)
-      })
+      }
       .compile
       .last
   }
 
   def findPersonAndContact(
-      coll: Ident,
+      coll: CollectiveId,
       query: Option[String],
-      order: RPerson.Table => Column[_]
+      order: (RPerson.Table, ROrganization.Table) => Nel[OrderBy]
   ): Stream[ConnectionIO, (RPerson, Option[ROrganization], Vector[RContact])] = {
     val valFilter = query
       .map(s => s"%$s%")
-      .map(v => c.value.like(v) || p.name.like(v) || p.notes.like(v))
+      .map(v => c.value.like(v) || p.name.like(v) || org.name.like(v) || p.notes.like(v))
     val sql = Select(
       select(p.all, org.all, c.all),
       from(p)
         .leftJoin(org, org.oid === p.oid)
         .leftJoin(c, c.personId === p.pid),
       p.cid === coll &&? valFilter
-    ).orderBy(order(p))
+    ).orderBy(order(p, org))
 
     sql.build
       .query[(RPerson, Option[ROrganization], Option[RContact])]
       .stream
       .groupAdjacentBy(_._1)
-      .map({ case (rp, chunk) =>
+      .map { case (rp, chunk) =>
         val cs = chunk.toVector.flatMap(_._3)
         val ro = chunk.map(_._2).head.flatten
         (rp, ro, cs)
-      })
+      }
   }
 
   def getPersonAndContact(
-      coll: Ident,
+      coll: CollectiveId,
       persId: Ident
   ): ConnectionIO[Option[(RPerson, Option[ROrganization], Vector[RContact])]] = {
     val sql =
@@ -109,20 +115,20 @@ object QOrganization {
       .query[(RPerson, Option[ROrganization], Option[RContact])]
       .stream
       .groupAdjacentBy(_._1)
-      .map({ case (rp, chunk) =>
+      .map { case (rp, chunk) =>
         val cs = chunk.toVector.flatMap(_._3)
         val ro = chunk.map(_._2).head.flatten
         (rp, ro, cs)
-      })
+      }
       .compile
       .last
   }
 
   def findPersonByContact(
-      coll: Ident,
+      coll: CollectiveId,
       value: String,
       ck: Option[ContactKind],
-      use: Option[NonEmptyList[PersonUse]]
+      use: Option[Nel[PersonUse]]
   ): Stream[ConnectionIO, RPerson] =
     runDistinct(
       select(p.all),
@@ -135,10 +141,10 @@ object QOrganization {
   def addOrg[F[_]](
       org: ROrganization,
       contacts: Seq[RContact],
-      cid: Ident
+      cid: CollectiveId
   ): Store[F] => F[AddResult] = {
     val insert = for {
-      n  <- ROrganization.insert(org)
+      n <- ROrganization.insert(org)
       cs <- contacts.toList.traverse(RContact.insert)
     } yield n + cs.sum
 
@@ -150,10 +156,10 @@ object QOrganization {
   def addPerson[F[_]](
       person: RPerson,
       contacts: Seq[RContact],
-      cid: Ident
+      cid: CollectiveId
   ): Store[F] => F[AddResult] = {
     val insert = for {
-      n  <- RPerson.insert(person)
+      n <- RPerson.insert(person)
       cs <- contacts.toList.traverse(RContact.insert)
     } yield n + cs.sum
 
@@ -165,11 +171,11 @@ object QOrganization {
   def updateOrg[F[_]](
       org: ROrganization,
       contacts: Seq[RContact],
-      cid: Ident
+      cid: CollectiveId
   ): Store[F] => F[AddResult] = {
     val insert = for {
-      n  <- ROrganization.update(org)
-      d  <- RContact.deleteOrg(org.oid)
+      n <- ROrganization.update(org)
+      d <- RContact.deleteOrg(org.oid)
       cs <- contacts.toList.traverse(RContact.insert)
     } yield n + cs.sum + d
 
@@ -181,11 +187,11 @@ object QOrganization {
   def updatePerson[F[_]](
       person: RPerson,
       contacts: Seq[RContact],
-      cid: Ident
+      cid: CollectiveId
   ): Store[F] => F[AddResult] = {
     val insert = for {
-      n  <- RPerson.update(person)
-      d  <- RContact.deletePerson(person.pid)
+      n <- RPerson.update(person)
+      d <- RContact.deletePerson(person.pid)
       cs <- contacts.toList.traverse(RContact.insert)
     } yield n + cs.sum + d
 
@@ -194,7 +200,7 @@ object QOrganization {
     store => store.add(insert, exists)
   }
 
-  def deleteOrg(orgId: Ident, collective: Ident): ConnectionIO[Int] =
+  def deleteOrg(orgId: Ident, collective: CollectiveId): ConnectionIO[Int] =
     for {
       n0 <- RItem.removeCorrOrg(collective, orgId)
       n1 <- RContact.deleteOrg(orgId)
@@ -202,7 +208,7 @@ object QOrganization {
       n3 <- ROrganization.delete(orgId, collective)
     } yield n0 + n1 + n2 + n3
 
-  def deletePerson(personId: Ident, collective: Ident): ConnectionIO[Int] =
+  def deletePerson(personId: Ident, collective: CollectiveId): ConnectionIO[Int] =
     for {
       n0 <- RItem.removeCorrPerson(collective, personId)
       n1 <- RItem.removeConcPerson(collective, personId)

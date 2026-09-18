@@ -1,20 +1,28 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.nlp
 
 import java.nio.file.Paths
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 
 import docspell.analysis.Env
 import docspell.common._
-import docspell.common.syntax.FileSyntax._
+import docspell.common.util.File
 import docspell.files.TestFiles
+import docspell.logging.TestLoggingConfig
 
 import edu.stanford.nlp.pipeline.StanfordCoreNLP
 import munit._
 
-class StanfordNerAnnotatorSuite extends FunSuite {
+class StanfordNerAnnotatorSuite extends FunSuite with TestLoggingConfig {
   lazy val germanClassifier =
-    new StanfordCoreNLP(Properties.nerGerman(None, false))
+    new StanfordCoreNLP(Properties.nerGerman(None, highRecall = false))
   lazy val englishClassifier =
     new StanfordCoreNLP(Properties.nerEnglish(None))
 
@@ -85,19 +93,19 @@ class StanfordNerAnnotatorSuite extends FunSuite {
 
     val regexNerContent =
       s"""(?i)volantino ag${"\t"}ORGANIZATION${"\t"}LOCATION,PERSON,MISC${"\t"}3
-      |(?i)volantino${"\t"}ORGANIZATION${"\t"}LOCATION,PERSON,MISC${"\t"}3
-      |(?i)ag${"\t"}ORGANIZATION${"\t"}LOCATION,PERSON,MISC${"\t"}3
-      |(?i)andrea rossi${"\t"}PERSON${"\t"}LOCATION,MISC${"\t"}2
-      |(?i)andrea${"\t"}PERSON${"\t"}LOCATION,MISC${"\t"}2
-      |(?i)rossi${"\t"}PERSON${"\t"}LOCATION,MISC${"\t"}2
-      |""".stripMargin
+         |(?i)volantino${"\t"}ORGANIZATION${"\t"}LOCATION,PERSON,MISC${"\t"}3
+         |(?i)ag${"\t"}ORGANIZATION${"\t"}LOCATION,PERSON,MISC${"\t"}3
+         |(?i)andrea rossi${"\t"}PERSON${"\t"}LOCATION,MISC${"\t"}2
+         |(?i)andrea${"\t"}PERSON${"\t"}LOCATION,MISC${"\t"}2
+         |(?i)rossi${"\t"}PERSON${"\t"}LOCATION,MISC${"\t"}2
+         |""".stripMargin
 
     File
-      .withTempDir[IO](Paths.get("target"), "test-regex-ner")
+      .withTempDir[IO](File.path(Paths.get("target")), "test-regex-ner")
       .use { dir =>
         for {
           out <- File.writeString[IO](dir / "regex.txt", regexNerContent)
-          ann    = StanfordNerAnnotator.makePipeline(StanfordNerSettings.RegexOnly(out))
+          ann = StanfordNerAnnotator.makePipeline(StanfordNerSettings.RegexOnly(out))
           labels = StanfordNerAnnotator.nerAnnotate(ann, "Hello Andrea Rossi, can you.")
           _ <- IO(
             assertEquals(

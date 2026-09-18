@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.Language exposing
     ( Language(..)
     , all
@@ -22,6 +29,16 @@ type Language
     | Romanian
     | Dutch
     | Latvian
+    | Japanese
+    | JpnVert
+    | Hebrew
+    | Hungarian
+    | Lithuanian
+    | Polish
+    | Estonian
+    | Ukrainian
+    | Khmer
+    | Slovak
 
 
 fromString : String -> Maybe Language
@@ -70,6 +87,36 @@ fromString str =
 
     else if str == "lav" || str == "lv" || str == "latvian" then
         Just Latvian
+
+    else if str == "jpn" || str == "ja" || str == "japanese" then
+        Just Japanese
+
+    else if str == "jpn_vert" || str == "ja_vert" || str == "jpnvert" then
+        Just JpnVert
+
+    else if str == "heb" || str == "he" || str == "hebrew" then
+        Just Hebrew
+
+    else if str == "hun" || str == "hu" || str == "hungarian" then
+        Just Hungarian
+
+    else if str == "lit" || str == "lt" || str == "lithuanian" then
+        Just Lithuanian
+
+    else if str == "pol" || str == "pl" || str == "polish" then
+        Just Polish
+
+    else if str == "est" || str == "et" || str == "estonian" then
+        Just Estonian
+
+    else if str == "ukr" || str == "uk" || str == "ukrainian" then
+        Just Ukrainian
+
+    else if str == "khm" || str == "kh" || str == "khmer" then
+        Just Khmer
+
+    else if str == "svk" || str == "sk" || str == "slovak" then
+        Just Slovak
 
     else
         Nothing
@@ -123,6 +170,36 @@ toIso3 lang =
         Latvian ->
             "lav"
 
+        Japanese ->
+            "jpn"
+
+        JpnVert ->
+            "jpn_vert"
+
+        Hebrew ->
+            "heb"
+
+        Hungarian ->
+            "hun"
+
+        Lithuanian ->
+            "lit"
+
+        Polish ->
+            "pol"
+
+        Estonian ->
+            "est"
+
+        Ukrainian ->
+            "ukr"
+
+        Khmer ->
+            "khm"
+
+        Slovak ->
+            "svk"
+
 
 all : List Language
 all =
@@ -141,4 +218,14 @@ all =
     , Russian
     , Romanian
     , Latvian
+    , Japanese
+    , JpnVert
+    , Hebrew
+    , Hungarian
+    , Lithuanian
+    , Polish
+    , Estonian
+    , Ukrainian
+    , Khmer
+    , Slovak
     ]

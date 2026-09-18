@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.impl
 
 import docspell.store.qb.DBFunction
@@ -55,6 +61,11 @@ object DBFunctionBuilder extends CommonBuilder {
 
       case DBFunction.Sum(expr) =>
         sql"SUM(" ++ SelectExprBuilder.build(expr) ++ fr")"
+
+      case DBFunction.Raw(name, exprs) =>
+        val n = Fragment.const0(name)
+        val inner = exprs.map(SelectExprBuilder.build).toList.reduce(_ ++ comma ++ _)
+        sql"$n($inner)"
     }
 
   def buildOperator(op: DBFunction.Operator): Fragment =

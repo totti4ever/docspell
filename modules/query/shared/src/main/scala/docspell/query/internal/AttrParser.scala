@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query.internal
 
 import cats.parse.{Parser => P}
@@ -24,6 +30,9 @@ object AttrParser {
 
   val dueDate: P[Attr.DateAttr] =
     P.ignoreCase(C.due).as(Attr.DueDate)
+
+  val created: P[Attr.DateAttr] =
+    P.ignoreCase(C.created).as(Attr.CreatedDate)
 
   val corrOrgId: P[Attr.StringAttr] =
     P.ignoreCase(C.corrOrgId)
@@ -63,16 +72,10 @@ object AttrParser {
   val folderName: P[Attr.StringAttr] =
     P.ignoreCase(C.folder).as(Attr.Folder.FolderName)
 
-  val attachCountAttr: P[Attr.IntAttr] =
-    P.ignoreCase(C.attachCount).as(Attr.AttachCount)
-
   // combining grouped by type
 
-  val intAttr: P[Attr.IntAttr] =
-    attachCountAttr
-
   val dateAttr: P[Attr.DateAttr] =
-    P.oneOf(List(date, dueDate))
+    P.oneOf(List(date, dueDate, created))
 
   val stringAttr: P[Attr.StringAttr] =
     P.oneOf(
@@ -95,5 +98,5 @@ object AttrParser {
     )
 
   val anyAttr: P[Attr] =
-    P.oneOf(List(dateAttr, stringAttr, intAttr))
+    P.oneOf(List(dateAttr, stringAttr))
 }

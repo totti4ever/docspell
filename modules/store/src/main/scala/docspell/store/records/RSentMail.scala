@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -38,7 +44,7 @@ object RSentMail {
       body: String
   ): F[RSentMail] =
     for {
-      id  <- Ident.randomId[F]
+      id <- Ident.randomId[F]
       now <- Timestamp.current[F]
     } yield RSentMail(
       id,
@@ -54,7 +60,7 @@ object RSentMail {
 
   def forItem(
       itemId: Ident,
-      accId: AccountId,
+      userId: Ident,
       messageId: String,
       sender: MailAddress,
       connName: Ident,
@@ -63,10 +69,9 @@ object RSentMail {
       body: String
   ): OptionT[ConnectionIO, (RSentMail, RSentMailItem)] =
     for {
-      user <- OptionT(RUser.findByAccount(accId))
       sm <- OptionT.liftF(
         RSentMail[ConnectionIO](
-          user.uid,
+          userId,
           messageId,
           sender,
           connName,
@@ -82,15 +87,15 @@ object RSentMail {
 
     val tableName = "sentmail"
 
-    val id         = Column[Ident]("id", this)
-    val uid        = Column[Ident]("uid", this)
-    val messageId  = Column[String]("message_id", this)
-    val sender     = Column[MailAddress]("sender", this)
-    val connName   = Column[Ident]("conn_name", this)
-    val subject    = Column[String]("subject", this)
+    val id = Column[Ident]("id", this)
+    val uid = Column[Ident]("uid", this)
+    val messageId = Column[String]("message_id", this)
+    val sender = Column[MailAddress]("sender", this)
+    val connName = Column[Ident]("conn_name", this)
+    val subject = Column[String]("subject", this)
     val recipients = Column[List[MailAddress]]("recipients", this)
-    val body       = Column[String]("body", this)
-    val created    = Column[Timestamp]("created", this)
+    val body = Column[String]("body", this)
+    val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](
       id,
@@ -125,7 +130,7 @@ object RSentMail {
   def deleteByItem(item: Ident): ConnectionIO[Int] =
     for {
       list <- RSentMailItem.findSentMailIdsByItem(item)
-      n1   <- RSentMailItem.deleteAllByItem(item)
+      n1 <- RSentMailItem.deleteAllByItem(item)
       n0 <- NonEmptyList.fromList(list.toList) match {
         case Some(nel) => DML.delete(T, T.id.in(nel))
         case None      => 0.pure[ConnectionIO]

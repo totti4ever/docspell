@@ -1,82 +1,54 @@
-cfg: {stdenv, fetchzip, file, curl, inotifyTools, fetchurl, jdk11, bash, jq, sqlite}:
-let
-  meta = with stdenv.lib; {
-    description = "Docspell helps to organize and archive your paper documents.";
-    homepage = https://github.com/eikek/docspell;
-    license = licenses.gpl3;
-    maintainers = [ maintainers.eikek ];
+{
+  stdenv,
+  bash,
+  fetchzip,
+  jdk17,
+}: let
+  version = "0.43.0";
+  server = {
+    url = "https://github.com/eikek/docspell/releases/download/v${version}/docspell-restserver-${version}.zip";
+    sha256 = "sha256-9qK0WcCbHNc8Z36hc6DXQrWCv3+WuG7+/UIs0Uqv8DA=";
   };
-in
-{ server = stdenv.mkDerivation rec {
-    name = "docspell-server-${cfg.version}";
+  joex = {
+    url = "https://github.com/eikek/docspell/releases/download/v${version}/docspell-joex-${version}.zip";
+    sha256 = "sha256-6BE+QgFkL7FimqwCw68/JAGg8PiERjNF4McV8FTWHMg=";
+  };
+in {
+  docspell-restserver = stdenv.mkDerivation {
+    inherit version;
+    pname = "docspell-restserver";
 
-    src = fetchzip cfg.server;
-
-    buildInputs = [ jdk11 ];
-
+    src = fetchzip server;
+    buildInputs = [jdk17];
     buildPhase = "true";
 
     installPhase = ''
-      mkdir -p $out/{bin,docspell-restserver-${cfg.version}}
-      cp -R * $out/docspell-restserver-${cfg.version}/
+      mkdir -p $out/{bin,docspell-restserver-${version}}
+      cp -R * $out/docspell-restserver-${version}/
       cat > $out/bin/docspell-restserver <<-EOF
       #!${bash}/bin/bash
-      $out/docspell-restserver-${cfg.version}/bin/docspell-restserver -java-home ${jdk11} "\$@"
+      $out/docspell-restserver-${version}/bin/docspell-restserver -java-home ${jdk17} "\$@"
       EOF
       chmod 755 $out/bin/docspell-restserver
     '';
-
-    inherit meta;
   };
 
-  joex = stdenv.mkDerivation rec {
-    name = "docspell-joex-${cfg.version}";
+  docspell-joex = stdenv.mkDerivation rec {
+    inherit version;
+    pname = "docspell-joex";
 
-    src = fetchzip cfg.joex;
-
-    buildInputs = [ jdk11 ];
-
+    src = fetchzip joex;
+    buildInputs = [jdk17];
     buildPhase = "true";
 
     installPhase = ''
-      mkdir -p $out/{bin,docspell-joex-${cfg.version}}
-      cp -R * $out/docspell-joex-${cfg.version}/
+      mkdir -p $out/{bin,docspell-joex-${version}}
+      cp -R * $out/docspell-joex-${version}/
       cat > $out/bin/docspell-joex <<-EOF
       #!${bash}/bin/bash
-      $out/docspell-joex-${cfg.version}/bin/docspell-joex -java-home ${jdk11} "\$@"
+      $out/docspell-joex-${version}/bin/docspell-joex -java-home ${jdk17} "\$@"
       EOF
       chmod 755 $out/bin/docspell-joex
     '';
-
-    inherit meta;
   };
-
-  tools = stdenv.mkDerivation {
-    name = "docspell-tools-${cfg.version}";
-
-    src = fetchzip cfg.tools;
-
-    buildPhase = "true";
-
-    installPhase = ''
-      mkdir -p $out/bin
-      cp $src/ds.sh $out/bin/ds
-      sed -i 's,CURL_CMD="curl",CURL_CMD="${curl}/bin/curl",g' $out/bin/ds
-
-      while read f; do
-        target="ds-$(basename "$f" ".sh")"
-        echo "Installing $f -> $target"
-        cp "$f" "$out/bin/$target"
-        sed -i 's,CURL_CMD="curl",CURL_CMD="${curl}/bin/curl",g' $out/bin/$target
-        sed -i 's,INOTIFY_CMD="inotifywait",INOTIFY_CMD="${inotifyTools}/bin/inotifywait",g' $out/bin/$target
-        sed -i 's,JQ_CMD="jq",JQ_CMD="${jq}/bin/jq",g' $out/bin/$target
-        sed -i 's,SQLITE_CMD="sqlite3",SQLITE_CMD="${sqlite}/bin/sqlite3",g' $out/bin/$target
-      done < <(find . -name "*.sh" -mindepth 2 -not -path "*webextension*")
-
-      chmod 755 $out/bin/*
-    '';
-
-    inherit meta;
-  };
-
 }

@@ -5,14 +5,14 @@ weight = 30
 mktoc = true
 +++
 
+# Finding items
+
 Items can be searched by their annotated meta data and their contents
 using full text search. The landing page shows a list of current
 items. Items are displayed sorted by their date, newest first.
 
 
 # Search Bar
-
-{{ imgright(file="search-bar.png") }}
 
 The search bar let's you search in item and attachment names names and
 do fulltext search. The icon next to the search field can switch
@@ -44,7 +44,7 @@ unmodified.
 
 # Search Menu
 
-{{ imgright(file="search-menu.png") }}
+{{ imgright2(light="search-menu.png", dark="search-menu_dark.png") }}
 
 The search menu can be opened by clicking the left icon in the top
 bar. It shows some options to constrain the item list:
@@ -79,11 +79,11 @@ You can also use drag&drop to tag items in this view. Simply drag an
 item card and drop it on a tag, this will toggle the tag on the item.
 If the item was tagged already, the tag is removed, otherwise added.
 
-<div class="columns is-centered">
-  <div class="column">
-  {{ imgnormal(file="drop-tag.png", width="400px") }}
-  </div>
-</div>
+<figure style="width:430px">
+    <img class="dark:hidden" src="../drop-tag.png" >
+    <img class="hidden dark:inline-block" src="../drop-tag_dark.png" >
+</figure>
+
 
 ## Folder
 
@@ -161,11 +161,17 @@ unless one of the following is true:
 ## The Query
 
 The query string for full text search is very powerful. Docspell
-currently supports [Apache SOLR](https://lucene.apache.org/solr/) as
-full text search backend, so you may want to have a look at their
-[documentation on query
-syntax](https://lucene.apache.org/solr/guide/8_4/query-syntax-and-parsing.html#query-syntax-and-parsing)
-for a in depth guide.
+currently supports [Apache SOLR](https://solr.apache.org/) and
+[PostgreSQL](https://www.postgresql.org/docs/14/textsearch.html) as
+full text search backends. You may want to have a look at [SOLRs
+documentation on query
+syntax](https://solr.apache.org/guide/8_4/query-syntax-and-parsing.html#query-syntax-and-parsing)
+for a in depth guide for how to search with SOLR. PostgreSQL also has
+[documentation](https://www.postgresql.org/docs/14/textsearch-controls.html#TEXTSEARCH-PARSING-QUERIES)
+about parsing queries, Docspell by default uses
+`websearch_to_tsquery`.
+
+Here is a quick overview for SOLR queries:
 
 - Wildcards: `?` matches any single character, `*` matches zero or
   more characters
@@ -186,6 +192,7 @@ contents, attachment names, item name and item notes.
 When using full text search, each item in the result list is annotated
 with the highlighted occurrence of the match.
 
-<figure class="image">
-  <img src="/img/fts-feature.png">
+<figure>
+    <img src="/img/fts-feature.png" class="light-block">
+    <img src="/img/fts-feature_dark.png" class="dark-block">
 </figure>

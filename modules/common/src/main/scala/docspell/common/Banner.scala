@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 case class Banner(
@@ -8,7 +14,8 @@ case class Banner(
     configFile: Option[String],
     appId: Ident,
     baseUrl: LenientUri,
-    ftsUrl: Option[LenientUri]
+    ftsInfo: Option[String],
+    fileStoreConfig: FileStoreConfig
 ) {
 
   private val banner =
@@ -28,8 +35,9 @@ case class Banner(
       s"Id:       ${appId.id}",
       s"Base-Url: ${baseUrl.asString}",
       s"Database: ${jdbcUrl.asString}",
-      s"Fts:      ${ftsUrl.map(_.asString).getOrElse("-")}",
+      s"Fts:      ${ftsInfo.getOrElse("-")}",
       s"Config:   ${configFile.getOrElse("")}",
+      s"FileRepo: ${fileStoreConfig}",
       ""
     )
 

@@ -1,11 +1,17 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract.odf
 
 import docspell.common.MimeType
 
 object OdfType {
 
-  val odt      = MimeType.application("vnd.oasis.opendocument.text")
-  val ods      = MimeType.application("vnd.oasis.opendocument.spreadsheet")
+  val odt = MimeType.application("vnd.oasis.opendocument.text")
+  val ods = MimeType.application("vnd.oasis.opendocument.spreadsheet")
   val odtAlias = MimeType.application("x-vnd.oasis.opendocument.text")
   val odsAlias = MimeType.application("x-vnd.oasis.opendocument.spreadsheet")
 

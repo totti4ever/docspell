@@ -1,10 +1,20 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Messages.DateFormat exposing
     ( format
     , formatDateLong
     , formatDateShort
     , formatDateTimeLong
+    , formatDateTimeShort
+    , formatIsoDateTimeUtc
     )
 
+import Data.TimeZone exposing (TimeZone)
 import DateFormat exposing (Token)
 import DateFormat.Language as DL
 import Messages.UiLanguage exposing (UiLanguage(..))
@@ -12,6 +22,7 @@ import Time
     exposing
         ( Month(..)
         , Weekday(..)
+        , Zone
         )
 
 
@@ -30,9 +41,15 @@ get lang =
         English ->
             gb
 
+        German ->
+            de
 
-format : UiLanguage -> (DateTimeMsg -> List Token) -> Int -> String
-format lang pattern millis =
+        French ->
+            fr
+
+
+format : UiLanguage -> TimeZone -> (DateTimeMsg -> List Token) -> Int -> String
+format lang zone pattern millis =
     let
         msg =
             get lang
@@ -40,22 +57,50 @@ format lang pattern millis =
         fmt =
             DateFormat.formatWithLanguage msg.lang (pattern msg)
     in
-    fmt Time.utc (Time.millisToPosix millis)
+    fmt (Data.TimeZone.toZone zone) (Time.millisToPosix millis)
 
 
-formatDateTimeLong : UiLanguage -> Int -> String
-formatDateTimeLong lang millis =
-    format lang .dateTimeLong millis
+formatDateTimeLong : UiLanguage -> TimeZone -> Int -> String
+formatDateTimeLong lang zone millis =
+    format lang zone .dateTimeLong millis
 
 
-formatDateLong : UiLanguage -> Int -> String
-formatDateLong lang millis =
-    format lang .dateLong millis
+formatDateLong : UiLanguage -> TimeZone -> Int -> String
+formatDateLong lang zone millis =
+    format lang zone .dateLong millis
 
 
-formatDateShort : UiLanguage -> Int -> String
-formatDateShort lang millis =
-    format lang .dateShort millis
+formatDateShort : UiLanguage -> TimeZone -> Int -> String
+formatDateShort lang zone millis =
+    format lang zone .dateShort millis
+
+
+formatDateTimeShort : UiLanguage -> TimeZone -> Int -> String
+formatDateTimeShort lang zone millis =
+    format lang zone .dateTimeShort millis
+
+
+isoDateTimeFormatter : List Token
+isoDateTimeFormatter =
+    [ DateFormat.yearNumber
+    , DateFormat.text "-"
+    , DateFormat.monthFixed
+    , DateFormat.text "-"
+    , DateFormat.dayOfMonthFixed
+    , DateFormat.text "T"
+    , DateFormat.hourMilitaryNumber
+    , DateFormat.text ":"
+    , DateFormat.minuteFixed
+    , DateFormat.text ":"
+    , DateFormat.secondFixed
+    , DateFormat.text "Z"
+    ]
+
+
+formatIsoDateTimeUtc : Int -> String
+formatIsoDateTimeUtc millis =
+    Time.millisToPosix millis
+        |> DateFormat.format isoDateTimeFormatter Time.utc
 
 
 

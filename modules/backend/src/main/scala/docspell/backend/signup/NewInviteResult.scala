@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.signup
 
 import docspell.common.Ident
@@ -9,11 +15,11 @@ sealed trait NewInviteResult { self: Product =>
 }
 
 object NewInviteResult {
-  case class Success(id: Ident)  extends NewInviteResult
+  case class Success(id: Ident) extends NewInviteResult
   case object InvitationDisabled extends NewInviteResult
-  case object PasswordMismatch   extends NewInviteResult
+  case object PasswordMismatch extends NewInviteResult
 
-  def passwordMismatch: NewInviteResult   = PasswordMismatch
-  def invitationClosed: NewInviteResult   = InvitationDisabled
+  def passwordMismatch: NewInviteResult = PasswordMismatch
+  def invitationClosed: NewInviteResult = InvitationDisabled
   def success(id: Ident): NewInviteResult = Success(id)
 }

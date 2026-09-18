@@ -1,222 +1,162 @@
-package docspell.joex
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
-import scala.concurrent.ExecutionContext
+package docspell.joex
 
 import cats.effect._
 import cats.implicits._
 import fs2.concurrent.SignallingRef
+import fs2.io.file.Files
+import fs2.io.net.Network
 
-import docspell.analysis.TextAnalyser
+import docspell.backend.MailAddressCodec
+import docspell.backend.joex.FindJobOwnerAccount
 import docspell.backend.ops._
 import docspell.common._
-import docspell.ftsclient.FtsClient
-import docspell.ftssolr.SolrFtsClient
-import docspell.joex.analysis.RegexNerFile
-import docspell.joex.fts.{MigrationTask, ReIndexTask}
+import docspell.joex.emptytrash._
+import docspell.joex.fts.MigrationTask
 import docspell.joex.hk._
-import docspell.joex.learn.LearnClassifierTask
-import docspell.joex.notify._
 import docspell.joex.pagecount._
-import docspell.joex.pdfconv.ConvertAllPdfTask
-import docspell.joex.pdfconv.PdfConvTask
 import docspell.joex.preview._
-import docspell.joex.process.ItemHandler
-import docspell.joex.process.ReProcessItem
-import docspell.joex.scanmailbox._
-import docspell.joex.scheduler._
-import docspell.joexapi.client.JoexClient
+import docspell.joex.updatecheck._
+import docspell.notification.api.NotificationModule
+import docspell.notification.impl.NotificationModuleImpl
+import docspell.pubsub.api.{PubSub, PubSubT}
+import docspell.scheduler._
+import docspell.scheduler.impl.{JobStoreModuleBuilder, SchedulerModuleBuilder}
+import docspell.scheduler.usertask.{UserTaskScope, UserTaskStore}
 import docspell.store.Store
-import docspell.store.queue._
-import docspell.store.records.RJobLog
+import docspell.store.records.{REmptyTrashSetting, RJobLog}
 
 import emil.javamail._
 import org.http4s.client.Client
-import org.http4s.client.blaze.BlazeClientBuilder
 
-final class JoexAppImpl[F[_]: ConcurrentEffect: Timer](
+final class JoexAppImpl[F[_]: Async](
     cfg: Config,
-    nodeOps: ONode[F],
     store: Store[F],
-    queue: JobQueue[F],
-    pstore: PeriodicTaskStore[F],
+    uts: UserTaskStore[F],
+    jobStore: JobStore[F],
     termSignal: SignallingRef[F, Boolean],
+    notificationMod: NotificationModule[F],
     val scheduler: Scheduler[F],
     val periodicScheduler: PeriodicScheduler[F]
 ) extends JoexApp[F] {
-
   def init: F[Unit] = {
-    val run  = scheduler.start.compile.drain
+    val run = scheduler.start.compile.drain
     val prun = periodicScheduler.start.compile.drain
+    val eventConsume = notificationMod.consumeAllEvents(maxConcurrent = 2).compile.drain
     for {
       _ <- scheduleBackgroundTasks
-      _ <- ConcurrentEffect[F].start(run)
-      _ <- ConcurrentEffect[F].start(prun)
+      _ <- Async[F].start(run)
+      _ <- Async[F].start(prun)
+      _ <- Async[F].start(eventConsume)
       _ <- scheduler.periodicAwake
       _ <- periodicScheduler.periodicAwake
-      _ <- nodeOps.register(cfg.appId, NodeType.Joex, cfg.baseUrl)
+      _ <- scheduler.startSubscriptions
+      _ <- periodicScheduler.startSubscriptions
     } yield ()
   }
 
   def findLogs(jobId: Ident): F[Vector[RJobLog]] =
     store.transact(RJobLog.findLogs(jobId))
 
-  def shutdown: F[Unit] =
-    nodeOps.unregister(cfg.appId)
-
   def initShutdown: F[Unit] =
-    periodicScheduler.shutdown *> scheduler.shutdown(false) *> termSignal.set(true)
+    periodicScheduler.shutdown *> scheduler.shutdown(cancelAll = false) *> termSignal.set(
+      true
+    )
 
   private def scheduleBackgroundTasks: F[Unit] =
     HouseKeepingTask
       .periodicTask[F](cfg.houseKeeping.schedule)
-      .flatMap(pstore.insert) *>
-      MigrationTask.job.flatMap(queue.insertIfNew) *>
+      .flatMap(t => uts.updateOneTask(UserTaskScope.system, t.summary, t)) *>
+      scheduleEmptyTrashTasks *>
+      UpdateCheckTask
+        .periodicTask(cfg.updateCheck)
+        .flatMap(t => uts.updateOneTask(UserTaskScope.system, t.summary, t)) *>
+      MigrationTask.job.flatMap(jobStore.insertIfNew) *>
       AllPreviewsTask
         .job(MakePreviewArgs.StoreMode.WhenMissing, None)
-        .flatMap(queue.insertIfNew) *>
-      AllPageCountTask.job.flatMap(queue.insertIfNew)
+        .flatMap(jobStore.insertIfNew) *>
+      AllPageCountTask.job.flatMap(jobStore.insertIfNew).void
+
+  private def scheduleEmptyTrashTasks: F[Unit] =
+    store
+      .transact(
+        REmptyTrashSetting
+          .findForAllCollectives(OCollective.EmptyTrash.default, chunkSize = 50)
+      )
+      .evalMap { es =>
+        val args = EmptyTrashArgs(es.cid, es.minAge)
+        uts.updateOneTask(
+          UserTaskScope.collective(args.collective),
+          args.makeSubject.some,
+          EmptyTrashTask.userTask(args, es.schedule)
+        )
+      }
+      .compile
+      .drain
+
 }
 
-object JoexAppImpl {
+object JoexAppImpl extends MailAddressCodec {
 
-  def create[F[_]: ConcurrentEffect: ContextShift: Timer](
+  def create[F[_]: Async: Files: Network](
       cfg: Config,
       termSignal: SignallingRef[F, Boolean],
-      connectEC: ExecutionContext,
-      clientEC: ExecutionContext,
-      blocker: Blocker
+      store: Store[F],
+      httpClient: Client[F],
+      pubSub: PubSub[F],
+      pools: Pools
   ): Resource[F, JoexApp[F]] =
     for {
-      httpClient <- BlazeClientBuilder[F](clientEC).resource
-      client = JoexClient(httpClient)
-      store    <- Store.create(cfg.jdbc, connectEC, blocker)
-      queue    <- JobQueue(store)
-      pstore   <- PeriodicTaskStore.create(store)
-      nodeOps  <- ONode(store)
-      joex     <- OJoex(client, store)
-      upload   <- OUpload(store, queue, cfg.files, joex)
-      fts      <- createFtsClient(cfg)(httpClient)
-      itemOps  <- OItem(store, fts, queue, joex)
-      analyser <- TextAnalyser.create[F](cfg.textAnalysis.textAnalysisConfig, blocker)
-      regexNer <- RegexNerFile(cfg.textAnalysis.regexNerFileConfig, blocker, store)
-      javaEmil =
-        JavaMailEmil(blocker, Settings.defaultSettings.copy(debug = cfg.mailDebug))
-      sch <- SchedulerBuilder(cfg.scheduler, blocker, store)
-        .withQueue(queue)
-        .withTask(
-          JobTask.json(
-            ProcessItemArgs.taskName,
-            ItemHandler.newItem[F](cfg, itemOps, fts, analyser, regexNer),
-            ItemHandler.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            ReProcessItemArgs.taskName,
-            ReProcessItem[F](cfg, fts, itemOps, analyser, regexNer),
-            ReProcessItem.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            NotifyDueItemsArgs.taskName,
-            NotifyDueItemsTask[F](cfg.sendMail, javaEmil),
-            NotifyDueItemsTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            ScanMailboxArgs.taskName,
-            ScanMailboxTask[F](cfg.userTasks.scanMailbox, javaEmil, upload, joex),
-            ScanMailboxTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            MigrationTask.taskName,
-            MigrationTask[F](cfg.fullTextSearch, fts),
-            MigrationTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            ReIndexTask.taskName,
-            ReIndexTask[F](cfg.fullTextSearch, fts),
-            ReIndexTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            HouseKeepingTask.taskName,
-            HouseKeepingTask[F](cfg),
-            HouseKeepingTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            PdfConvTask.taskName,
-            PdfConvTask[F](cfg),
-            PdfConvTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            ConvertAllPdfArgs.taskName,
-            ConvertAllPdfTask[F](queue, joex),
-            ConvertAllPdfTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            LearnClassifierArgs.taskName,
-            LearnClassifierTask[F](cfg.textAnalysis, analyser),
-            LearnClassifierTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            MakePreviewArgs.taskName,
-            MakePreviewTask[F](cfg.convert, cfg.extraction.preview),
-            MakePreviewTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            AllPreviewsArgs.taskName,
-            AllPreviewsTask[F](queue, joex),
-            AllPreviewsTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            MakePageCountArgs.taskName,
-            MakePageCountTask[F](),
-            MakePageCountTask.onCancel[F]
-          )
-        )
-        .withTask(
-          JobTask.json(
-            AllPageCountTask.taskName,
-            AllPageCountTask[F](queue, joex),
-            AllPageCountTask.onCancel[F]
-          )
-        )
-        .resource
-      psch <- PeriodicScheduler.create(
-        cfg.periodicScheduler,
-        sch,
-        queue,
-        pstore,
-        client,
-        Timer[F]
+      joexLogger <- Resource.pure(
+        docspell.logging.getLogger[F](name = s"joex-${cfg.appId.id}")
       )
-      app = new JoexAppImpl(cfg, nodeOps, store, queue, pstore, termSignal, sch, psch)
-      appR <- Resource.make(app.init.map(_ => app))(_.shutdown)
+      pubSubT = PubSubT(pubSub, joexLogger)
+      javaEmil =
+        JavaMailEmil(Settings.defaultSettings.copy(debug = cfg.mailDebug))
+      notificationMod <- Resource.eval(
+        NotificationModuleImpl[F](store, javaEmil, httpClient, queueSize = 200)
+      )
+
+      jobStoreModule = JobStoreModuleBuilder(store)
+        .withPubsub(pubSubT)
+        .withEventSink(notificationMod)
+        .withFindJobOwner(FindJobOwnerAccount(store))
+        .build
+
+      tasks <- JoexTasks.resource(
+        cfg,
+        pools,
+        jobStoreModule,
+        httpClient,
+        pubSubT,
+        notificationMod,
+        javaEmil
+      )
+
+      schedulerModule <- SchedulerModuleBuilder(jobStoreModule)
+        .withSchedulerConfig(cfg.scheduler)
+        .withPeriodicSchedulerConfig(cfg.periodicScheduler)
+        .withTaskRegistry(tasks.get)
+        .resource
+
+      app = new JoexAppImpl(
+        cfg,
+        store,
+        jobStoreModule.userTasks,
+        jobStoreModule.jobs,
+        termSignal,
+        notificationMod,
+        schedulerModule.scheduler,
+        schedulerModule.periodicScheduler
+      )
+      nodes <- ONode(store)
+      _ <- nodes.withRegistered(cfg.appId, NodeType.Joex, cfg.baseUrl, None)
+      appR <- Resource.make(app.init.map(_ => app))(_.initShutdown)
     } yield appR
 
-  private def createFtsClient[F[_]: ConcurrentEffect](
-      cfg: Config
-  )(client: Client[F]): Resource[F, FtsClient[F]] =
-    if (cfg.fullTextSearch.enabled) SolrFtsClient(cfg.fullTextSearch.solr, client)
-    else Resource.pure[F, FtsClient[F]](FtsClient.none[F])
 }

@@ -1,6 +1,11 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query.internal
 
-import cats.parse.Numbers
 import cats.parse.{Parser => P}
 
 import docspell.query.ItemQuery._
@@ -20,9 +25,6 @@ object SimpleExprParser {
   private[this] val inOrOpDate =
     P.eitherOr(op ~ DateParser.date, inOp *> DateParser.dateOrMore)
 
-  private[this] val opInt =
-    op ~ Numbers.digits.map(_.toInt)
-
   val stringExpr: P[Expr] =
     (AttrParser.stringAttr ~ inOrOpStr).map {
       case (attr, Right((op, value))) =>
@@ -37,11 +39,6 @@ object SimpleExprParser {
         Expr.SimpleExpr(op, Property.DateProperty(attr, value))
       case (attr, Left(values)) =>
         Expr.InDateExpr(attr, values)
-    }
-
-  val intExpr: P[Expr] =
-    (AttrParser.intAttr ~ opInt).map { case (attr, (op, value)) =>
-      Expr.SimpleExpr(op, Property(attr, value))
     }
 
   val existsExpr: P[Expr.Exists] =
@@ -108,7 +105,6 @@ object SimpleExprParser {
       List(
         dateExpr,
         stringExpr,
-        intExpr,
         existsExpr,
         fulltextExpr,
         tagIdExpr,

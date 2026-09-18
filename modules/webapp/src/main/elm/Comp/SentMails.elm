@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.SentMails exposing
     ( Model
     , Msg
@@ -105,7 +112,7 @@ view2 texts model =
                 , div [ class "py-1 whitespace-pre-wrap" ]
                     [ text mail.body
                     ]
-                , div [ class "flex flex-row items-center border-t dark:border-bluegray-600 justify-end text-sm " ]
+                , div [ class "flex flex-row items-center border-t dark:border-slate-600 justify-end text-sm " ]
                     [ a
                         [ class S.secondaryBasicButton
                         , onClick Hide

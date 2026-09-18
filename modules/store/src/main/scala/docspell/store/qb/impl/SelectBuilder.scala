@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.impl
 
 import cats.data.NonEmptyList
@@ -8,11 +14,11 @@ import _root_.doobie.implicits._
 import _root_.doobie.{Query => _, _}
 
 object SelectBuilder {
-  val comma     = fr","
-  val asc       = fr" ASC"
-  val desc      = fr" DESC"
+  val comma = fr","
+  val asc = fr" ASC"
+  val desc = fr" DESC"
   val intersect = fr" INTERSECT"
-  val union     = fr" UNION ALL"
+  val union = fr" UNION ALL"
 
   def apply(q: Select): Fragment =
     build(q)
@@ -46,7 +52,7 @@ object SelectBuilder {
 
   def buildSimple(sq: Select.SimpleSelect): Fragment = {
     val f0 = sq.projection.map(selectExpr).reduceLeft(_ ++ comma ++ _)
-    val f1 = fromExpr(sq.from)
+    val f1 = sq.from.map(fromExpr).getOrElse(Fragment.empty)
     val f2 = cond(sq.where)
     val f3 = sq.groupBy.map(groupBy).getOrElse(Fragment.empty)
     f0 ++ f1 ++ f2 ++ f3

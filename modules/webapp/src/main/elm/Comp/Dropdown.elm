@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.Dropdown exposing
     ( Model
     , Msg(..)
@@ -7,6 +14,7 @@ module Comp.Dropdown exposing
     , isDropdownChangeMsg
     , makeModel
     , makeMultiple
+    , makeMultipleList
     , makeSingle
     , makeSingleList
     , mkOption
@@ -54,6 +62,7 @@ type alias Model a =
     , menuOpen : Bool
     , filterString : String
     , searchable : Int -> Bool
+    , searchWithAdditional : Bool
     }
 
 
@@ -69,6 +78,7 @@ makeModel input =
     , available = []
     , menuOpen = False
     , filterString = ""
+    , searchWithAdditional = False
     }
 
 
@@ -107,6 +117,26 @@ makeMultiple =
         { multiple = True
         , searchable = \n -> n > 0
         }
+
+
+makeMultipleList :
+    { options : List a
+    , selected : List a
+    }
+    -> Model a
+makeMultipleList opts =
+    let
+        m =
+            makeMultiple
+
+        m2 =
+            { m | available = List.map (makeItem m) opts.options }
+
+        m3 =
+            List.map (makeItem m2) opts.selected
+                |> List.foldl (\el -> \model -> selectItem model el) m2
+    in
+    m3
 
 
 getSelected : Model a -> List a
@@ -359,7 +389,7 @@ update msg model =
 
                 Just Util.Html.ESC ->
                     if model.menuOpen then
-                        ( model, Cmd.none )
+                        update ToggleMenu model
 
                     else
                         case model.selected of
@@ -374,7 +404,11 @@ update msg model =
                                 ( model, Cmd.none )
 
                 Just Util.Html.Space ->
-                    update ToggleMenu model
+                    if model.menuOpen then
+                        ( model, Cmd.none )
+
+                    else
+                        update ToggleMenu model
 
                 Just Util.Html.Enter ->
                     let
@@ -430,16 +464,40 @@ view2 cfg settings model =
         viewMultiple2 cfg settings model
 
     else
-        viewSingle2 cfg model
+        viewSingle2 cfg settings model
 
 
-viewSingle2 : ViewSettings a -> Model a -> Html (Msg a)
-viewSingle2 cfg model =
+searchInValueOnly : ViewSettings a -> (a -> String)
+searchInValueOnly cfg =
+    cfg.makeOption >> .text
+
+
+searchInValueAdditional : ViewSettings a -> (a -> String)
+searchInValueAdditional cfg =
+    let
+        combine item =
+            item.text ++ " " ++ item.additional |> String.trim
+    in
+    cfg.makeOption >> combine
+
+
+searchIn : Model a -> ViewSettings a -> (a -> String)
+searchIn model cfg =
+    if model.searchWithAdditional then
+        searchInValueAdditional cfg
+
+    else
+        searchInValueOnly cfg
+
+
+viewSingle2 : ViewSettings a -> UiSettings -> Model a -> Html (Msg a)
+viewSingle2 cfg settings model =
     let
         renderItem item =
             a
                 [ href "#"
                 , class cfg.style.item
+                , class (cfg.labelColor item.value settings)
                 , classList
                     [ ( cfg.style.itemActive, item.active )
                     , ( "font-semibold", item.selected )
@@ -448,7 +506,7 @@ viewSingle2 cfg model =
                 , onKeyUp KeyPress
                 ]
                 [ text <| (.value >> cfg.makeOption >> .text) item
-                , span [ class "text-gray-400 float-right" ]
+                , span [ class "text-gray-400 opacity-75 float-right" ]
                     [ text <| (.value >> cfg.makeOption >> .additional) item
                     ]
                 ]
@@ -494,7 +552,7 @@ viewSingle2 cfg model =
             , input
                 [ type_ "text"
                 , placeholder cfg.placeholder
-                , onInput (Filter (cfg.makeOption >> .text))
+                , onInput (Filter (searchIn model cfg))
                 , value model.filterString
                 , class "inline-block border-0 px-0 w-full py-0 focus:ring-0 "
                 , class cfg.style.input
@@ -569,8 +627,8 @@ viewMultiple2 cfg settings model =
                 (List.map renderSelectMultiple model.selected)
             , input
                 [ type_ "text"
-                , placeholder "Search…"
-                , onInput (Filter (cfg.makeOption >> .text))
+                , placeholder cfg.placeholder
+                , onInput (Filter (searchIn model cfg))
                 , value model.filterString
                 , class "inline-flex w-16 border-0 px-0 focus:ring-0 h-6"
                 , class cfg.style.input

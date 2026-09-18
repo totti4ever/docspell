@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.date
 
 import java.time.LocalDate
@@ -15,11 +21,9 @@ import docspell.common._
 object DateFind {
 
   def findDates(text: String, lang: Language): Stream[Pure, NerDateLabel] =
-    TextSplitter
-      .splitToken(text, " \t.,\n\r/".toSet)
-      .filter(w => lang != Language.Latvian || w.value != "gada")
+    splitWords(text, lang)
       .sliding(3)
-      .filter(_.length == 3)
+      .filter(_.size == 3)
       .flatMap(q =>
         Stream.emits(
           SimpleDate
@@ -28,15 +32,51 @@ object DateFind {
               NerDateLabel(
                 sd.toLocalDate,
                 NerLabel(
-                  text.substring(q.head.begin, q(2).end),
+                  text.substring(q.head.get.begin, q(2).end),
                   NerTag.Date,
-                  q.head.begin,
+                  q.head.get.begin,
                   q(2).end
                 )
               )
             )
         )
       )
+
+  private[this] val jpnChars =
+    ("年月日" + MonthName.getAll(Language.Japanese).map(_.mkString).mkString).toSet
+
+  private[date] def splitWords(text: String, lang: Language): Stream[Pure, Word] = {
+    val sep = " -\t.,\n\r/"
+    val (separators, stext) =
+      if (lang == Language.Japanese) {
+        (sep + "年月日") -> text.map(c => if (jpnChars.contains(c)) c else ' ')
+      } else if (lang == Language.Lithuanian) {
+        (sep + "md") -> text
+      } else sep -> text
+
+    val ukrFlexion = List(
+      "р",
+      "рік",
+      "року",
+      "ого",
+      "го",
+      "ий",
+      "ій",
+      "й",
+      "ше",
+      "ге",
+      "тє",
+      "те",
+      "ме",
+      "е",
+      "є"
+    )
+    TextSplitter
+      .splitToken(stext, separators.toSet)
+      .filter(w => lang != Language.Latvian || w.value != "gada")
+      .filter(w => lang != Language.Spanish || w.value != "de")
+      .filter(w => lang != Language.Ukrainian || !ukrFlexion.contains(w.value))
+  }
 
   case class SimpleDate(year: Int, month: Int, day: Int) {
     def toLocalDate: LocalDate =
@@ -73,6 +113,7 @@ object DateFind {
         case Language.French     => dmy.or(ymd).or(mdy)
         case Language.Italian    => dmy.or(ymd).or(mdy)
         case Language.Spanish    => dmy.or(ymd).or(mdy)
+        case Language.Hungarian  => ymd
         case Language.Czech      => dmy.or(ymd).or(mdy)
         case Language.Danish     => dmy.or(ymd).or(mdy)
         case Language.Finnish    => dmy.or(ymd).or(mdy)
@@ -83,6 +124,15 @@ object DateFind {
         case Language.Swedish    => ymd.or(dmy).or(mdy)
         case Language.Dutch      => dmy.or(ymd).or(mdy)
         case Language.Latvian    => dmy.or(lavLong).or(ymd)
+        case Language.Japanese   => ymd
+        case Language.JpnVert    => ymd
+        case Language.Hebrew     => dmy
+        case Language.Lithuanian => ymd
+        case Language.Polish     => dmy
+        case Language.Estonian   => dmy
+        case Language.Khmer      => dmy
+        case Language.Ukrainian  => dmy.or(ymd)
+        case Language.Slovak     => dmy.or(ymd)
       }
       p.read(parts) match {
         case Result.Success(sds, _) =>
@@ -141,11 +191,11 @@ object DateFind {
         Reader(words => Nel.of(reader, more: _*).map(_.read(words)).reduce)
 
       def readFirst[A](f: Word => Option[A]): Reader[A] =
-        Reader({
+        Reader {
           case Nil => Result.Failure
           case a :: as =>
             f(a).map(value => Result.Success(value, as)).getOrElse(Result.Failure)
-        })
+        }
     }
 
     sealed trait Result[+A] {
@@ -157,17 +207,17 @@ object DateFind {
 
     object Result {
       final case class Success[A](value: A, rest: List[Word]) extends Result[A] {
-        val toOption                                 = Some(value)
+        val toOption = Some(value)
         def flatMap[B](f: A => Result[B]): Result[B] = f(value)
-        def map[B](f: A => B): Result[B]             = Success(f(value), rest)
+        def map[B](f: A => B): Result[B] = Success(f(value), rest)
         def next[B](r: Reader[B]): Result[(A, B)] =
           r.read(rest).map(b => (value, b))
       }
       final case object Failure extends Result[Nothing] {
-        val toOption                                       = None
+        val toOption = None
         def flatMap[B](f: Nothing => Result[B]): Result[B] = this
-        def map[B](f: Nothing => B): Result[B]             = this
-        def next[B](r: Reader[B]): Result[(Nothing, B)]    = this
+        def map[B](f: Nothing => B): Result[B] = this
+        def next[B](r: Reader[B]): Result[(Nothing, B)] = this
       }
 
       implicit def resultSemigroup[A: Semigroup]: Semigroup[Result[A]] =

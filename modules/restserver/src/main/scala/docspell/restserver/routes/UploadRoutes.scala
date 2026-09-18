@@ -1,8 +1,15 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.data.OptionT
 import cats.effect._
 import cats.implicits._
+import fs2.io.file.Files
 
 import docspell.backend.BackendApp
 import docspell.backend.auth.AuthToken
@@ -14,13 +21,12 @@ import docspell.restserver.http4s.ResponseGenerator
 import org.http4s._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.dsl.Http4sDsl
-import org.http4s.multipart.Multipart
 import org.log4s._
 
 object UploadRoutes {
   private[this] val logger = getLogger
 
-  def secured[F[_]: Effect](
+  def secured[F[_]: Async: Files](
       backend: BackendApp[F],
       cfg: Config,
       user: AuthToken
@@ -28,7 +34,13 @@ object UploadRoutes {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 
-    val submitting = submitFiles[F](backend, cfg, Right(user.account)) _
+    val submitting =
+      submitFiles[F](
+        backend,
+        cfg,
+        Right(user.account.collectiveId),
+        user.account.userId.some
+      ) _
 
     HttpRoutes.of {
       case req @ POST -> Root / "item" =>
@@ -39,7 +51,7 @@ object UploadRoutes {
     }
   }
 
-  def open[F[_]: Effect](backend: BackendApp[F], cfg: Config): HttpRoutes[F] = {
+  def open[F[_]: Async: Files](backend: BackendApp[F], cfg: Config): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 
@@ -48,7 +60,7 @@ object UploadRoutes {
         (for {
           _ <- OptionT(backend.collective.findEnabledSource(srcId))
           res <- OptionT.liftF(
-            submitFiles(backend, cfg, Left(srcId))(req, None, Priority.Low, dsl)
+            submitFiles(backend, cfg, Left(srcId), None)(req, None, Priority.Low, dsl)
           )
         } yield res).getOrElseF(NotFound())
 
@@ -56,16 +68,22 @@ object UploadRoutes {
         (for {
           _ <- OptionT(backend.collective.findEnabledSource(srcId))
           res <- OptionT.liftF(
-            submitFiles(backend, cfg, Left(srcId))(req, Some(itemId), Priority.Low, dsl)
+            submitFiles(backend, cfg, Left(srcId), None)(
+              req,
+              Some(itemId),
+              Priority.Low,
+              dsl
+            )
           )
         } yield res).getOrElseF(NotFound())
     }
   }
 
-  private def submitFiles[F[_]: Effect](
+  private def submitFiles[F[_]: Async: Files](
       backend: BackendApp[F],
       cfg: Config,
-      accOrSrc: Either[Ident, AccountId]
+      accOrSrc: Either[Ident, CollectiveId],
+      userId: Option[Ident]
   )(
       req: Request[F],
       itemId: Option[Ident],
@@ -74,17 +92,26 @@ object UploadRoutes {
   ): F[Response[F]] = {
     import dsl._
 
-    for {
-      multipart <- req.as[Multipart[F]]
-      updata <- readMultipart(
-        multipart,
-        "webapp",
-        logger,
-        prio,
-        cfg.backend.files.validMimeTypes
-      )
-      result <- backend.upload.submitEither(updata, accOrSrc, true, itemId)
-      res    <- Ok(basicResult(result))
-    } yield res
+    val decodeMultipart =
+      EntityDecoder
+        .mixedMultipartResource(
+          maxSizeBeforeWrite = 10 * 1024 * 1024
+        )
+        .evalMap(_.decode(req, strict = false).value)
+        .rethrow
+
+    decodeMultipart.use { multipart =>
+      for {
+        updata <- readMultipart(
+          multipart,
+          "webapp",
+          logger,
+          prio,
+          cfg.backend.files.validMimeTypes
+        )
+        result <- backend.upload.submitEither(updata, accOrSrc, userId, itemId)
+        res <- Ok(uploadSubmitResult(result))
+      } yield res
+    }
   }
 }

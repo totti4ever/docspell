@@ -5,44 +5,88 @@ import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport._
 
 object Dependencies {
 
-  val BcryptVersion           = "0.4"
+  val BcryptVersion = "0.4"
   val BetterMonadicForVersion = "0.3.1"
-  val BitpeaceVersion         = "0.7.0"
-  val CalevVersion            = "0.4.2"
-  val CatsParseVersion        = "0.3.2"
-  val CirceVersion            = "0.13.0"
-  val ClipboardJsVersion      = "2.0.6"
-  val DoobieVersion           = "0.13.0"
-  val EmilVersion             = "0.9.1"
-  val FlexmarkVersion         = "0.62.2"
-  val FlywayVersion           = "7.8.1"
-  val Fs2Version              = "2.5.4"
-  val H2Version               = "1.4.200"
-  val Http4sVersion           = "0.21.22"
-  val Icu4jVersion            = "69.1"
-  val JsoupVersion            = "1.13.1"
-  val KindProjectorVersion    = "0.10.3"
-  val KittensVersion          = "2.2.2"
-  val LevigoJbig2Version      = "2.0"
-  val Log4sVersion            = "1.9.0"
-  val LogbackVersion          = "1.2.3"
-  val MariaDbVersion          = "2.7.2"
-  val MiniTestVersion         = "2.9.3"
-  val MUnitVersion            = "0.7.25"
-  val OrganizeImportsVersion  = "0.5.0"
-  val PdfboxVersion           = "2.0.23"
-  val PoiVersion              = "4.1.2"
-  val PostgresVersion         = "42.2.20"
-  val PureConfigVersion       = "0.15.0"
-  val ScalaJavaTimeVersion    = "2.2.2"
-  val Slf4jVersion            = "1.7.30"
-  val StanfordNlpVersion      = "4.2.0"
-  val TikaVersion             = "1.26"
-  val YamuscaVersion          = "0.8.0"
-  val SwaggerUIVersion        = "3.47.1"
-  val TwelveMonkeysVersion    = "3.6.4"
-  val JQueryVersion           = "3.5.1"
-  val ViewerJSVersion         = "0.5.8"
+  val BinnyVersion = "0.11.0"
+  val CalevVersion = "0.7.4"
+  val CatsVersion = "2.10.0"
+  val CatsEffectVersion = "3.6.3"
+  val CatsParseVersion = "1.1.0"
+  val CirceVersion = "0.15.0-M1"
+  val CirceGenericExtrasVersion = "0.14.4"
+  val CirceYamlVersion = "0.16.1"
+  val ClipboardJsVersion = "2.0.11"
+  val DoobieVersion = "1.0.0-RC6"
+  val EmilVersion = "0.19.0"
+  val FlexmarkVersion = "0.64.8"
+  val FlywayVersion = "11.14.1"
+  val Fs2Version = "3.12.2"
+  val H2Version = "2.3.232"
+  val Http4sVersion = "0.23.30"
+  val Icu4jVersion = "77.1"
+  val JavaOtpVersion = "0.4.0"
+  val JsoupVersion = "1.20.1"
+  val JwtScalaVersion = "11.0.3"
+  val KindProjectorVersion = "0.10.3"
+  val KittensVersion = "3.5.0"
+  val LevigoJbig2Version = "2.0"
+  val Log4sVersion = "1.10.0"
+  val LogbackVersion = "1.2.10"
+  val MariaDbVersion = "3.5.6"
+  val MUnitVersion = "1.2.0"
+  val MUnitCatsEffectVersion = "2.1.0"
+  val PdfboxVersion = "3.0.6"
+  val PdfjsViewerVersion = "2.12.313"
+  val PoiVersion = "5.4.0"
+  val PostgresVersion = "42.7.8"
+  val PureConfigVersion = "0.17.9"
+  val ScalaJavaTimeVersion = "2.6.0"
+  val ScodecBitsVersion = "1.2.4"
+  val ScribeVersion = "3.17.0"
+  val Slf4jVersion = "2.0.17"
+  val SourcecodeVersion = "0.4.4"
+  val StanfordNlpVersion = "4.5.10"
+  val TikaVersion = "3.2.3"
+  val YamuscaVersion = "0.11.0"
+  val SwaggerUIVersion = "5.29.3"
+  val TestContainerVersion = "0.43.0"
+  val TwelveMonkeysVersion = "3.12.0"
+  val JQueryVersion = "3.5.1"
+
+  val scribe = Seq(
+    "com.outr" %% "scribe" % ScribeVersion,
+    "com.outr" %% "scribe-slf4j2" % ScribeVersion
+  )
+
+  val sourcecode = Seq(
+    "com.lihaoyi" %% "sourcecode" % SourcecodeVersion
+  )
+
+  val jwtScala = Seq(
+    "com.github.jwt-scala" %% "jwt-circe" % JwtScalaVersion
+  )
+
+  val scodecBits = Seq(
+    "org.scodec" %% "scodec-bits" % ScodecBitsVersion
+  )
+
+  val javaOtp = Seq(
+    "com.eatthepath" % "java-otp" % JavaOtpVersion
+  )
+
+  val testContainer = Seq(
+    "com.dimafeng" %% "testcontainers-scala-munit" % TestContainerVersion,
+    "com.dimafeng" %% "testcontainers-scala-mariadb" % TestContainerVersion,
+    "com.dimafeng" %% "testcontainers-scala-postgresql" % TestContainerVersion
+  )
+
+  val cats = Seq(
+    "org.typelevel" %% "cats-core" % CatsVersion
+  )
+
+  val catsEffect = Seq(
+    "org.typelevel" %% "cats-effect" % CatsEffectVersion
+  )
 
   val catsParse = Seq(
     "org.typelevel" %% "cats-parse" % CatsParseVersion
@@ -51,7 +95,7 @@ object Dependencies {
     Def.setting("org.typelevel" %%% "cats-parse" % CatsParseVersion)
 
   val scalaJsStubs =
-    "org.scala-js" %% "scalajs-stubs" % "1.0.0" % "provided"
+    "org.scala-js" %% "scalajs-stubs" % "1.1.0" % "provided"
 
   val catsJS = Def.setting("org.typelevel" %%% "cats-core" % "2.4.2")
 
@@ -75,13 +119,10 @@ object Dependencies {
   val jclOverSlf4j = Seq(
     "org.slf4j" % "jcl-over-slf4j" % Slf4jVersion
   )
-  val julOverSlf4j = Seq(
-    "org.slf4j" % "jul-to-slf4j" % Slf4jVersion
-  )
 
   val poi = Seq(
-    "org.apache.poi" % "poi"            % PoiVersion,
-    "org.apache.poi" % "poi-ooxml"      % PoiVersion,
+    "org.apache.poi" % "poi" % PoiVersion,
+    "org.apache.poi" % "poi-ooxml" % PoiVersion,
     "org.apache.poi" % "poi-scratchpad" % PoiVersion
   ).map(
     _.excludeAll(
@@ -92,8 +133,8 @@ object Dependencies {
   // https://github.com/vsch/flexmark-java
   // BSD 2-Clause
   val flexmark = Seq(
-    "com.vladsch.flexmark" % "flexmark"                       % FlexmarkVersion,
-    "com.vladsch.flexmark" % "flexmark-ext-tables"            % FlexmarkVersion,
+    "com.vladsch.flexmark" % "flexmark" % FlexmarkVersion,
+    "com.vladsch.flexmark" % "flexmark-ext-tables" % FlexmarkVersion,
     "com.vladsch.flexmark" % "flexmark-ext-gfm-strikethrough" % FlexmarkVersion
   ).map(
     _.excludeAll(
@@ -122,7 +163,7 @@ object Dependencies {
     "com.github.eikek" %% "emil-common" % EmilVersion
   )
   val emil = Seq(
-    "com.github.eikek" %% "emil-common"   % EmilVersion,
+    "com.github.eikek" %% "emil-common" % EmilVersion,
     "com.github.eikek" %% "emil-javamail" % EmilVersion
   )
   val emilDoobie = Seq(
@@ -156,30 +197,29 @@ object Dependencies {
       ExclusionRule("com.sun.xml.bind", "jaxb-core"),
       ExclusionRule("javax.xml.bind", "jaxb-api"),
       ExclusionRule("javax.activation"),
+      ExclusionRule("junit", "junit"),
       ExclusionRule("de.jollyday", "jollyday"),
       ExclusionRule("com.apple", "AppleJavaExtensions"),
       ExclusionRule("org.glassfish", "javax.json")
     )
   )
 
-  val stanfordNlpModels = Seq(
-    ("edu.stanford.nlp" % "stanford-corenlp" % StanfordNlpVersion)
-      .classifier("models"),
-    ("edu.stanford.nlp" % "stanford-corenlp" % StanfordNlpVersion)
-      .classifier("models-german"),
-    ("edu.stanford.nlp" % "stanford-corenlp" % StanfordNlpVersion)
-      .classifier("models-french"),
-    ("edu.stanford.nlp" % "stanford-corenlp" % StanfordNlpVersion)
-      .classifier(
-        "models-english"
-      )
-  )
+  val stanfordNlpModels = {
+    val artifact = "edu.stanford.nlp" % "stanford-corenlp" % StanfordNlpVersion
+    Seq(
+      artifact.classifier("models"),
+      artifact.classifier("models-german"),
+      artifact.classifier("models-french"),
+      artifact.classifier("models-english"),
+      artifact.classifier("models-spanish")
+    )
+  }
 
   val tika = Seq(
     "org.apache.tika" % "tika-core" % TikaVersion
   )
   val commonsIO = Seq(
-    "commons-io" % "commons-io" % "2.8.0"
+    "commons-io" % "commons-io" % "2.20.0"
   )
   val tikaParser = Seq(
     "org.apache.tika" % "tika-parsers" % TikaVersion
@@ -189,13 +229,16 @@ object Dependencies {
     "org.mindrot" % "jbcrypt" % BcryptVersion
   )
 
-  val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % Fs2Version,
-    "co.fs2" %% "fs2-io"   % Fs2Version
+  val fs2Core = Seq(
+    "co.fs2" %% "fs2-core" % Fs2Version
   )
+  val fs2Io = Seq(
+    "co.fs2" %% "fs2-io" % Fs2Version
+  )
+  val fs2 = fs2Core ++ fs2Io
 
   val http4sClient = Seq(
-    "org.http4s" %% "http4s-blaze-client" % Http4sVersion
+    "org.http4s" %% "http4s-ember-client" % Http4sVersion
   )
 
   val http4sCirce = Seq(
@@ -207,21 +250,24 @@ object Dependencies {
   )
 
   val http4sServer = Seq(
-    "org.http4s" %% "http4s-blaze-server" % Http4sVersion
+    "org.http4s" %% "http4s-ember-server" % Http4sVersion
   )
 
-  val circe = Seq(
-    "io.circe" %% "circe-generic" % CirceVersion,
-    "io.circe" %% "circe-parser"  % CirceVersion
+  val circeCore = Seq(
+    "io.circe" %% "circe-core" % CirceVersion
   )
-
-  // https://github.com/Log4s/log4s;ASL 2.0
-  val loggingApi = Seq(
-    "org.log4s" %% "log4s" % Log4sVersion
+  val circeParser = Seq(
+    "io.circe" %% "circe-parser" % CirceVersion
   )
-
-  val logging = Seq(
-    "ch.qos.logback" % "logback-classic" % LogbackVersion
+  val circe =
+    circeCore ++ circeParser ++ Seq(
+      "io.circe" %% "circe-generic" % CirceVersion
+    )
+  val circeGenericExtra = circeCore ++ Seq(
+    "io.circe" %% "circe-generic-extras" % CirceGenericExtrasVersion
+  )
+  val circeYaml = circeCore ++ Seq(
+    "io.circe" %% "circe-yaml" % CirceYamlVersion
   )
 
   // https://github.com/melrief/pureconfig
@@ -230,13 +276,17 @@ object Dependencies {
     "com.github.pureconfig" %% "pureconfig" % PureConfigVersion
   )
 
+  val pureconfigIp4s = Seq(
+    "com.github.pureconfig" %% "pureconfig-ip4s" % PureConfigVersion
+  )
+
   // https://github.com/h2database/h2database
   // MPL 2.0 or EPL 1.0
   val h2 = Seq(
     "com.h2database" % "h2" % H2Version
   )
   val mariadb = Seq(
-    "org.mariadb.jdbc" % "mariadb-java-client" % MariaDbVersion //flyway doesn't work with newer mariadb
+    "org.mariadb.jdbc" % "mariadb-java-client" % MariaDbVersion
   )
   val postgres = Seq(
     "org.postgresql" % "postgresql" % PostgresVersion
@@ -246,50 +296,50 @@ object Dependencies {
   // https://github.com/tpolecat/doobie
   // MIT
   val doobie = Seq(
-    "org.tpolecat" %% "doobie-core"   % DoobieVersion,
+    "org.tpolecat" %% "doobie-core" % DoobieVersion,
     "org.tpolecat" %% "doobie-hikari" % DoobieVersion
   )
 
-  val bitpeace = Seq(
-    "com.github.eikek" %% "bitpeace-core" % BitpeaceVersion
+  val binny = Seq(
+    "com.github.eikek" %% "binny-core" % BinnyVersion,
+    "com.github.eikek" %% "binny-jdbc" % BinnyVersion,
+    "com.github.eikek" %% "binny-minio" % BinnyVersion,
+    "com.github.eikek" %% "binny-fs" % BinnyVersion
   )
 
   // https://github.com/flyway/flyway
   // ASL 2.0
   val flyway = Seq(
-    "org.flywaydb" % "flyway-core" % FlywayVersion
+    "org.flywaydb" % "flyway-core" % FlywayVersion,
+    "org.flywaydb" % "flyway-database-postgresql" % FlywayVersion,
+    "org.flywaydb" % "flyway-mysql" % FlywayVersion
   )
 
   val yamusca = Seq(
-    "com.github.eikek" %% "yamusca-core" % YamuscaVersion
+    "com.github.eikek" %% "yamusca-core" % YamuscaVersion,
+    "com.github.eikek" %% "yamusca-derive" % YamuscaVersion
   )
-
-  val miniTest = Seq(
-    // https://github.com/monix/minitest
-    // Apache 2.0
-    "io.monix" %% "minitest"      % MiniTestVersion,
-    "io.monix" %% "minitest-laws" % MiniTestVersion
-  ).map(_ % Test)
+  val yamuscaCirce = Seq(
+    "com.github.eikek" %% "yamusca-circe" % YamuscaVersion
+  )
 
   val munit = Seq(
-    "org.scalameta" %% "munit"            % MUnitVersion,
-    "org.scalameta" %% "munit-scalacheck" % MUnitVersion
+    "org.scalameta" %% "munit" % MUnitVersion,
+    "org.scalameta" %% "munit-scalacheck" % MUnitVersion,
+    "org.typelevel" %% "munit-cats-effect" % MUnitCatsEffectVersion
   )
 
-  val kindProjectorPlugin = "org.typelevel" %% "kind-projector"     % KindProjectorVersion
-  val betterMonadicFor    = "com.olegpy"    %% "better-monadic-for" % BetterMonadicForVersion
+  val kindProjectorPlugin = "org.typelevel" %% "kind-projector" % KindProjectorVersion
+  val betterMonadicFor = "com.olegpy" %% "better-monadic-for" % BetterMonadicForVersion
 
   val webjars = Seq(
-    "org.webjars" % "swagger-ui"   % SwaggerUIVersion,
-    "org.webjars" % "viewerjs"     % ViewerJSVersion,
-    "org.webjars" % "clipboard.js" % ClipboardJsVersion
+    "org.webjars" % "swagger-ui" % SwaggerUIVersion,
+    "org.webjars" % "clipboard.js" % ClipboardJsVersion,
+    "org.webjars.npm" % "pdfjs-dist-viewer-min" % PdfjsViewerVersion
   )
 
   val icu4j = Seq(
     "com.ibm.icu" % "icu4j" % Icu4jVersion
   )
 
-  val organizeImports = Seq(
-    "com.github.liancheng" %% "organize-imports" % OrganizeImportsVersion
-  )
 }

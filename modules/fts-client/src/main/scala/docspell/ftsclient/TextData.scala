@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftsclient
 
 import docspell.common._
@@ -8,9 +14,11 @@ sealed trait TextData {
 
   def item: Ident
 
-  def collective: Ident
+  def collective: CollectiveId
 
   def folder: Option[Ident]
+
+  def language: Language
 
   final def fold[A](f: TextData.Attachment => A, g: TextData.Item => A): A =
     this match {
@@ -24,9 +32,9 @@ object TextData {
   final case class Attachment(
       item: Ident,
       attachId: Ident,
-      collective: Ident,
+      collective: CollectiveId,
       folder: Option[Ident],
-      lang: Language,
+      language: Language,
       name: Option[String],
       text: Option[String]
   ) extends TextData {
@@ -38,7 +46,7 @@ object TextData {
   def attachment(
       item: Ident,
       attachId: Ident,
-      collective: Ident,
+      collective: CollectiveId,
       folder: Option[Ident],
       lang: Language,
       name: Option[String],
@@ -48,10 +56,11 @@ object TextData {
 
   final case class Item(
       item: Ident,
-      collective: Ident,
+      collective: CollectiveId,
       folder: Option[Ident],
       name: Option[String],
-      notes: Option[String]
+      notes: Option[String],
+      language: Language
   ) extends TextData {
 
     val id = Ident.unsafe("item") / item
@@ -60,10 +69,12 @@ object TextData {
 
   def item(
       item: Ident,
-      collective: Ident,
+      collective: CollectiveId,
       folder: Option[Ident],
       name: Option[String],
-      notes: Option[String]
+      notes: Option[String],
+      lang: Language
   ): TextData =
-    Item(item, collective, folder, name, notes)
+    Item(item, collective, folder, name, notes, lang)
+
 }

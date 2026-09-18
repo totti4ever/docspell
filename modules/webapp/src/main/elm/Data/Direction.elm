@@ -1,6 +1,14 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.Direction exposing
     ( Direction(..)
     , all
+    , asString
     , fromString
     , icon
     , icon2
@@ -8,7 +16,6 @@ module Data.Direction exposing
     , iconFromMaybe2
     , iconFromString
     , iconFromString2
-    , toString
     )
 
 
@@ -37,8 +44,8 @@ all =
     ]
 
 
-toString : Direction -> String
-toString dir =
+asString : Direction -> String
+asString dir =
     case dir of
         Incoming ->
             "Incoming"

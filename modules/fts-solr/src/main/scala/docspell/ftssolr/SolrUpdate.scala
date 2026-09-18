@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import cats.effect._
@@ -21,14 +27,20 @@ trait SolrUpdate[F[_]] {
 
   def update(tds: List[TextData]): F[Unit]
 
-  def updateFolder(itemId: Ident, collective: Ident, folder: Option[Ident]): F[Unit]
+  def updateFolder(
+      itemId: Ident,
+      collective: CollectiveId,
+      folder: Option[Ident]
+  ): F[Unit]
+
+  def updateVersionDoc(doc: VersionDoc): F[Unit]
 
   def delete(q: String, commitWithin: Option[Int]): F[Unit]
 }
 
 object SolrUpdate {
 
-  def apply[F[_]: ConcurrentEffect](cfg: SolrConfig, client: Client[F]): SolrUpdate[F] = {
+  def apply[F[_]: Async](cfg: SolrConfig, client: Client[F]): SolrUpdate[F] = {
     val dsl = new Http4sClientDsl[F] {}
     import dsl._
 
@@ -48,15 +60,20 @@ object SolrUpdate {
         client.expect[Unit](req)
       }
 
+      def updateVersionDoc(doc: VersionDoc): F[Unit] = {
+        val req = Method.POST(List(doc).asJson, url)
+        client.expect[Unit](req)
+      }
+
       def updateFolder(
           itemId: Ident,
-          collective: Ident,
+          collective: CollectiveId,
           folder: Option[Ident]
       ): F[Unit] = {
         val queryUrl = Uri.unsafeFromString(cfg.url.asString) / "query"
         val q = QueryData(
           "*:*",
-          s"${Field.itemId.name}:${itemId.id} AND ${Field.collectiveId.name}:${collective.id}",
+          s"${Field.itemId.name}:${itemId.id} AND ${Field.collectiveId.name}:${collective.value}",
           Int.MaxValue,
           0,
           List(Field.id),
@@ -66,7 +83,7 @@ object SolrUpdate {
         for {
           docIds <- client.expect[DocIdResult](searchReq)
           sets = docIds.toSetFolder(folder)
-          req  = Method.POST(sets.asJson, url)
+          req = Method.POST(sets.asJson, url)
           _ <- client.expect[Unit](req)
         } yield ()
       }
@@ -84,13 +101,12 @@ object SolrUpdate {
         client.expect[Unit](req)
       }
 
-      private val minOneChange: TextData => Boolean =
-        _ match {
-          case td: TextData.Attachment =>
-            td.name.isDefined || td.text.isDefined
-          case td: TextData.Item =>
-            td.name.isDefined || td.notes.isDefined
-        }
+      private val minOneChange: TextData => Boolean = {
+        case td: TextData.Attachment =>
+          td.name.isDefined || td.text.isDefined
+        case td: TextData.Item =>
+          td.name.isDefined || td.notes.isDefined
+      }
     }
   }
 

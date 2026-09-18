@@ -1,9 +1,14 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
-import java.time.LocalDateTime
-import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.time.{Instant, LocalDate, ZoneId}
+import java.time.{Duration => _, _}
 
 import cats.effect.Sync
 
@@ -43,12 +48,20 @@ case class Timestamp(value: Instant) {
 
   def asString: String = value.toString
 
+  def forFilename: String =
+    DateTimeFormatter
+      .ofPattern("YYYY-MM-dd'T'HH-mm-ss")
+      .format(value.atOffset(ZoneOffset.UTC))
+
   def <(other: Timestamp): Boolean =
     this.value.isBefore(other.value)
+
+  def >(other: Timestamp): Boolean =
+    this.value.isAfter(other.value)
 }
 
 object Timestamp {
-  val UTC = ZoneId.of("UTC")
+  val UTC: ZoneId = ZoneOffset.UTC
 
   val Epoch = Timestamp(Instant.EPOCH)
 
@@ -60,6 +73,9 @@ object Timestamp {
 
   def atUtc(ldt: LocalDateTime): Timestamp =
     from(ldt.atZone(UTC))
+
+  def ofMillis(ms: Long): Timestamp =
+    Timestamp(Instant.ofEpochMilli(ms))
 
   def daysBetween(ts0: Timestamp, ts1: Timestamp): Long =
     ChronoUnit.DAYS.between(ts0.toUtcDate, ts1.toUtcDate)

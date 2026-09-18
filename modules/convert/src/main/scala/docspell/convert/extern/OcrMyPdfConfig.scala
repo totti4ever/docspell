@@ -1,11 +1,17 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.convert.extern
 
-import java.nio.file.Path
+import fs2.io.file.Path
 
-import docspell.common.SystemCommand
+import docspell.common.exec.ExternalCommand
 
 case class OcrMyPdfConfig(
     enabled: Boolean,
-    command: SystemCommand.Config,
+    command: ExternalCommand,
     workingDir: Path
 )

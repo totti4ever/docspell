@@ -1,5 +1,14 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.Model exposing
     ( AttachmentRename
+    , ConfirmModalValue(..)
+    , MailSendResult(..)
     , Model
     , Msg(..)
     , NotesField(..)
@@ -9,13 +18,18 @@ module Comp.ItemDetail.Model exposing
     , ViewMode(..)
     , emptyModel
     , initSelectViewModel
+    , initShowQrModel
     , isEditNotes
+    , isShowQrAttach
+    , isShowQrItem
     , personMatchesOrg
     , resultModel
     , resultModelCmd
     , resultModelCmdSub
     )
 
+import Api.Model.AddonRunConfig exposing (AddonRunConfig)
+import Api.Model.AddonRunConfigList exposing (AddonRunConfigList)
 import Api.Model.BasicResult exposing (BasicResult)
 import Api.Model.CustomField exposing (CustomField)
 import Api.Model.EquipmentList exposing (EquipmentList)
@@ -31,19 +45,22 @@ import Api.Model.SentMails exposing (SentMails)
 import Api.Model.Tag exposing (Tag)
 import Api.Model.TagList exposing (TagList)
 import Comp.AttachmentMeta
-import Comp.ConfirmModal
 import Comp.CustomFieldMultiInput
 import Comp.DatePicker
 import Comp.DetailEdit
 import Comp.Dropdown
 import Comp.Dropzone
+import Comp.ItemLinkForm
 import Comp.ItemMail
 import Comp.KeyInput
 import Comp.LinkTarget exposing (LinkTarget)
 import Comp.MarkdownInput
 import Comp.SentMails
+import Comp.SimpleTextInput
+import Comp.TagDropdown
 import Data.Direction exposing (Direction)
 import Data.Fields exposing (Field)
+import Data.ItemIds exposing (ItemIdChange)
 import DatePicker exposing (DatePicker)
 import Dict exposing (Dict)
 import File exposing (File)
@@ -53,16 +70,15 @@ import Html5.DragDrop as DD
 import Http
 import Page exposing (Page(..))
 import Set exposing (Set)
-import Throttle exposing (Throttle)
-import Util.Tag
 
 
 type alias Model =
     { item : ItemDetail
+    , runConfigs : List AddonRunConfig
     , visibleAttach : Int
     , attachMenuOpen : Bool
     , menuOpen : Bool
-    , tagModel : Comp.Dropdown.Model Tag
+    , tagModel : Comp.TagDropdown.Model
     , directionModel : Comp.Dropdown.Model Direction
     , corrOrgModel : Comp.Dropdown.Model IdName
     , corrPersonModel : Comp.Dropdown.Model IdName
@@ -71,11 +87,11 @@ type alias Model =
     , folderModel : Comp.Dropdown.Model IdName
     , allFolders : List FolderItem
     , nameModel : String
+    , nameInput : Comp.SimpleTextInput.Model
     , nameState : SaveNameState
-    , nameSaveThrottle : Throttle Msg
     , notesModel : Maybe String
     , notesField : NotesField
-    , itemModal : Maybe (Comp.ConfirmModal.Settings Msg)
+    , itemModal : Maybe ConfirmModalValue
     , itemDatePicker : DatePicker
     , itemDate : Maybe Int
     , itemProposals : ItemProposals
@@ -84,13 +100,12 @@ type alias Model =
     , itemMail : Comp.ItemMail.Model
     , mailOpen : Bool
     , mailSending : Bool
-    , mailSendResult : Maybe BasicResult
+    , mailSendResult : MailSendResult
     , sentMails : Comp.SentMails.Model
     , sentMailsOpen : Bool
     , attachMeta : Dict String Comp.AttachmentMeta.Model
     , attachMetaOpen : Bool
-    , pdfNativeView : Maybe Bool
-    , attachModal : Maybe (Comp.ConfirmModal.Settings Msg)
+    , attachModal : Maybe ConfirmModalValue
     , addFilesOpen : Bool
     , addFilesModel : Comp.Dropzone.Model
     , selectedFiles : List File
@@ -103,13 +118,49 @@ type alias Model =
     , keyInputModel : Comp.KeyInput.Model
     , customFieldsModel : Comp.CustomFieldMultiInput.Model
     , customFieldSavingIcon : Dict String String
-    , customFieldThrottle : Throttle Msg
     , allTags : List Tag
     , allPersons : Dict String Person
     , attachmentDropdownOpen : Bool
+    , mobileItemMenuOpen : Bool
     , editMenuTabsOpen : Set String
     , viewMode : ViewMode
+    , showQrModel : ShowQrModel
+    , itemLinkModel : Comp.ItemLinkForm.Model
+    , showRunAddon : Bool
+    , addonRunConfigDropdown : Comp.Dropdown.Model AddonRunConfig
+    , addonRunSubmitted : Bool
     }
+
+
+type alias ShowQrModel =
+    { item : Bool
+    , attach : Bool
+    }
+
+
+initShowQrModel : ShowQrModel
+initShowQrModel =
+    { item = False
+    , attach = False
+    }
+
+
+isShowQrItem : ShowQrModel -> Bool
+isShowQrItem model =
+    model.item
+
+
+isShowQrAttach : ShowQrModel -> Bool
+isShowQrAttach model =
+    model.attach
+
+
+type ConfirmModalValue
+    = ConfirmModalReprocessItem Msg
+    | ConfirmModalReprocessFile Msg
+    | ConfirmModalDeleteItem Msg
+    | ConfirmModalDeleteFile Msg
+    | ConfirmModalDeleteAllFiles Msg
 
 
 type ViewMode
@@ -126,6 +177,13 @@ type alias SelectViewModel =
 type SelectActionMode
     = NoneAction
     | DeleteSelected
+
+
+type MailSendResult
+    = MailSendSuccessful
+    | MailSendHttpError Http.Error
+    | MailSendFailed String
+    | MailSendResultInitial
 
 
 type NotesField
@@ -152,10 +210,11 @@ isEditNotes field =
 emptyModel : Model
 emptyModel =
     { item = Api.Model.ItemDetail.empty
+    , runConfigs = []
     , visibleAttach = 0
     , attachMenuOpen = False
     , menuOpen = False
-    , tagModel = Util.Tag.makeDropdownModel
+    , tagModel = Comp.TagDropdown.emptyModel
     , directionModel =
         Comp.Dropdown.makeSingleList
             { options = Data.Direction.all
@@ -167,9 +226,9 @@ emptyModel =
     , concEquipModel = Comp.Dropdown.makeSingle
     , folderModel = Comp.Dropdown.makeSingle
     , allFolders = []
+    , nameInput = Comp.SimpleTextInput.initDefault Nothing
     , nameModel = ""
     , nameState = SaveSuccess
-    , nameSaveThrottle = Throttle.create 1
     , notesModel = Nothing
     , notesField = ViewNotes
     , itemModal = Nothing
@@ -181,12 +240,11 @@ emptyModel =
     , itemMail = Comp.ItemMail.emptyModel
     , mailOpen = False
     , mailSending = False
-    , mailSendResult = Nothing
+    , mailSendResult = MailSendResultInitial
     , sentMails = Comp.SentMails.init
     , sentMailsOpen = False
     , attachMeta = Dict.empty
     , attachMetaOpen = False
-    , pdfNativeView = Nothing
     , attachModal = Nothing
     , addFilesOpen = False
     , addFilesModel = Comp.Dropzone.init []
@@ -200,12 +258,17 @@ emptyModel =
     , keyInputModel = Comp.KeyInput.init
     , customFieldsModel = Comp.CustomFieldMultiInput.initWith []
     , customFieldSavingIcon = Dict.empty
-    , customFieldThrottle = Throttle.create 1
     , allTags = []
     , allPersons = Dict.empty
     , attachmentDropdownOpen = False
+    , mobileItemMenuOpen = False
     , editMenuTabsOpen = Set.empty
     , viewMode = SimpleView
+    , showQrModel = initShowQrModel
+    , itemLinkModel = Comp.ItemLinkForm.emptyModel
+    , showRunAddon = False
+    , addonRunConfigDropdown = Comp.Dropdown.makeSingle
+    , addonRunSubmitted = False
     }
 
 
@@ -218,12 +281,12 @@ initSelectViewModel =
 
 type Msg
     = ToggleMenu
-    | ReloadItem
+    | ReloadItem Bool
     | Init
     | SetItem ItemDetail
     | SetActiveAttachment Int
     | ToggleAttachment String
-    | TagDropdownMsg (Comp.Dropdown.Msg Tag)
+    | TagDropdownMsg Comp.TagDropdown.Msg
     | DirDropdownMsg (Comp.Dropdown.Msg Direction)
     | OrgDropdownMsg (Comp.Dropdown.Msg IdName)
     | CorrPersonMsg (Comp.Dropdown.Msg IdName)
@@ -233,7 +296,6 @@ type Msg
     | GetOrgResp (Result Http.Error ReferenceList)
     | GetPersonResp (Result Http.Error PersonList)
     | GetEquipResp (Result Http.Error EquipmentList)
-    | SetName String
     | SetNotes String
     | ToggleEditNotes
     | NotesEditMsg Comp.MarkdownInput.Msg
@@ -252,7 +314,7 @@ type Msg
     | ItemModalCancelled
     | RequestDelete
     | SaveResp (Result Http.Error BasicResult)
-    | DeleteResp (Result Http.Error BasicResult)
+    | DeleteResp String (Result Http.Error BasicResult)
     | GetItemResp (Result Http.Error ItemDetail)
     | GetProposalResp (Result Http.Error ItemProposals)
     | RemoveDueDate
@@ -265,7 +327,6 @@ type Msg
     | SentMailsResp (Result Http.Error SentMails)
     | AttachMetaClick String
     | AttachMetaMsg String Comp.AttachmentMeta.Msg
-    | TogglePdfNativeView Bool
     | RequestDeleteAttachment String
     | DeleteAttachConfirmed String
     | RequestDeleteSelected
@@ -298,7 +359,6 @@ type Msg
     | StartEditEquipModal
     | ResetHiddenMsg Field (Result Http.Error BasicResult)
     | SaveNameResp (Result Http.Error BasicResult)
-    | UpdateThrottle
     | KeyInputMsg Comp.KeyInput.Msg
     | ToggleAttachMenu
     | UiSettingsUpdated
@@ -307,6 +367,7 @@ type Msg
     | CustomFieldSaveResp CustomField String (Result Http.Error BasicResult)
     | CustomFieldRemoveResp String (Result Http.Error BasicResult)
     | ToggleAttachmentDropdown
+    | ToggleMobileItemMenu
     | ToggleAkkordionTab String
     | ToggleOpenAllAkkordionTabs
     | RequestReprocessFile String
@@ -315,6 +376,19 @@ type Msg
     | RequestReprocessItem
     | ReprocessItemConfirmed
     | ToggleSelectView
+    | RestoreItem
+    | ToggleShowQrItem String
+    | ToggleShowQrAttach String
+    | PrintElement String
+    | SetNameMsg Comp.SimpleTextInput.Msg
+    | ToggleSelectItem
+    | ItemLinkFormMsg Comp.ItemLinkForm.Msg
+    | ToggleShowRunAddon
+    | LoadRunConfigResp (Result Http.Error AddonRunConfigList)
+    | RunAddonMsg (Comp.Dropdown.Msg AddonRunConfig)
+    | RunSelectedAddon
+    | RunAddonResp (Result Http.Error BasicResult)
+    | SetAddonRunSubmitted Bool
 
 
 type SaveNameState
@@ -328,22 +402,24 @@ type alias UpdateResult =
     , cmd : Cmd Msg
     , sub : Sub Msg
     , linkTarget : LinkTarget
+    , removedItem : Maybe String
+    , selectionChange : ItemIdChange
     }
 
 
 resultModel : Model -> UpdateResult
 resultModel model =
-    UpdateResult model Cmd.none Sub.none Comp.LinkTarget.LinkNone
+    UpdateResult model Cmd.none Sub.none Comp.LinkTarget.LinkNone Nothing Data.ItemIds.noChange
 
 
 resultModelCmd : ( Model, Cmd Msg ) -> UpdateResult
 resultModelCmd ( model, cmd ) =
-    UpdateResult model cmd Sub.none Comp.LinkTarget.LinkNone
+    UpdateResult model cmd Sub.none Comp.LinkTarget.LinkNone Nothing Data.ItemIds.noChange
 
 
 resultModelCmdSub : ( Model, Cmd Msg, Sub Msg ) -> UpdateResult
 resultModelCmdSub ( model, cmd, sub ) =
-    UpdateResult model cmd sub Comp.LinkTarget.LinkNone
+    UpdateResult model cmd sub Comp.LinkTarget.LinkNone Nothing Data.ItemIds.noChange
 
 
 personMatchesOrg : Model -> Bool

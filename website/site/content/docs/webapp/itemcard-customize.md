@@ -1,9 +1,9 @@
 +++
 title = "Customize Item Card"
-weight = 32
-[extra]
-mktoc = true
+weight = 39
 +++
+
+# Customize item card
 
 The search view or list view displays the search results as a list of
 item cards. Each cards represents one item.
@@ -12,35 +12,35 @@ The item card can be customized a bit in the user settings. In the
 user menu (the user icon, top right), choose _User Profile_ and then
 _UI Settings_. Among other things, there is a _Item Cards_ section:
 
-{{ figure(file="itemcard-customize-01.png") }}
+{{ figure2(light="itemcard-customize-01.png", dark="itemcard-customize-01_dark.png") }}
 
 ### Max Note Length
 
 This defines how many of the item notes to display in the card. You
 can set it to `0` to not show any notes at all. This is only a "soft
 limit", there is also a "hard limit" in [docspell's
-configuration](@/docs/configure/_index.md#rest-server) (see `max-note-length`),
-that is an upper limit to this value.
+configuration](@/docs/configure/defaults.md#rest-server) (see
+`max-note-length`), that is an upper limit to this value.
 
 ### Size of item preview
 
 The item preview is an image of the first page of the first
 attachment. You can change the order of attachments in the item detail
 view. This image has a predefined size, which is specified [docspell's
-configuration](@/docs/configure/_index.md#joex) (see
+configuration](@/docs/configure/defaults.md#joex) (see
 `extraction.preview.dpi`). The size for displaying it, can be
 specified via this setting. A _small_ preview uses about 80px width, a
 _medium_ one 160px and _large_ means to use the available space in the
 card.
 
-<div class="columns">
-    <div class="column">
+<div class="grid grid-cols-3 gap-4">
+    <div class="">
       {{ imgnormal(file="itemcard-customize-04.png", width="300")}}
     </div>
-    <div class="column">
+    <div class="">
       {{ imgnormal(file="itemcard-customize-03.png", width="300")}}
     </div>
-    <div class="column">
+    <div class="">
       {{ imgnormal(file="itemcard-customize-02.png", width="300")}}
     </div>
 </div>

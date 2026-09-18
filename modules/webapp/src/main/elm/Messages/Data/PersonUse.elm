@@ -1,4 +1,15 @@
-module Messages.Data.PersonUse exposing (gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Data.PersonUse exposing
+    ( de
+    , fr
+    , gb
+    )
 
 import Data.PersonUse exposing (PersonUse(..))
 
@@ -17,3 +28,35 @@ gb pu =
 
         Disabled ->
             "Disabled"
+
+
+de : PersonUse -> String
+de pu =
+    case pu of
+        Correspondent ->
+            "Korrespondent"
+
+        Concerning ->
+            "Betreffend"
+
+        Both ->
+            "Beides"
+
+        Disabled ->
+            "Deaktiviert"
+
+
+fr : PersonUse -> String
+fr pu =
+    case pu of
+        Correspondent ->
+            "Correspondante"
+
+        Concerning ->
+            "Concernée"
+
+        Both ->
+            "Les deux"
+
+        Disabled ->
+            "inactif"

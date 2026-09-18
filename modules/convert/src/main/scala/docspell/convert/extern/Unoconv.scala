@@ -1,31 +1,35 @@
-package docspell.convert.extern
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
-import java.nio.file.Path
+package docspell.convert.extern
 
 import cats.effect._
 import fs2.Stream
+import fs2.io.file.{Files, Path}
 
-import docspell.common._
 import docspell.convert.ConversionResult
 import docspell.convert.ConversionResult.Handler
+import docspell.logging.Logger
 
 object Unoconv {
 
-  def toPDF[F[_]: Sync: ContextShift, A](
+  def toPDF[F[_]: Async: Files, A](
       cfg: UnoconvConfig,
       chunkSize: Int,
-      blocker: Blocker,
       logger: Logger[F]
   )(in: Stream[F, Byte], handler: Handler[F, A]): F[A] = {
-    val reader: (Path, SystemCommand.Result) => F[ConversionResult[F]] =
-      ExternConv.readResult[F](blocker, chunkSize, logger)
+    val reader: (Path, Int) => F[ConversionResult[F]] =
+      ExternConv.readResult[F](chunkSize, logger)
+    val cmd = cfg.command.withVars(Map.empty)
 
     ExternConv.toPDF[F, A](
       "unoconv",
-      cfg.command,
+      cmd,
       cfg.workingDir,
-      false,
-      blocker,
+      useStdin = false,
       logger,
       reader
     )(
@@ -33,5 +37,4 @@ object Unoconv {
       handler
     )
   }
-
 }

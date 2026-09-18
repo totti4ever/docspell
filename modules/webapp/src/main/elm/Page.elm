@@ -1,15 +1,30 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page exposing
-    ( Page(..)
+    ( LoginData
+    , Page(..)
+    , emptyLoginData
     , fromUrl
     , goto
     , hasSidebar
     , href
+    , isDashboardPage
+    , isDetailPage
     , isOpen
+    , isSearchPage
     , isSecured
+    , isSharePage
     , loginPage
     , loginPageReferrer
     , pageFromString
     , pageName
+    , pageShareDetail
+    , pageShareId
     , pageToString
     , set
     , uploadId
@@ -24,9 +39,24 @@ import Url.Parser.Query as Query
 import Util.Maybe
 
 
+type alias LoginData =
+    { referrer : Maybe Page
+    , session : Maybe String
+    , openid : Int
+    }
+
+
+emptyLoginData : LoginData
+emptyLoginData =
+    { referrer = Nothing
+    , session = Nothing
+    , openid = 0
+    }
+
+
 type Page
-    = HomePage
-    | LoginPage (Maybe Page)
+    = SearchPage (Maybe String)
+    | LoginPage LoginData
     | ManageDataPage
     | CollectiveSettingPage
     | UserSettingPage
@@ -35,12 +65,18 @@ type Page
     | UploadPage (Maybe String)
     | NewInvitePage
     | ItemDetailPage String
+    | SharePage String
+    | ShareDetailPage String String
+    | DashboardPage
 
 
 isSecured : Page -> Bool
 isSecured page =
     case page of
-        HomePage ->
+        DashboardPage ->
+            True
+
+        SearchPage _ ->
             True
 
         LoginPage _ ->
@@ -70,6 +106,12 @@ isSecured page =
         ItemDetailPage _ ->
             True
 
+        SharePage _ ->
+            False
+
+        ShareDetailPage _ _ ->
+            False
+
 
 {-| Currently, all secured pages have a sidebar, except UploadPage.
 -}
@@ -78,6 +120,12 @@ hasSidebar page =
     case page of
         UploadPage _ ->
             False
+
+        SharePage _ ->
+            True
+
+        ShareDetailPage _ _ ->
+            True
 
         _ ->
             isSecured page
@@ -92,17 +140,60 @@ loginPage : Page -> Page
 loginPage p =
     case p of
         LoginPage _ ->
-            LoginPage Nothing
+            LoginPage emptyLoginData
 
         _ ->
-            LoginPage (Just p)
+            LoginPage { emptyLoginData | referrer = Just p }
+
+
+isSharePage : Page -> Bool
+isSharePage page =
+    case page of
+        SharePage _ ->
+            True
+
+        _ ->
+            False
+
+
+isSearchPage : Page -> Bool
+isSearchPage page =
+    case page of
+        SearchPage _ ->
+            True
+
+        _ ->
+            False
+
+
+isDashboardPage : Page -> Bool
+isDashboardPage page =
+    case page of
+        DashboardPage ->
+            True
+
+        _ ->
+            False
+
+
+isDetailPage : Page -> Bool
+isDetailPage page =
+    case page of
+        ItemDetailPage _ ->
+            True
+
+        _ ->
+            False
 
 
 pageName : Page -> String
 pageName page =
     case page of
-        HomePage ->
-            "Home"
+        DashboardPage ->
+            "dashboard"
+
+        SearchPage _ ->
+            "Search"
 
         LoginPage _ ->
             "Login"
@@ -136,12 +227,38 @@ pageName page =
         ItemDetailPage _ ->
             "Item"
 
+        SharePage _ ->
+            "Share"
 
-loginPageReferrer : Page -> Maybe Page
+        ShareDetailPage _ _ ->
+            "Share Detail"
+
+
+loginPageReferrer : Page -> LoginData
 loginPageReferrer page =
     case page of
-        LoginPage r ->
-            r
+        LoginPage data ->
+            data
+
+        _ ->
+            emptyLoginData
+
+
+pageShareId : Page -> Maybe String
+pageShareId page =
+    case page of
+        SharePage id ->
+            Just id
+
+        _ ->
+            Nothing
+
+
+pageShareDetail : Page -> Maybe ( String, String )
+pageShareDetail page =
+    case page of
+        ShareDetailPage shareId itemId ->
+            Just ( shareId, itemId )
 
         _ ->
             Nothing
@@ -160,19 +277,27 @@ uploadId page =
 pageToString : Page -> String
 pageToString page =
     case page of
-        HomePage ->
-            "/app/home"
+        DashboardPage ->
+            "/app/dashboard"
 
-        LoginPage referer ->
-            case referer of
-                Just (LoginPage _) ->
-                    "/app/login"
-
-                Just p ->
-                    "/app/login?r=" ++ pageToString p
+        SearchPage bmId ->
+            case bmId of
+                Just id ->
+                    "/app/search?bm=" ++ id
 
                 Nothing ->
-                    "/app/login"
+                    "/app/search"
+
+        LoginPage data ->
+            case data.referrer of
+                Just (LoginPage _) ->
+                    "/app/login?openid=" ++ String.fromInt data.openid
+
+                Just p ->
+                    "/app/login?r=" ++ pageToString p ++ "&openid=" ++ String.fromInt data.openid
+
+                Nothing ->
+                    "/app/login?openid=" ++ String.fromInt data.openid
 
         ManageDataPage ->
             "/app/managedata"
@@ -199,6 +324,12 @@ pageToString page =
 
         ItemDetailPage id ->
             "/app/item/" ++ id
+
+        SharePage id ->
+            "/app/share/" ++ id
+
+        ShareDetailPage shareId itemId ->
+            "/app/share/" ++ shareId ++ "/" ++ itemId
 
 
 pageFromString : String -> Maybe Page
@@ -240,13 +371,15 @@ pathPrefix =
 parser : Parser (Page -> a) a
 parser =
     oneOf
-        [ Parser.map HomePage
+        [ Parser.map DashboardPage
             (oneOf
                 [ Parser.top
-                , s pathPrefix </> s "home"
+                , s pathPrefix
+                , s pathPrefix </> s "dashboard"
                 ]
             )
-        , Parser.map LoginPage (s pathPrefix </> s "login" <?> pageQuery)
+        , Parser.map SearchPage (s pathPrefix </> s "search" <?> Query.string "bm")
+        , Parser.map LoginPage (s pathPrefix </> s "login" <?> loginPageParser)
         , Parser.map ManageDataPage (s pathPrefix </> s "managedata")
         , Parser.map CollectiveSettingPage (s pathPrefix </> s "csettings")
         , Parser.map UserSettingPage (s pathPrefix </> s "usettings")
@@ -256,6 +389,8 @@ parser =
         , Parser.map (UploadPage Nothing) (s pathPrefix </> s "upload")
         , Parser.map NewInvitePage (s pathPrefix </> s "newinvite")
         , Parser.map ItemDetailPage (s pathPrefix </> s "item" </> string)
+        , Parser.map ShareDetailPage (s pathPrefix </> s "share" </> string </> string)
+        , Parser.map SharePage (s pathPrefix </> s "share" </> string)
         ]
 
 
@@ -271,6 +406,21 @@ fromString str =
             Url Url.Http "localhost" Nothing str Nothing Nothing
     in
     fromUrl url
+
+
+loginPageOAuthQuery : Query.Parser Int
+loginPageOAuthQuery =
+    Query.map (Maybe.withDefault 0) (Query.int "openid")
+
+
+loginPageSessionQuery : Query.Parser (Maybe String)
+loginPageSessionQuery =
+    Query.string "auth"
+
+
+loginPageParser : Query.Parser LoginData
+loginPageParser =
+    Query.map3 LoginData pageQuery loginPageSessionQuery loginPageOAuthQuery
 
 
 pageQuery : Query.Parser (Maybe Page)

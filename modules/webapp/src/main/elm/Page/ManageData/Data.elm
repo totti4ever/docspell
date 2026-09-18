@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.ManageData.Data exposing
     ( Model
     , Msg(..)
@@ -5,6 +12,9 @@ module Page.ManageData.Data exposing
     , init
     )
 
+import Comp.AddonArchiveManage
+import Comp.AddonRunConfigManage
+import Comp.BookmarkManage
 import Comp.CustomFieldManage
 import Comp.EquipmentManage
 import Comp.FolderManage
@@ -22,6 +32,9 @@ type alias Model =
     , personManageModel : Comp.PersonManage.Model
     , folderManageModel : Comp.FolderManage.Model
     , fieldManageModel : Comp.CustomFieldManage.Model
+    , bookmarkModel : Comp.BookmarkManage.Model
+    , addonArchiveModel : Comp.AddonArchiveManage.Model
+    , addonRunConfigModel : Comp.AddonRunConfigManage.Model
     }
 
 
@@ -30,6 +43,15 @@ init flags =
     let
         ( m2, c2 ) =
             Comp.TagManage.update flags Comp.TagManage.LoadTags Comp.TagManage.emptyModel
+
+        ( bm, bc ) =
+            Comp.BookmarkManage.init flags
+
+        ( aam, aac ) =
+            Comp.AddonArchiveManage.init flags
+
+        ( arm, arc ) =
+            Comp.AddonRunConfigManage.init flags
     in
     ( { currentTab = Just TagTab
       , tagManageModel = m2
@@ -38,8 +60,16 @@ init flags =
       , personManageModel = Comp.PersonManage.emptyModel
       , folderManageModel = Comp.FolderManage.empty
       , fieldManageModel = Comp.CustomFieldManage.empty
+      , bookmarkModel = bm
+      , addonArchiveModel = aam
+      , addonRunConfigModel = arm
       }
-    , Cmd.map TagManageMsg c2
+    , Cmd.batch
+        [ Cmd.map TagManageMsg c2
+        , Cmd.map BookmarkMsg bc
+        , Cmd.map AddonArchiveMsg aac
+        , Cmd.map AddonRunConfigMsg arc
+        ]
     )
 
 
@@ -50,6 +80,9 @@ type Tab
     | PersonTab
     | FolderTab
     | CustomFieldTab
+    | BookmarkTab
+    | AddonArchiveTab
+    | AddonRunConfigTab
 
 
 type Msg
@@ -60,3 +93,6 @@ type Msg
     | PersonManageMsg Comp.PersonManage.Msg
     | FolderMsg Comp.FolderManage.Msg
     | CustomFieldMsg Comp.CustomFieldManage.Msg
+    | BookmarkMsg Comp.BookmarkManage.Msg
+    | AddonArchiveMsg Comp.AddonArchiveManage.Msg
+    | AddonRunConfigMsg Comp.AddonRunConfigManage.Msg

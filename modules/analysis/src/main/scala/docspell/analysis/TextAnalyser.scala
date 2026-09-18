@@ -1,16 +1,22 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis
 
 import cats.Applicative
 import cats.effect._
 import cats.implicits._
+import fs2.io.file.Files
 
 import docspell.analysis.classifier.{StanfordTextClassifier, TextClassifier}
 import docspell.analysis.contact.Contact
 import docspell.analysis.date.DateFind
 import docspell.analysis.nlp._
 import docspell.common._
-
-import org.log4s.getLogger
+import docspell.logging.Logger
 
 trait TextAnalyser[F[_]] {
 
@@ -24,7 +30,6 @@ trait TextAnalyser[F[_]] {
   def classifier: TextClassifier[F]
 }
 object TextAnalyser {
-  private[this] val logger = getLogger
 
   case class Result(labels: Vector[NerLabel], dates: Vector[NerDateLabel]) {
 
@@ -32,10 +37,7 @@ object TextAnalyser {
       labels ++ dates.map(dl => dl.label.copy(label = dl.date.toString))
   }
 
-  def create[F[_]: Concurrent: Timer: ContextShift](
-      cfg: TextAnalysisConfig,
-      blocker: Blocker
-  ): Resource[F, TextAnalyser[F]] =
+  def create[F[_]: Async: Files](cfg: TextAnalysisConfig): Resource[F, TextAnalyser[F]] =
     Resource
       .eval(Nlp(cfg.nlpConfig))
       .map(stanfordNer =>
@@ -51,12 +53,12 @@ object TextAnalyser {
               tags0 <- stanfordNer(Nlp.Input(cacheKey, settings, logger, input))
               tags1 <- contactNer(input)
               dates <- dateNer(settings.lang, input)
-              list  = tags0 ++ tags1
+              list = tags0 ++ tags1
               spans = NerLabelSpan.build(list)
             } yield Result(spans ++ list, dates)
 
           def classifier: TextClassifier[F] =
-            new StanfordTextClassifier[F](cfg.classifier, blocker)
+            new StanfordTextClassifier[F](cfg.classifier)
 
           private def textLimit(logger: Logger[F], text: String): F[String] =
             if (cfg.maxLength <= 0)
@@ -82,12 +84,13 @@ object TextAnalyser {
 
   /** Provides the nlp pipeline based on the configuration. */
   private object Nlp {
-    def apply[F[_]: Concurrent: Timer](
+    def apply[F[_]: Async: Files](
         cfg: TextAnalysisConfig.NlpConfig
-    ): F[Input[F] => F[Vector[NerLabel]]] =
+    ): F[Input[F] => F[Vector[NerLabel]]] = {
+      val log = docspell.logging.getLogger[F]
       cfg.mode match {
         case NlpMode.Disabled =>
-          Logger.log4s(logger).info("NLP is disabled as defined in config.") *>
+          log.info("NLP is disabled as defined in config.") *>
             Applicative[F].pure(_ => Vector.empty[NerLabel].pure[F])
         case _ =>
           PipelineCache(cfg.clearInterval)(
@@ -96,6 +99,7 @@ object TextAnalyser {
           )
             .map(annotate[F])
       }
+    }
 
     final case class Input[F[_]](
         key: Ident,
@@ -104,7 +108,7 @@ object TextAnalyser {
         text: String
     )
 
-    def annotate[F[_]: BracketThrow](
+    def annotate[F[_]: Async](
         cache: PipelineCache[F]
     )(input: Input[F]): F[Vector[NerLabel]] =
       cache

@@ -1,79 +1,95 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.learn
 
 import cats.data.Kleisli
 import cats.effect._
 import cats.implicits._
 import fs2.Stream
+import fs2.io.file.Files
 
 import docspell.analysis.TextAnalyser
 import docspell.analysis.classifier.TextClassifier.Data
 import docspell.common._
-import docspell.joex.scheduler._
+import docspell.scheduler._
+import docspell.store.Store
 
 object LearnItemEntities {
-  def learnAll[F[_]: Sync: ContextShift, A](
+  def learnAll[F[_]: Async: Files, A](
       analyser: TextAnalyser[F],
-      collective: Ident,
+      store: Store[F],
+      collective: CollectiveId,
       maxItems: Int,
       maxTextLen: Int
   ): Task[F, A, Unit] =
-    learnCorrOrg(analyser, collective, maxItems, maxTextLen)
-      .flatMap(_ => learnCorrPerson[F, A](analyser, collective, maxItems, maxTextLen))
-      .flatMap(_ => learnConcPerson(analyser, collective, maxItems, maxTextLen))
-      .flatMap(_ => learnConcEquip(analyser, collective, maxItems, maxTextLen))
+    learnCorrOrg[F, A](analyser, store, collective, maxItems, maxTextLen)
+      .flatMap(_ =>
+        learnCorrPerson[F, A](analyser, store, collective, maxItems, maxTextLen)
+      )
+      .flatMap(_ => learnConcPerson(analyser, store, collective, maxItems, maxTextLen))
+      .flatMap(_ => learnConcEquip(analyser, store, collective, maxItems, maxTextLen))
 
-  def learnCorrOrg[F[_]: Sync: ContextShift, A](
+  def learnCorrOrg[F[_]: Async: Files, A](
       analyser: TextAnalyser[F],
-      collective: Ident,
+      store: Store[F],
+      collective: CollectiveId,
       maxItems: Int,
       maxTextLen: Int
   ): Task[F, A, Unit] =
-    learn(analyser, collective)(
+    learn(store, analyser, collective)(
       ClassifierName.correspondentOrg,
-      ctx => SelectItems.forCorrOrg(ctx.store, collective, maxItems, maxTextLen)
+      _ => SelectItems.forCorrOrg(store, collective, maxItems, maxTextLen)
     )
 
-  def learnCorrPerson[F[_]: Sync: ContextShift, A](
+  def learnCorrPerson[F[_]: Async: Files, A](
       analyser: TextAnalyser[F],
-      collective: Ident,
+      store: Store[F],
+      collective: CollectiveId,
       maxItems: Int,
       maxTextLen: Int
   ): Task[F, A, Unit] =
-    learn(analyser, collective)(
+    learn(store, analyser, collective)(
       ClassifierName.correspondentPerson,
-      ctx => SelectItems.forCorrPerson(ctx.store, collective, maxItems, maxTextLen)
+      _ => SelectItems.forCorrPerson(store, collective, maxItems, maxTextLen)
     )
 
-  def learnConcPerson[F[_]: Sync: ContextShift, A](
+  def learnConcPerson[F[_]: Async: Files, A](
       analyser: TextAnalyser[F],
-      collective: Ident,
+      store: Store[F],
+      collective: CollectiveId,
       maxItems: Int,
       maxTextLen: Int
   ): Task[F, A, Unit] =
-    learn(analyser, collective)(
+    learn(store, analyser, collective)(
       ClassifierName.concernedPerson,
-      ctx => SelectItems.forConcPerson(ctx.store, collective, maxItems, maxTextLen)
+      _ => SelectItems.forConcPerson(store, collective, maxItems, maxTextLen)
     )
 
-  def learnConcEquip[F[_]: Sync: ContextShift, A](
+  def learnConcEquip[F[_]: Async: Files, A](
       analyser: TextAnalyser[F],
-      collective: Ident,
+      store: Store[F],
+      collective: CollectiveId,
       maxItems: Int,
       maxTextLen: Int
   ): Task[F, A, Unit] =
-    learn(analyser, collective)(
+    learn(store, analyser, collective)(
       ClassifierName.concernedEquip,
-      ctx => SelectItems.forConcEquip(ctx.store, collective, maxItems, maxTextLen)
+      _ => SelectItems.forConcEquip(store, collective, maxItems, maxTextLen)
     )
 
-  private def learn[F[_]: Sync: ContextShift, A](
+  private def learn[F[_]: Async: Files, A](
+      store: Store[F],
       analyser: TextAnalyser[F],
-      collective: Ident
+      collective: CollectiveId
   )(cname: ClassifierName, data: Context[F, _] => Stream[F, Data]): Task[F, A, Unit] =
     Task { ctx =>
       ctx.logger.info(s"Learn classifier ${cname.name}") *>
         analyser.classifier.trainClassifier(ctx.logger, data(ctx))(
-          Kleisli(StoreClassifierModel.handleModel(ctx, collective, cname))
+          Kleisli(StoreClassifierModel.handleModel(store, ctx.logger, collective, cname))
         )
     }
 }

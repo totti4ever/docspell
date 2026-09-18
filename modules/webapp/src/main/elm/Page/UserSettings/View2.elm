@@ -1,12 +1,24 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.UserSettings.View2 exposing (viewContent, viewSidebar)
 
 import Comp.ChangePasswordForm
+import Comp.DueItemsTaskManage
 import Comp.EmailSettingsManage
 import Comp.ImapSettingsManage
-import Comp.NotificationManage
+import Comp.NotificationChannelManage
+import Comp.NotificationHookManage
+import Comp.OtpSetup
+import Comp.PeriodicQueryTaskManage
 import Comp.ScanMailboxManage
 import Comp.UiSettingsManage
 import Data.Flags exposing (Flags)
+import Data.Icons as Icons
 import Data.UiSettings exposing (UiSettings)
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -19,6 +31,24 @@ import Styles as S
 
 viewSidebar : Texts -> Bool -> Flags -> UiSettings -> Model -> Html Msg
 viewSidebar texts visible _ _ model =
+    let
+        isNotificationTab =
+            case model.currentTab of
+                Just NotificationTab ->
+                    True
+
+                Just NotificationQueriesTab ->
+                    True
+
+                Just NotificationWebhookTab ->
+                    True
+
+                Just NotificationDueItemsTab ->
+                    True
+
+                _ ->
+                    False
+    in
     div
         [ id "sidebar"
         , class S.sidebar
@@ -42,16 +72,67 @@ viewSidebar texts visible _ _ model =
                     [ class "ml-3" ]
                     [ text texts.uiSettings ]
                 ]
+            , div []
+                [ a
+                    [ href "#"
+                    , onClick (SetTab NotificationTab)
+                    , menuEntryActive model NotificationTab
+                    , class S.sidebarLink
+                    ]
+                    [ Icons.notificationHooksIcon ""
+                    , span
+                        [ class "ml-3" ]
+                        [ text texts.notifications ]
+                    ]
+                , div
+                    [ class "ml-5 flex flex-col"
+                    , classList [ ( "hidden", not isNotificationTab ) ]
+                    ]
+                    [ a
+                        [ href "#"
+                        , onClick (SetTab NotificationWebhookTab)
+                        , menuEntryActive model NotificationWebhookTab
+                        , class S.sidebarLink
+                        ]
+                        [ i [ class "fa fa-bell" ] []
+                        , span
+                            [ class "ml-3" ]
+                            [ text texts.basics.notificationHooks ]
+                        ]
+                    , a
+                        [ href "#"
+                        , onClick (SetTab NotificationDueItemsTab)
+                        , menuEntryActive model NotificationDueItemsTab
+                        , class S.sidebarLink
+                        ]
+                        [ i [ class "fa fa-history" ] []
+                        , span
+                            [ class "ml-3" ]
+                            [ text texts.dueItems ]
+                        ]
+                    , a
+                        [ href "#"
+                        , onClick (SetTab NotificationQueriesTab)
+                        , menuEntryActive model NotificationQueriesTab
+                        , class S.sidebarLink
+                        ]
+                        [ i [ class "fa fa-history" ] []
+                        , span
+                            [ class "ml-3" ]
+                            [ text texts.basics.periodicQueries ]
+                        ]
+                    ]
+                ]
             , a
                 [ href "#"
-                , onClick (SetTab NotificationTab)
-                , menuEntryActive model NotificationTab
+                , onClick (SetTab ChannelTab)
+                , menuEntryActive model ChannelTab
                 , class S.sidebarLink
                 ]
                 [ i [ class "fa fa-bullhorn" ] []
                 , span
                     [ class "ml-3" ]
-                    [ text texts.notifications ]
+                    [ text texts.channelSettings ]
                 ]
             , a
                 [ href "#"
@@ -97,6 +178,17 @@ viewSidebar texts visible _ _ model =
                     [ class "ml-3" ]
                     [ text texts.changePassword ]
                 ]
+            , a
+                [ href "#"
+                , onClick (SetTab OtpTab)
+                , menuEntryActive model OtpTab
+                , class S.sidebarLink
+                ]
+                [ i [ class "fa fa-key" ] []
+                , span
+                    [ class "ml-3" ]
+                    [ text texts.otpMenu ]
+                ]
             ]
         ]
 
@@ -115,7 +207,16 @@ viewContent texts flags settings model =
                 viewEmailSettings texts settings model
 
             Just NotificationTab ->
-                viewNotificationManage texts settings model
+                viewNotificationInfo texts settings model
+
+            Just NotificationWebhookTab ->
+                viewNotificationHooks texts settings model
+
+            Just NotificationQueriesTab ->
+                viewNotificationQueries texts settings model
+
+            Just NotificationDueItemsTab ->
+                viewNotificationDueItems texts settings model
 
             Just ImapSettingsTab ->
                 viewImapSettings texts settings model
@@ -125,6 +226,12 @@ viewContent texts flags settings model =
 
             Just UiSettingsTab ->
                 viewUiSettings texts flags settings model
+
+            Just OtpTab ->
+                viewOtpSetup texts settings model
+
+            Just ChannelTab ->
+                viewChannels texts settings model
 
             Nothing ->
                 []
@@ -142,6 +249,45 @@ menuEntryActive model tab =
 
     else
         class ""
+
+
+viewChannels : Texts -> UiSettings -> Model -> List (Html Msg)
+viewChannels texts settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ i [ class "fa fa-bell" ] []
+        , div [ class "ml-3" ]
+            [ text texts.channels
+            ]
+        ]
+    , Markdown.toHtml [ class "opacity-80  text-lg mb-3 markdown-preview" ] texts.channelInfoText
+    , Html.map ChannelMsg
+        (Comp.NotificationChannelManage.view texts.channelManage
+            settings
+            model.channelModel
+        )
+    ]
+
+
+viewOtpSetup : Texts -> UiSettings -> Model -> List (Html Msg)
+viewOtpSetup texts _ model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ i [ class "fa fa-key" ] []
+        , div [ class "ml-3" ]
+            [ text texts.otpMenu
+            ]
+        ]
+    , Html.map OtpSetupMsg
+        (Comp.OtpSetup.view
+            texts.otpSetup
+            model.otpSetupModel
+        )
+    ]
 
 
 viewChangePassword : Texts -> Model -> List (Html Msg)
@@ -227,8 +373,8 @@ viewImapSettings texts settings model =
     ]
 
 
-viewNotificationManage : Texts -> UiSettings -> Model -> List (Html Msg)
-viewNotificationManage texts settings model =
+viewNotificationInfo : Texts -> UiSettings -> Model -> List (Html Msg)
+viewNotificationInfo texts settings model =
     [ h2
         [ class S.header1
         , class "inline-flex items-center"
@@ -238,16 +384,115 @@ viewNotificationManage texts settings model =
             [ text texts.notifications
             ]
         ]
-    , p [ class "opacity-80 text-lg mb-3" ]
-        [ text texts.notificationInfoText
+    , Markdown.toHtml [ class "opacity-80 text-lg max-w-prose mb-3 markdown-preview" ] texts.notificationInfoText
+    , div [ class "mt-2" ]
+        [ ul [ class "list-none ml-8" ]
+            [ li [ class "py-2" ]
+                [ a
+                    [ href "#"
+                    , onClick (SetTab NotificationWebhookTab)
+                    , class S.link
+                    ]
+                    [ i [ class "fa fa-bell" ] []
+                    , span
+                        [ class "ml-3" ]
+                        [ text texts.basics.notificationHooks ]
+                    ]
+                , div [ class "ml-3 text-sm opacity-50" ]
+                    [ text texts.webhookInfoText
+                    ]
+                ]
+            , li [ class "py-2" ]
+                [ a
+                    [ href "#"
+                    , onClick (SetTab NotificationDueItemsTab)
+                    , class S.link
+                    ]
+                    [ i [ class "fa fa-history" ] []
+                    , span
+                        [ class "ml-3" ]
+                        [ text texts.dueItems ]
+                    ]
+                , div [ class "ml-3 text-sm opacity-50" ]
+                    [ text texts.dueItemsInfoText
+                    ]
+                ]
+            , li [ class "py-2" ]
+                [ a
+                    [ href "#"
+                    , onClick (SetTab NotificationQueriesTab)
+                    , class S.link
+                    ]
+                    [ Icons.periodicTasksIcon ""
+                    , span
+                        [ class "ml-3" ]
+                        [ text texts.basics.periodicQueries ]
+                    ]
+                , div [ class "ml-3 text-sm opacity-50" ]
+                    [ text texts.periodicQueryInfoText
+                    ]
+                ]
+            ]
         ]
-    , p [ class "opacity-80 text-lg mb-3" ]
-        [ Markdown.toHtml [] texts.notificationRemindDaysInfo
+    ]
+
+
+viewNotificationDueItems : Texts -> UiSettings -> Model -> List (Html Msg)
+viewNotificationDueItems texts settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
         ]
+        [ i [ class "fa fa-history" ] []
+        , div [ class "ml-3" ]
+            [ text texts.dueItems
+            ]
+        ]
+    , Markdown.toHtml [ class "opacity-80 text-lg mb-3 markdown-preview" ] texts.dueItemsInfoText
     , Html.map NotificationMsg
-        (Comp.NotificationManage.view2 texts.notificationManage
+        (Comp.DueItemsTaskManage.view2 texts.notificationManage
             settings
             model.notificationModel
+        )
+    ]
+
+
+viewNotificationQueries : Texts -> UiSettings -> Model -> List (Html Msg)
+viewNotificationQueries texts settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ i [ class "fa fa-history" ] []
+        , div [ class "ml-3" ]
+            [ text texts.basics.periodicQueries
+            ]
+        ]
+    , Markdown.toHtml [ class "opacity-80  text-lg mb-3 markdown-preview" ] texts.periodicQueryInfoText
+    , Html.map PeriodicQueryMsg
+        (Comp.PeriodicQueryTaskManage.view texts.periodicQueryTask
+            settings
+            model.periodicQueryModel
+        )
+    ]
+
+
+viewNotificationHooks : Texts -> UiSettings -> Model -> List (Html Msg)
+viewNotificationHooks texts settings model =
+    [ h2
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ i [ class "fa fa-bell" ] []
+        , div [ class "ml-3" ]
+            [ text texts.basics.notificationHooks
+            ]
+        ]
+    , Markdown.toHtml [ class "opacity-80  text-lg mb-3 markdown-preview" ] texts.webhookInfoText
+    , Html.map NotificationHookMsg
+        (Comp.NotificationHookManage.view texts.notificationHookManage
+            settings
+            model.notificationHookModel
         )
     ]
 

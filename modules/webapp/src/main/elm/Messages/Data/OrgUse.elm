@@ -1,4 +1,15 @@
-module Messages.Data.OrgUse exposing (gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Data.OrgUse exposing
+    ( de
+    , fr
+    , gb
+    )
 
 import Data.OrgUse exposing (OrgUse(..))
 
@@ -11,3 +22,23 @@ gb pu =
 
         Disabled ->
             "Disabled"
+
+
+de : OrgUse -> String
+de pu =
+    case pu of
+        Correspondent ->
+            "Korrespondent"
+
+        Disabled ->
+            "Deaktiviert"
+
+
+fr : OrgUse -> String
+fr pu =
+    case pu of
+        Correspondent ->
+            "Correspondant"
+
+        Disabled ->
+            "inactif"

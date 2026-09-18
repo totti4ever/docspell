@@ -1,11 +1,21 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemMail exposing
     ( FormAction(..)
     , Model
     , Msg
     , clear
+    , clearRecipients
     , emptyModel
     , init
+    , setMailInfo
     , update
+    , view
     , view2
     )
 
@@ -25,7 +35,6 @@ import Html.Events exposing (onClick, onInput)
 import Http
 import Messages.Comp.ItemMail exposing (Texts)
 import Styles as S
-import Util.Http
 
 
 type alias Model =
@@ -39,8 +48,15 @@ type alias Model =
     , bccRecipientsModel : Comp.EmailInput.Model
     , body : String
     , attachAll : Bool
-    , formError : Maybe String
+    , formError : FormError
+    , showCC : Bool
     }
+
+
+type FormError
+    = FormErrorNone
+    | FormErrorNoConnection
+    | FormErrorHttp Http.Error
 
 
 type Msg
@@ -49,6 +65,8 @@ type Msg
     | CCRecipientMsg Comp.EmailInput.Msg
     | BCCRecipientMsg Comp.EmailInput.Msg
     | SetBody String
+    | SetSubjectBody String String
+    | ToggleShowCC
     | ConnMsg (Comp.Dropdown.Msg String)
     | ConnResp (Result Http.Error EmailSettingsList)
     | ToggleAttachAll
@@ -80,7 +98,8 @@ emptyModel =
     , bccRecipientsModel = Comp.EmailInput.init
     , body = ""
     , attachAll = True
-    , formError = Nothing
+    , formError = FormErrorNone
+    , showCC = False
     }
 
 
@@ -100,18 +119,38 @@ clear model =
     }
 
 
+clearRecipients : Model -> Model
+clearRecipients model =
+    { model
+        | recipients = []
+        , ccRecipients = []
+        , bccRecipients = []
+    }
+
+
+setMailInfo : String -> String -> Msg
+setMailInfo subject body =
+    SetSubjectBody subject body
+
+
 update : Flags -> Msg -> Model -> ( Model, Cmd Msg, FormAction )
 update flags msg model =
     case msg of
         SetSubject str ->
             ( { model | subject = str }, Cmd.none, FormNone )
 
+        SetSubjectBody subj body ->
+            ( { model | subject = subj, body = body }, Cmd.none, FormNone )
+
         RecipientMsg m ->
             let
                 ( em, ec, rec ) =
                     Comp.EmailInput.update flags model.recipients m model.recipientsModel
             in
-            ( { model | recipients = rec, recipientsModel = em }
+            ( { model
+                | recipients = rec
+                , recipientsModel = em
+              }
             , Cmd.map RecipientMsg ec
             , FormNone
             )
@@ -121,7 +160,10 @@ update flags msg model =
                 ( em, ec, rec ) =
                     Comp.EmailInput.update flags model.ccRecipients m model.ccRecipientsModel
             in
-            ( { model | ccRecipients = rec, ccRecipientsModel = em }
+            ( { model
+                | ccRecipients = rec
+                , ccRecipientsModel = em
+              }
             , Cmd.map CCRecipientMsg ec
             , FormNone
             )
@@ -150,6 +192,9 @@ update flags msg model =
         ToggleAttachAll ->
             ( { model | attachAll = not model.attachAll }, Cmd.none, FormNone )
 
+        ToggleShowCC ->
+            ( { model | showCC = not model.showCC }, Cmd.none, FormNone )
+
         ConnResp (Ok list) ->
             let
                 names =
@@ -165,24 +210,24 @@ update flags msg model =
                 | connectionModel = cm
                 , formError =
                     if names == [] then
-                        Just "No E-Mail connections configured. Goto user settings to add one."
+                        FormErrorNoConnection
 
                     else
-                        Nothing
+                        FormErrorNone
               }
             , Cmd.none
             , FormNone
             )
 
         ConnResp (Err err) ->
-            ( { model | formError = Just (Util.Http.errorToString err) }, Cmd.none, FormNone )
+            ( { model | formError = FormErrorHttp err }, Cmd.none, FormNone )
 
         Cancel ->
             ( model, Cmd.none, FormCancel )
 
         Send ->
             case ( model.formError, Comp.Dropdown.getSelected model.connectionModel ) of
-                ( Nothing, conn :: [] ) ->
+                ( FormErrorNone, conn :: [] ) ->
                     let
                         emptyMail =
                             Api.Model.SimpleMail.empty
@@ -212,15 +257,36 @@ isValid model =
         && model.body
         /= ""
         && model.formError
-        == Nothing
+        == FormErrorNone
+        && Comp.Dropdown.getSelected model.connectionModel
+        /= []
 
 
 
 --- View2
 
 
+type alias ViewConfig =
+    { withAttachments : Bool
+    , textAreaClass : String
+    , showCancel : Bool
+    }
+
+
 view2 : Texts -> UiSettings -> Model -> Html Msg
 view2 texts settings model =
+    let
+        cfg =
+            { withAttachments = True
+            , textAreaClass = ""
+            , showCancel = True
+            }
+    in
+    view texts settings cfg model
+
+
+view : Texts -> UiSettings -> ViewConfig -> Model -> Html Msg
+view texts settings cfg model =
     let
         dds =
             Data.DropdownStyle.mainStyle
@@ -249,16 +315,37 @@ view2 texts settings model =
             ]
         , div
             [ class S.errorMessage
-            , classList [ ( "hidden", model.formError == Nothing ) ]
+            , classList [ ( "hidden", model.formError == FormErrorNone ) ]
             ]
-            [ Maybe.withDefault "" model.formError |> text
+            [ case model.formError of
+                FormErrorNone ->
+                    text ""
+
+                FormErrorHttp err ->
+                    text (texts.httpError err)
+
+                FormErrorNoConnection ->
+                    text texts.connectionMissing
             ]
         , div [ class "mb-4" ]
             [ label
                 [ class S.inputLabel
+                , class "flex flex-row"
                 ]
                 [ text texts.recipients
                 , B.inputRequired
+                , a
+                    [ class S.link
+                    , class "justify-end flex flex-grow"
+                    , onClick ToggleShowCC
+                    , href "#"
+                    ]
+                    [ if model.showCC then
+                        text texts.lessRecipients
+
+                      else
+                        text texts.moreRecipients
+                    ]
                 ]
             , Html.map RecipientMsg
                 (Comp.EmailInput.view2 { style = dds, placeholder = appendDots texts.recipients }
@@ -266,7 +353,10 @@ view2 texts settings model =
                     model.recipientsModel
                 )
             ]
-        , div [ class "mb-4" ]
+        , div
+            [ class "mb-4"
+            , classList [ ( "hidden", not model.showCC ) ]
+            ]
             [ label [ class S.inputLabel ]
                 [ text texts.ccRecipients
                 ]
@@ -276,7 +366,10 @@ view2 texts settings model =
                     model.ccRecipientsModel
                 )
             ]
-        , div [ class "mb-4" ]
+        , div
+            [ class "mb-4"
+            , classList [ ( "hidden", not model.showCC ) ]
+            ]
             [ label [ class S.inputLabel ]
                 [ text texts.bccRecipients
                 ]
@@ -308,19 +401,24 @@ view2 texts settings model =
                 [ onInput SetBody
                 , value model.body
                 , class S.textAreaInput
+                , class cfg.textAreaClass
                 ]
                 []
             ]
-        , MB.viewItem <|
-            MB.Checkbox
-                { tagger = \_ -> ToggleAttachAll
-                , label = texts.includeAllAttachments
-                , value = model.attachAll
-                , id = "item-send-mail-attach-all"
-                }
+        , if cfg.withAttachments then
+            MB.viewItem <|
+                MB.Checkbox
+                    { tagger = \_ -> ToggleAttachAll
+                    , label = texts.includeAllAttachments
+                    , value = model.attachAll
+                    , id = "item-send-mail-attach-all"
+                    }
+
+          else
+            span [ class "hidden" ] []
         , div [ class "flex flex-row space-x-2" ]
             [ B.primaryButton
-                { label = "Send"
+                { label = texts.sendLabel
                 , icon = "fa fa-paper-plane font-thin"
                 , handler = onClick Send
                 , attrs = [ href "#" ]
@@ -330,7 +428,10 @@ view2 texts settings model =
                 { label = texts.basics.cancel
                 , icon = "fa fa-times"
                 , handler = onClick Cancel
-                , attrs = [ href "#" ]
+                , attrs =
+                    [ href "#"
+                    , classList [ ( "hidden", not cfg.showCancel ) ]
+                    ]
                 , disabled = False
                 }
             ]

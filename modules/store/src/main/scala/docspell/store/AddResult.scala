@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store
 
 import docspell.store.AddResult._
@@ -21,14 +27,14 @@ object AddResult {
     )
 
   case object Success extends AddResult {
-    def toEither  = Right(())
+    def toEither = Right(())
     val isSuccess = true
     def fold[A](fa: Success.type => A, fb: EntityExists => A, fc: Failure => A): A =
       fa(this)
   }
 
   case class EntityExists(msg: String) extends AddResult {
-    def toEither  = Left(new Exception(msg))
+    def toEither = Left(new Exception(msg))
     val isSuccess = false
     def fold[A](fa: Success.type => A, fb: EntityExists => A, fc: Failure => A): A =
       fb(this)
@@ -36,11 +42,14 @@ object AddResult {
     def withMsg(msg: String): EntityExists =
       EntityExists(msg)
   }
+  def entityExists(msg: String): AddResult = EntityExists(msg)
 
   case class Failure(ex: Throwable) extends AddResult {
-    def toEither  = Left(ex)
+    def toEither = Left(ex)
     val isSuccess = false
     def fold[A](fa: Success.type => A, fb: EntityExists => A, fc: Failure => A): A =
       fc(this)
   }
+  def failure(ex: Exception): AddResult =
+    Failure(ex)
 }

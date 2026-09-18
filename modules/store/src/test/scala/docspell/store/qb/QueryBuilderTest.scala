@@ -1,15 +1,22 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
+import docspell.logging.TestLoggingConfig
 import docspell.store.qb.DSL._
 import docspell.store.qb.model._
 
 import munit._
 
-class QueryBuilderTest extends FunSuite {
+class QueryBuilderTest extends FunSuite with TestLoggingConfig {
 
   test("simple") {
-    val c        = CourseRecord.as("c")
-    val owner    = PersonRecord.as("p1")
+    val c = CourseRecord.as("c")
+    val owner = PersonRecord.as("p1")
     val lecturer = PersonRecord.as("p2")
 
     val proj = select(c.all, owner.all, lecturer.all)
@@ -32,7 +39,7 @@ class QueryBuilderTest extends FunSuite {
     val q = Select(proj, tables, cond).orderBy(c.name.desc)
     q match {
       case Select.Ordered(
-            Select.SimpleSelect(false, proj, from, where, group),
+            Select.SimpleSelect(false, projs, from, where, group),
             sb,
             vempty
           ) =>
@@ -41,11 +48,13 @@ class QueryBuilderTest extends FunSuite {
           sb,
           OrderBy(SelectExpr.SelectColumn(c.name, None), OrderBy.OrderType.Desc)
         )
-        assertEquals(11, proj.size)
+        assertEquals(11, projs.size)
         from match {
-          case FromExpr.From(_) =>
+          case None =>
             fail("Unexpected from value")
-          case FromExpr.Joined(f, joins) =>
+          case Some(FromExpr.From(_)) =>
+            fail("Unexpected from value")
+          case Some(FromExpr.Joined(f, joins)) =>
             assertEquals(f, FromExpr.From(c))
             assertEquals(2, joins.size)
             joins.head match {

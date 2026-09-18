@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import docspell.common.syntax.all._
@@ -7,17 +13,18 @@ import io.circe.generic.semiauto._
 
 /** Arguments to the poll-mailbox task.
   *
-  * This tasks queries user mailboxes and pushes found mails into
-  * docspell for processing.
+  * This tasks queries user mailboxes and pushes found mails into docspell for processing.
   *
-  * If the structure changes, there must be some database migration to
-  * update or remove the json data of the corresponding task.
+  * If the structure changes, there must be some database migration to update or remove
+  * the json data of the corresponding task.
   */
 case class ScanMailboxArgs(
     // the docspell user account
-    account: AccountId,
+    account: AccountInfo,
     // the configured imap connection
     imapConnection: Ident,
+    // scan folders recursively
+    scanRecursively: Option[Boolean],
     // what folders to search
     folders: List[String],
     // only select mails received since then
@@ -39,8 +46,10 @@ case class ScanMailboxArgs(
     // the language for extraction and analysis
     language: Option[Language],
     // apply additional filter to all mails or only imported
-    postHandleAll: Option[Boolean]
-)
+    postHandleAll: Option[Boolean],
+    // Exclude the mail body when importing
+    attachmentsOnly: Option[Boolean]
+) extends TaskArguments
 
 object ScanMailboxArgs {
 

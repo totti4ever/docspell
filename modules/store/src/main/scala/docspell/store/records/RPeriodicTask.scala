@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -13,9 +19,8 @@ import doobie._
 import doobie.implicits._
 import io.circe.Encoder
 
-/** A periodic task is a special job description, that shares a few
-  * properties of a `RJob`. It must provide all information to create
-  * a `RJob` value eventually.
+/** A periodic task is a special job description, that shares a few properties of a
+  * `RJob`. It must provide all information to create a `RJob` value eventually.
   */
 case class RPeriodicTask(
     id: Ident,
@@ -33,6 +38,9 @@ case class RPeriodicTask(
     created: Timestamp,
     summary: Option[String]
 ) {
+
+  def withArgs[A: Encoder](args: A): RPeriodicTask =
+    copy(args = Encoder[A].apply(args).noSpaces)
 
   def toJob[F[_]: Sync]: F[RJob] =
     for {
@@ -59,86 +67,23 @@ case class RPeriodicTask(
 
 object RPeriodicTask {
 
-  def create[F[_]: Sync](
-      enabled: Boolean,
-      task: Ident,
-      group: Ident,
-      args: String,
-      subject: String,
-      submitter: Ident,
-      priority: Priority,
-      timer: CalEvent,
-      summary: Option[String]
-  ): F[RPeriodicTask] =
-    Ident
-      .randomId[F]
-      .flatMap(id =>
-        Timestamp
-          .current[F]
-          .map { now =>
-            RPeriodicTask(
-              id,
-              enabled,
-              task,
-              group,
-              args,
-              subject,
-              submitter,
-              priority,
-              None,
-              None,
-              timer,
-              timer
-                .nextElapse(now.atZone(Timestamp.UTC))
-                .map(_.toInstant)
-                .map(Timestamp.apply)
-                .getOrElse(Timestamp.Epoch),
-              now,
-              summary
-            )
-          }
-      )
-
-  def createJson[F[_]: Sync, A](
-      enabled: Boolean,
-      task: Ident,
-      group: Ident,
-      args: A,
-      subject: String,
-      submitter: Ident,
-      priority: Priority,
-      timer: CalEvent,
-      summary: Option[String]
-  )(implicit E: Encoder[A]): F[RPeriodicTask] =
-    create[F](
-      enabled,
-      task,
-      group,
-      E(args).noSpaces,
-      subject,
-      submitter,
-      priority,
-      timer,
-      summary
-    )
-
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "periodic_task"
 
-    val id        = Column[Ident]("id", this)
-    val enabled   = Column[Boolean]("enabled", this)
-    val task      = Column[Ident]("task", this)
-    val group     = Column[Ident]("group_", this)
-    val args      = Column[String]("args", this)
-    val subject   = Column[String]("subject", this)
+    val id = Column[Ident]("id", this)
+    val enabled = Column[Boolean]("enabled", this)
+    val task = Column[Ident]("task", this)
+    val group = Column[Ident]("group_", this)
+    val args = Column[String]("args", this)
+    val subject = Column[String]("subject", this)
     val submitter = Column[Ident]("submitter", this)
-    val priority  = Column[Priority]("priority", this)
-    val worker    = Column[Ident]("worker", this)
-    val marked    = Column[Timestamp]("marked", this)
-    val timer     = Column[CalEvent]("timer", this)
-    val nextrun   = Column[Timestamp]("nextrun", this)
-    val created   = Column[Timestamp]("created", this)
-    val summary   = Column[String]("summary", this)
+    val priority = Column[Priority]("priority", this)
+    val worker = Column[Ident]("worker", this)
+    val marked = Column[Timestamp]("marked", this)
+    val timer = Column[CalEvent]("timer", this)
+    val nextrun = Column[Timestamp]("nextrun", this)
+    val created = Column[Timestamp]("created", this)
+    val summary = Column[String]("summary", this)
     val all = NonEmptyList.of[Column[_]](
       id,
       enabled,
@@ -161,14 +106,29 @@ object RPeriodicTask {
   def as(alias: String): Table =
     Table(Some(alias))
 
-  def insert(v: RPeriodicTask): ConnectionIO[Int] =
-    DML.insert(
-      T,
-      T.all,
-      fr"${v.id},${v.enabled},${v.task},${v.group},${v.args}," ++
-        fr"${v.subject},${v.submitter},${v.priority},${v.worker}," ++
-        fr"${v.marked},${v.timer},${v.nextrun},${v.created},${v.summary}"
-    )
+  def findByTask(taskName: Ident): ConnectionIO[Vector[RPeriodicTask]] =
+    Select(
+      select(T.all),
+      from(T),
+      T.task === taskName
+    ).build.query[RPeriodicTask].to[Vector]
+
+  def updateTask(id: Ident, taskName: Ident, args: String): ConnectionIO[Int] =
+    DML.update(T, T.id === id, DML.set(T.task.setTo(taskName), T.args.setTo(args)))
+
+  def setArgs(taskId: Ident, args: String): ConnectionIO[Int] =
+    DML.update(T, T.id === taskId, DML.set(T.args.setTo(args)))
+
+  def setEnabledByTask(taskName: Ident, enabled: Boolean): ConnectionIO[Int] =
+    DML.update(T, T.task === taskName, DML.set(T.enabled.setTo(enabled)))
+
+  def insert(v: RPeriodicTask, silent: Boolean): ConnectionIO[Int] = {
+    val values = fr"${v.id},${v.enabled},${v.task},${v.group},${v.args}," ++
+      fr"${v.subject},${v.submitter},${v.priority},${v.worker}," ++
+      fr"${v.marked},${v.timer},${v.nextrun},${v.created},${v.summary}"
+    if (silent) DML.insertSilent(T, T.all, values)
+    else DML.insert(T, T.all, values)
+  }
 
   def update(v: RPeriodicTask): ConnectionIO[Int] =
     DML.update(

@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.EditForm exposing (formTabs, view2)
 
 import Comp.CustomFieldMultiInput
@@ -13,8 +20,9 @@ import Comp.ItemDetail.Model
         , personMatchesOrg
         )
 import Comp.KeyInput
+import Comp.SimpleTextInput
 import Comp.Tabs as TB
-import Data.Direction
+import Comp.TagDropdown
 import Data.DropdownStyle
 import Data.Fields
 import Data.Flags exposing (Flags)
@@ -31,7 +39,6 @@ import Set exposing (Set)
 import Styles as S
 import Util.Folder
 import Util.Person
-import Util.Tag
 
 
 view2 : Texts -> Flags -> UiSettings -> Model -> Html Msg
@@ -117,7 +124,7 @@ formTabs texts flags settings model =
         directionCfg =
             { makeOption =
                 \entry ->
-                    { text = Data.Direction.toString entry
+                    { text = texts.direction entry
                     , additional = ""
                     }
             , placeholder = texts.chooseDirection
@@ -152,14 +159,11 @@ formTabs texts flags settings model =
       , info = Nothing
       , body =
             [ div [ class "relative mb-4" ]
-                [ input
-                    [ type_ "text"
-                    , value model.nameModel
-                    , onInput SetName
-                    , class S.textInputSidebar
-                    , class "pr-10"
-                    ]
-                    []
+                [ Html.map SetNameMsg
+                    (Comp.SimpleTextInput.view
+                        [ class S.textInputSidebar, class "pr-10" ]
+                        model.nameInput
+                    )
                 , span [ class S.inputLeftIconOnly ]
                     [ i
                         [ classList
@@ -206,10 +210,7 @@ formTabs texts flags settings model =
       , body =
             [ div [ class "mb-4 flex flex-col" ]
                 [ Html.map TagDropdownMsg
-                    (Comp.Dropdown.view2 (Util.Tag.tagSettings texts.basics.chooseTag dds)
-                        settings
-                        model.tagModel
-                    )
+                    (Comp.TagDropdown.view texts.tagDropdown settings dds model.tagModel)
                 , div [ class "flex flex-row items-center justify-end" ]
                     [ a
                         [ class S.secondaryButton
@@ -241,7 +242,7 @@ formTabs texts flags settings model =
                         , ( "hidden", isFolderMember model )
                         ]
                     ]
-                    [ Markdown.toHtml [] texts.folderNotOwnerWarning
+                    [ Markdown.toHtml [] texts.basics.folderNotOwnerWarning
                     ]
                 ]
             ]
@@ -295,7 +296,7 @@ formTabs texts flags settings model =
             [ optional [ Data.Fields.CorrOrg ] <|
                 div [ class "mb-4" ]
                     [ label [ class S.inputLabel ]
-                        [ Icons.organizationIcon2 "mr-2"
+                        [ Icons.organizationIcon "mr-2"
                         , text texts.basics.organization
                         , addIconLink texts.addNewOrg StartCorrOrgModal
                         , editIconLink texts.editOrg model.corrOrgModel StartEditCorrOrgModal
@@ -311,7 +312,7 @@ formTabs texts flags settings model =
             , optional [ Data.Fields.CorrPerson ] <|
                 div [ class "mb-4" ]
                     [ label [ class S.inputLabel ]
-                        [ Icons.personIcon2 "mr-2"
+                        [ Icons.personIcon "mr-2"
                         , text texts.basics.person
                         , addIconLink texts.addNewCorrespondentPerson StartCorrPersonModal
                         , editIconLink texts.editPerson
@@ -345,7 +346,7 @@ formTabs texts flags settings model =
             [ optional [ Data.Fields.ConcPerson ] <|
                 div [ class "mb-4" ]
                     [ label [ class S.inputLabel ]
-                        [ Icons.personIcon2 "mr-2"
+                        [ Icons.personIcon "mr-2"
                         , text texts.basics.person
                         , addIconLink texts.addNewConcerningPerson StartConcPersonModal
                         , editIconLink texts.editPerson
@@ -363,7 +364,7 @@ formTabs texts flags settings model =
             , optional [ Data.Fields.ConcEquip ] <|
                 div [ class "mb-4" ]
                     [ label [ class S.inputLabel ]
-                        [ Icons.equipmentIcon2 "mr-2"
+                        [ Icons.equipmentIcon "mr-2"
                         , text texts.basics.equipment
                         , addIconLink texts.addNewEquipment StartEquipModal
                         , editIconLink texts.editEquipment
@@ -385,7 +386,7 @@ formTabs texts flags settings model =
       , titleRight = []
       , info = Nothing
       , body =
-            [ div [ class "mb-4" ]
+            [ div [ class "mb-24" ]
                 [ Html.map DirDropdownMsg
                     (Comp.Dropdown.view2
                         directionCfg
@@ -407,7 +408,11 @@ renderSuggestions texts model mkName idnames tagger =
         , class "flex flex-col text-sm"
         ]
         [ div [ class "font-bold my-1" ]
-            [ text texts.suggestions
+            [ if List.isEmpty idnames then
+                text texts.noSuggestions
+
+              else
+                text texts.suggestions
             ]
         , ul [ class "list-disc ml-6" ] <|
             (idnames

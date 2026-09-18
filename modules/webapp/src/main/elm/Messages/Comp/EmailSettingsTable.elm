@@ -1,4 +1,16 @@
-module Messages.Comp.EmailSettingsTable exposing (Texts, gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Comp.EmailSettingsTable exposing
+    ( Texts
+    , de
+    , fr
+    , gb
+    )
 
 import Messages.Basics
 
@@ -15,4 +27,20 @@ gb =
     { basics = Messages.Basics.gb
     , hostPort = "Host/Port"
     , from = "From"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , hostPort = "Server/Port"
+    , from = "Absender"
+    }
+
+
+fr : Texts
+fr =
+    { basics = Messages.Basics.fr
+    , hostPort = "Hôte/Port"
+    , from = "De"
     }

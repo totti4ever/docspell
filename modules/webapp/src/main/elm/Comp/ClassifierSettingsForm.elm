@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ClassifierSettingsForm exposing
     ( Model
     , Msg
@@ -18,8 +25,9 @@ import Data.CalEvent exposing (CalEvent)
 import Data.DropdownStyle as DS
 import Data.Flags exposing (Flags)
 import Data.ListType exposing (ListType)
+import Data.TagOrder
+import Data.TimeZone exposing (TimeZone)
 import Data.UiSettings exposing (UiSettings)
-import Data.Validated exposing (Validated(..))
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Http
@@ -31,7 +39,7 @@ import Util.Tag
 
 type alias Model =
     { scheduleModel : Comp.CalEventInput.Model
-    , schedule : Validated CalEvent
+    , schedule : Maybe CalEvent
     , itemCountModel : Comp.IntField.Model
     , itemCount : Maybe Int
     , categoryListModel : Comp.Dropdown.Model String
@@ -59,7 +67,7 @@ init flags sett =
             Comp.CalEventInput.init flags newSchedule
     in
     ( { scheduleModel = cem
-      , schedule = Data.Validated.Unknown newSchedule
+      , schedule = Just newSchedule
       , itemCountModel = Comp.IntField.init (Just 0) Nothing True
       , itemCount = Just sett.itemCount
       , categoryListModel =
@@ -84,18 +92,18 @@ init flags sett =
             Comp.FixedDropdown.init Data.ListType.all
       }
     , Cmd.batch
-        [ Api.getTags flags "" GetTagsResp
+        [ Api.getTags flags "" Data.TagOrder.NameAsc GetTagsResp
         , Cmd.map ScheduleMsg cec
         ]
     )
 
 
-getSettings : Model -> Validated ClassifierSetting
+getSettings : Model -> Maybe ClassifierSetting
 getSettings model =
-    Data.Validated.map
-        (\sch ->
+    Maybe.map
+        (\s ->
             { schedule =
-                Data.CalEvent.makeEvent sch
+                Data.CalEvent.makeEvent s
             , itemCount = Maybe.withDefault 0 model.itemCount
             , listType = Data.ListType.toString model.categoryListType
             , categoryList = Comp.Dropdown.getSelected model.categoryListModel
@@ -104,8 +112,8 @@ getSettings model =
         model.schedule
 
 
-update : Flags -> Msg -> Model -> ( Model, Cmd Msg )
-update flags msg model =
+update : Flags -> TimeZone -> Msg -> Model -> ( Model, Cmd Msg )
+update flags tz msg model =
     case msg of
         GetTagsResp (Ok tl) ->
             let
@@ -116,7 +124,7 @@ update flags msg model =
                 lm =
                     Comp.Dropdown.SetOptions categories
             in
-            update flags (CategoryListMsg lm) model
+            update flags tz (CategoryListMsg lm) model
 
         GetTagsResp (Err _) ->
             ( model, Cmd.none )
@@ -126,7 +134,8 @@ update flags msg model =
                 ( cm, cc, ce ) =
                     Comp.CalEventInput.update
                         flags
-                        (Data.Validated.value model.schedule)
+                        tz
+                        model.schedule
                         lmsg
                         model.scheduleModel
             in
@@ -240,7 +249,7 @@ view2 texts settings model =
                 (Comp.CalEventInput.view2
                     texts.calEventInput
                     ""
-                    (Data.Validated.value model.schedule)
+                    model.schedule
                     model.scheduleModel
                 )
             ]

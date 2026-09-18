@@ -1,9 +1,20 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.PowerSearchInput exposing
     ( Action(..)
     , Model
     , Msg
     , ViewSettings
+    , getSearchString
     , init
+    , initWith
+    , isValid
+    , setSearchString
     , update
     , viewInput
     , viewResult
@@ -36,6 +47,20 @@ init =
     }
 
 
+initWith : String -> ( Model, Cmd Msg, Sub Msg )
+initWith qstr =
+    let
+        result =
+            update (setSearchString qstr) init
+    in
+    ( result.model, result.cmd, result.subs )
+
+
+isValid : Model -> Bool
+isValid model =
+    model.input /= Nothing && model.result.success
+
+
 type Msg
     = SetSearch String
     | KeyUpMsg (Maybe KeyCode)
@@ -54,6 +79,16 @@ type alias Result =
     , action : Action
     , subs : Sub Msg
     }
+
+
+setSearchString : String -> Msg
+setSearchString q =
+    SetSearch q
+
+
+getSearchString : Model -> Maybe String
+getSearchString model =
+    model.input
 
 
 
@@ -136,24 +171,21 @@ throttleUpdate model =
 
 type alias ViewSettings =
     { placeholder : String
-    , extraAttrs : List (Attribute Msg)
     }
 
 
 viewInput : ViewSettings -> Model -> Html Msg
 viewInput cfg model =
     input
-        (cfg.extraAttrs
-            ++ [ type_ "text"
-               , placeholder cfg.placeholder
-               , onInput SetSearch
-               , Util.Html.onKeyUpCode KeyUpMsg
-               , Maybe.map value model.input
-                    |> Maybe.withDefault (value "")
-               , class S.textInput
-               , class "text-sm "
-               ]
-        )
+        [ type_ "text"
+        , placeholder cfg.placeholder
+        , onInput SetSearch
+        , Util.Html.onKeyUpCode KeyUpMsg
+        , Maybe.map value model.input
+            |> Maybe.withDefault (value "")
+        , class S.textInput
+        , class "text-sm "
+        ]
         []
 
 

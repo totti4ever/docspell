@@ -1,22 +1,27 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
 
-import docspell.common._
+import docspell.common.{FileKey, _}
 import docspell.store.qb.DSL._
 import docspell.store.qb.TableDef
 import docspell.store.qb._
 
-import bitpeace.FileMeta
 import doobie._
 import doobie.implicits._
 
-/** The archive file of some attachment. The `id` is shared with the
-  * attachment, to create a 0..1-1 relationship.
+/** The archive file of some attachment. The `id` is shared with the attachment, to create
+  * a 0..1-1 relationship.
   */
 case class RAttachmentArchive(
-    id: Ident, //same as RAttachment.id
-    fileId: Ident,
+    id: Ident, // same as RAttachment.id
+    fileId: FileKey,
     name: Option[String],
     messageId: Option[String],
     created: Timestamp
@@ -26,11 +31,11 @@ object RAttachmentArchive {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "attachment_archive"
 
-    val id        = Column[Ident]("id", this)
-    val fileId    = Column[Ident]("file_id", this)
-    val name      = Column[String]("filename", this)
+    val id = Column[Ident]("id", this)
+    val fileId = Column[FileKey]("file_id", this)
+    val name = Column[String]("filename", this)
     val messageId = Column[String]("message_id", this)
-    val created   = Column[Timestamp]("created", this)
+    val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](id, fileId, name, messageId, created)
   }
@@ -54,12 +59,12 @@ object RAttachmentArchive {
   def delete(attachId: Ident): ConnectionIO[Int] =
     DML.delete(T, T.id === attachId)
 
-  def deleteAll(fId: Ident): ConnectionIO[Int] =
+  def deleteAll(fId: FileKey): ConnectionIO[Int] =
     DML.delete(T, T.fileId === fId)
 
   def findByIdAndCollective(
       attachId: Ident,
-      collective: Ident
+      collective: CollectiveId
   ): ConnectionIO[Option[RAttachmentArchive]] = {
     val b = RAttachment.as("b")
     val a = RAttachmentArchive.as("a")
@@ -76,7 +81,7 @@ object RAttachmentArchive {
 
   def findByMessageIdAndCollective(
       messageIds: NonEmptyList[String],
-      collective: Ident
+      collective: CollectiveId
   ): ConnectionIO[Vector[RAttachmentArchive]] = {
     val b = RAttachment.as("b")
     val a = RAttachmentArchive.as("a")
@@ -92,9 +97,7 @@ object RAttachmentArchive {
 
   def findByItemWithMeta(
       id: Ident
-  ): ConnectionIO[Vector[(RAttachmentArchive, FileMeta)]] = {
-    import bitpeace.sql._
-
+  ): ConnectionIO[Vector[(RAttachmentArchive, RFileMeta)]] = {
     val a = RAttachmentArchive.as("a")
     val b = RAttachment.as("b")
     val m = RFileMeta.as("m")
@@ -104,12 +107,11 @@ object RAttachmentArchive {
         .innerJoin(m, a.fileId === m.id)
         .innerJoin(b, a.id === b.id),
       b.itemId === id
-    ).orderBy(b.position.asc).build.query[(RAttachmentArchive, FileMeta)].to[Vector]
+    ).orderBy(b.position.asc).build.query[(RAttachmentArchive, RFileMeta)].to[Vector]
   }
 
-  /** If the given attachment id has an associated archive, this returns
-    * the number of all associated attachments. Returns 0 if there is
-    * no archive for the given attachment.
+  /** If the given attachment id has an associated archive, this returns the number of all
+    * associated attachments. Returns 0 if there is no archive for the given attachment.
     */
   def countEntries(attachId: Ident): ConnectionIO[Int] =
     Select(

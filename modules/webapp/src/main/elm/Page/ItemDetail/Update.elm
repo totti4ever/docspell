@@ -1,29 +1,33 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.ItemDetail.Update exposing (update)
 
 import Api
-import Browser.Navigation as Nav
 import Comp.ItemDetail
 import Comp.ItemDetail.Model
 import Comp.LinkTarget
-import Data.Flags exposing (Flags)
+import Data.Environment as Env
+import Data.ItemIds
 import Data.ItemNav exposing (ItemNav)
-import Data.UiSettings exposing (UiSettings)
 import Page exposing (Page(..))
 import Page.ItemDetail.Data exposing (Model, Msg(..), UpdateResult)
 import Scroll
 import Task
 
 
-update : Nav.Key -> Flags -> ItemNav -> UiSettings -> Msg -> Model -> UpdateResult
-update key flags inav settings msg model =
+update : ItemNav -> Env.Update -> Msg -> Model -> UpdateResult
+update inav env msg model =
     case msg of
         Init id ->
             let
                 result =
-                    Comp.ItemDetail.update key
-                        flags
-                        inav
-                        settings
+                    Comp.ItemDetail.update inav
+                        env
                         Comp.ItemDetail.Model.Init
                         model.detail
 
@@ -33,18 +37,27 @@ update key flags inav settings msg model =
             { model = { model | detail = result.model }
             , cmd =
                 Cmd.batch
-                    [ Api.itemDetail flags id ItemResp
+                    [ Api.itemDetail env.flags id ItemResp
                     , Cmd.map ItemDetailMsg result.cmd
                     , Task.attempt ScrollResult task
                     ]
             , sub = Sub.map ItemDetailMsg result.sub
             , linkTarget = result.linkTarget
+            , removedItem = result.removedItem
+            , selectedItems = env.selectedItems
             }
+
+        ReloadItem withFiles ->
+            let
+                m =
+                    ItemDetailMsg (Comp.ItemDetail.Model.ReloadItem withFiles)
+            in
+            update inav env m model
 
         ItemDetailMsg lmsg ->
             let
                 result =
-                    Comp.ItemDetail.update key flags inav settings lmsg model.detail
+                    Comp.ItemDetail.update inav env lmsg model.detail
 
                 pageSwitch =
                     case result.linkTarget of
@@ -52,12 +65,14 @@ update key flags inav settings msg model =
                             Cmd.none
 
                         _ ->
-                            Page.set key HomePage
+                            Page.set env.key (SearchPage Nothing)
             in
             { model = { model | detail = result.model }
             , cmd = Cmd.batch [ pageSwitch, Cmd.map ItemDetailMsg result.cmd ]
             , sub = Sub.map ItemDetailMsg result.sub
             , linkTarget = result.linkTarget
+            , removedItem = result.removedItem
+            , selectedItems = Data.ItemIds.apply env.selectedItems result.selectionChange
             }
 
         ItemResp (Ok item) ->
@@ -65,17 +80,28 @@ update key flags inav settings msg model =
                 lmsg =
                     Comp.ItemDetail.Model.SetItem item
             in
-            update key flags inav settings (ItemDetailMsg lmsg) model
+            update inav env (ItemDetailMsg lmsg) model
 
         ItemResp (Err _) ->
-            UpdateResult model Cmd.none Sub.none Comp.LinkTarget.LinkNone
+            unit env model
 
         ScrollResult _ ->
-            UpdateResult model Cmd.none Sub.none Comp.LinkTarget.LinkNone
+            unit env model
 
         UiSettingsUpdated ->
             let
                 lmsg =
                     ItemDetailMsg Comp.ItemDetail.Model.UiSettingsUpdated
             in
-            update key flags inav settings lmsg model
+            update inav env lmsg model
+
+
+unit : Env.Update -> Model -> UpdateResult
+unit env model =
+    { model = model
+    , cmd = Cmd.none
+    , sub = Sub.none
+    , linkTarget = Comp.LinkTarget.LinkNone
+    , removedItem = Nothing
+    , selectedItems = env.selectedItems
+    }

@@ -1,51 +1,66 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.hk
 
 import cats.effect._
 import cats.implicits._
+import fs2.io.net.Network
 
 import docspell.common._
-import docspell.joex.scheduler.{Context, Task}
+import docspell.logging.Logger
+import docspell.scheduler.Task
+import docspell.store.Store
 import docspell.store.records._
 
 import org.http4s.client.Client
-import org.http4s.client.blaze.BlazeClientBuilder
+import org.http4s.ember.client.EmberClientBuilder
 
 object CheckNodesTask {
-
-  def apply[F[_]: ConcurrentEffect](
-      cfg: HouseKeepingConfig.CheckNodes
-  ): Task[F, Unit, Unit] =
+  def apply[F[_]: Async: Network](
+      cfg: HouseKeepingConfig.CheckNodes,
+      store: Store[F]
+  ): Task[F, Unit, CleanupResult] =
     Task { ctx =>
       if (cfg.enabled)
         for {
           _ <- ctx.logger.info("Check nodes reachability")
-          _ <- BlazeClientBuilder[F](ctx.blocker.blockingContext).resource.use { client =>
-            checkNodes(ctx, client)
+          _ <- EmberClientBuilder.default[F].build.use { client =>
+            checkNodes(ctx.logger, store, client)
           }
           _ <- ctx.logger.info(
             s"Remove nodes not found more than ${cfg.minNotFound} times"
           )
-          n <- removeNodes(ctx, cfg)
+          n <- removeNodes(store, cfg)
           _ <- ctx.logger.info(s"Removed $n nodes")
-        } yield ()
+        } yield CleanupResult.of(n)
       else
-        ctx.logger.info("CheckNodes task is disabled in the configuration")
+        ctx.logger.info("CheckNodes task is disabled in the configuration") *>
+          CleanupResult.disabled.pure[F]
+
     }
 
-  def checkNodes[F[_]: Sync](ctx: Context[F, _], client: Client[F]): F[Unit] =
-    ctx.store
+  def checkNodes[F[_]: Async](
+      logger: Logger[F],
+      store: Store[F],
+      client: Client[F]
+  ): F[Unit] =
+    store
       .transact(RNode.streamAll)
       .evalMap(node =>
-        checkNode(ctx.logger, client)(node.url)
+        checkNode(logger, client)(node.url)
           .flatMap(seen =>
-            if (seen) ctx.store.transact(RNode.resetNotFound(node.id))
-            else ctx.store.transact(RNode.incrementNotFound(node.id))
+            if (seen) store.transact(RNode.resetNotFound(node.id))
+            else store.transact(RNode.incrementNotFound(node.id))
           )
       )
       .compile
       .drain
 
-  def checkNode[F[_]: Sync](logger: Logger[F], client: Client[F])(
+  def checkNode[F[_]: Async](logger: Logger[F], client: Client[F])(
       url: LenientUri
   ): F[Boolean] = {
     val apiVersion = url / "api" / "info" / "version"
@@ -59,9 +74,9 @@ object CheckNodesTask {
   }
 
   def removeNodes[F[_]](
-      ctx: Context[F, _],
+      store: Store[F],
       cfg: HouseKeepingConfig.CheckNodes
   ): F[Int] =
-    ctx.store.transact(RNode.deleteNotFound(cfg.minNotFound))
+    store.transact(RNode.deleteNotFound(cfg.minNotFound))
 
 }

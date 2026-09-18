@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.ItemQuery exposing
     ( AttrMatch(..)
     , ItemQuery(..)
@@ -14,6 +21,8 @@ module Data.ItemQuery exposing
 import Api.Model.CustomFieldValue exposing (CustomFieldValue)
 import Api.Model.ItemQuery as RQ
 import Data.Direction exposing (Direction)
+import Data.SearchMode exposing (SearchMode)
+import Util.String
 
 
 type TagMatch
@@ -50,6 +59,7 @@ type ItemQuery
     | Source AttrMatch String
     | Dir Direction
     | ItemIdIn (List String)
+    | ItemIdMatch String
     | ItemName AttrMatch String
     | AllNames String
     | Contents String
@@ -63,15 +73,17 @@ and list =
             Nothing
 
         es ->
-            Just (And es)
+            Just (unwrap (And es))
 
 
-request : Maybe ItemQuery -> RQ.ItemQuery
-request mq =
+request : SearchMode -> Maybe ItemQuery -> RQ.ItemQuery
+request smode mq =
     { offset = Nothing
     , limit = Nothing
     , withDetails = Just True
     , query = renderMaybe mq
+    , searchMode = Data.SearchMode.asString smode |> Just
+    , statsProfile = Nothing
     }
 
 
@@ -79,6 +91,32 @@ renderMaybe : Maybe ItemQuery -> String
 renderMaybe mq =
     Maybe.map render mq
         |> Maybe.withDefault ""
+
+
+unwrap : ItemQuery -> ItemQuery
+unwrap query =
+    case query of
+        And inner ->
+            case inner of
+                first :: [] ->
+                    unwrap first
+
+                _ ->
+                    And (List.map unwrap inner)
+
+        Or inner ->
+            case inner of
+                first :: [] ->
+                    unwrap first
+
+                _ ->
+                    Or (List.map unwrap inner)
+
+        Not (Not inner) ->
+            unwrap inner
+
+        _ ->
+            query
 
 
 render : ItemQuery -> String
@@ -109,7 +147,7 @@ render q =
             String.replace "\"" "\\\""
                 >> surround "\""
     in
-    case q of
+    case unwrap q of
         And inner ->
             List.map render inner
                 |> String.join " "
@@ -170,13 +208,20 @@ render q =
             "incoming:" ++ boolStr (dir == Data.Direction.Incoming)
 
         ItemIdIn ids ->
-            "id~=" ++ String.join "," ids
+            "id~=" ++ String.join "," (List.map quoteStr ids)
+
+        ItemIdMatch id ->
+            if String.length id == 47 then
+                "id" ++ attrMatch Eq ++ quoteStr id
+
+            else
+                "id" ++ attrMatch Like ++ (quoteStr <| Util.String.appendIfAbsent "*" id)
 
         ItemName m str ->
             "name" ++ attrMatch m ++ quoteStr str
 
         AllNames str ->
-            "$names:" ++ quoteStr str
+            "names:" ++ quoteStr str
 
         Contents str ->
             "content:" ++ quoteStr str

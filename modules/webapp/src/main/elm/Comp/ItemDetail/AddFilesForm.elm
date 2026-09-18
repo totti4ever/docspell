@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.AddFilesForm exposing (view)
 
 import Comp.Dropzone
@@ -17,6 +24,11 @@ import Util.Size
 
 view : Texts -> Model -> Html Msg
 view texts model =
+    let
+        dropzoneCfg =
+            { light = True
+            }
+    in
     div
         [ classList
             [ ( "hidden", not model.addFilesOpen )
@@ -28,7 +40,7 @@ view texts model =
             [ text texts.addMoreFilesToItem
             ]
         , Html.map AddFilesMsg
-            (Comp.Dropzone.view2 texts.dropzone model.addFilesModel)
+            (Comp.Dropzone.view2 texts.dropzone dropzoneCfg model.addFilesModel)
         , div [ class "flex flex-row space-x-2 mt-2" ]
             [ button
                 [ class S.primaryButton
@@ -44,6 +56,14 @@ view texts model =
                 ]
                 [ text texts.reset
                 ]
+            , div [ class "flex-grow" ] []
+            , button
+                [ class S.secondaryButton
+                , href "#"
+                , onClick AddFilesToggle
+                ]
+                [ text texts.basics.cancel
+                ]
             ]
         , div
             [ classList
@@ -56,7 +76,7 @@ view texts model =
             , a
                 [ class S.successMessageLink
                 , href "#"
-                , onClick ReloadItem
+                , onClick (ReloadItem False)
                 ]
                 [ text texts.refreshNow
                 ]

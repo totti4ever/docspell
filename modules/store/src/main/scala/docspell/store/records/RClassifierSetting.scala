@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.{NonEmptyList, OptionT}
@@ -12,7 +18,7 @@ import doobie._
 import doobie.implicits._
 
 case class RClassifierSetting(
-    cid: Ident,
+    cid: CollectiveId,
     schedule: CalEvent,
     itemCount: Int,
     created: Timestamp,
@@ -37,12 +43,12 @@ object RClassifierSetting {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "classifier_setting"
 
-    val cid        = Column[Ident]("cid", this)
-    val schedule   = Column[CalEvent]("schedule", this)
-    val itemCount  = Column[Int]("item_count", this)
-    val created    = Column[Timestamp]("created", this)
+    val cid = Column[CollectiveId]("coll_id", this)
+    val schedule = Column[CalEvent]("schedule", this)
+    val itemCount = Column[Int]("item_count", this)
+    val created = Column[Timestamp]("created", this)
     val categories = Column[List[String]]("categories", this)
-    val listType   = Column[ListType]("category_list_type", this)
+    val listType = Column[ListType]("category_list_type", this)
     val all = NonEmptyList
       .of[Column[_]](cid, schedule, itemCount, created, categories, listType)
   }
@@ -73,20 +79,19 @@ object RClassifierSetting {
       n2 <- if (n1 <= 0) insert(v) else 0.pure[ConnectionIO]
     } yield n1 + n2
 
-  def findById(id: Ident): ConnectionIO[Option[RClassifierSetting]] = {
+  def findById(id: CollectiveId): ConnectionIO[Option[RClassifierSetting]] = {
     val sql = run(select(T.all), from(T), T.cid === id)
     sql.query[RClassifierSetting].option
   }
 
-  def delete(coll: Ident): ConnectionIO[Int] =
+  def delete(coll: CollectiveId): ConnectionIO[Int] =
     DML.delete(T, T.cid === coll)
 
-  /** Finds tag categories that exist and match the classifier setting.
-    * If the setting contains a black list, they are removed from the
-    * existing categories. If it is a whitelist, the intersection is
-    * returned.
+  /** Finds tag categories that exist and match the classifier setting. If the setting
+    * contains a black list, they are removed from the existing categories. If it is a
+    * whitelist, the intersection is returned.
     */
-  def getActiveCategories(coll: Ident): ConnectionIO[List[String]] =
+  def getActiveCategories(coll: CollectiveId): ConnectionIO[List[String]] =
     (for {
       sett <- OptionT(findById(coll))
       cats <- OptionT.liftF(RTag.listCategories(coll))
@@ -98,8 +103,10 @@ object RClassifierSetting {
       }
     } yield res).getOrElse(Nil)
 
-  /** Checks the json array of tag categories and removes those that are not present anymore. */
-  def fixCategoryList(coll: Ident): ConnectionIO[Int] =
+  /** Checks the json array of tag categories and removes those that are not present
+    * anymore.
+    */
+  def fixCategoryList(coll: CollectiveId): ConnectionIO[Int] =
     (for {
       sett <- OptionT(findById(coll))
       cats <- OptionT.liftF(RTag.listCategories(coll))
@@ -124,7 +131,7 @@ object RClassifierSetting {
           categories.nonEmpty
       }
 
-    def toRecord(coll: Ident, created: Timestamp): RClassifierSetting =
+    def toRecord(coll: CollectiveId, created: Timestamp): RClassifierSetting =
       RClassifierSetting(
         coll,
         schedule,
@@ -138,5 +145,4 @@ object RClassifierSetting {
     def fromRecord(r: RClassifierSetting): Classifier =
       Classifier(r.schedule, r.itemCount, r.categoryList, r.listType)
   }
-
 }

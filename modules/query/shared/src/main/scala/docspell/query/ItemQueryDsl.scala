@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query
 
 import cats.data.NonEmptyList
@@ -72,5 +78,7 @@ object ItemQueryDsl {
     def tagsEq(values: NonEmptyList[String]): Expr =
       Expr.TagsMatch(TagOperator.AllMatch, values)
 
+    def itemIdsIn(values: NonEmptyList[String]): Expr =
+      Expr.InExpr(Attr.ItemId, values)
   }
 }

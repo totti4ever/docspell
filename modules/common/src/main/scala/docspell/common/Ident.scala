@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import java.security.SecureRandom
@@ -19,13 +25,21 @@ case class Ident(id: String) {
     !isEmpty
 
   def /(next: Ident): Ident =
-    new Ident(id + "." + next.id)
+    new Ident(id + Ident.concatChar + next.id)
+
+  def /(next: Number): Ident =
+    new Ident(id + Ident.concatChar + next)
+
+  def take(n: Int): Ident =
+    new Ident(id.take(n))
 }
 
 object Ident {
+  private val concatChar = '.'
   implicit val identEq: Eq[Ident] =
     Eq.by(_.id)
 
+  // Note, the slash *must not* be part of valid characters
   val chars: Set[Char] = (('A' to 'Z') ++ ('a' to 'z') ++ ('0' to '9') ++ "-_.@").toSet
 
   def randomUUID[F[_]: Sync]: F[Ident] =
@@ -70,4 +84,6 @@ object Ident {
   implicit val order: Order[Ident] =
     Order.by(_.id)
 
+  implicit val ordering: Ordering[Ident] =
+    Ordering.by(_.id)
 }

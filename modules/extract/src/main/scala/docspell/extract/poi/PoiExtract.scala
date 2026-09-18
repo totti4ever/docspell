@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract.poi
 
 import java.io.{ByteArrayInputStream, InputStream}
@@ -43,17 +49,13 @@ object PoiExtract {
       case PoiType.docx =>
         getDocx(data)
       case PoiType.msoffice =>
-        EitherT(getDoc[F](data))
-          .recoverWith({ case _ =>
-            EitherT(getXls[F](data))
-          })
-          .value
+        EitherT(getDoc[F](data)).recoverWith { case _ =>
+          EitherT(getXls[F](data))
+        }.value
       case PoiType.ooxml =>
-        EitherT(getDocx[F](data))
-          .recoverWith({ case _ =>
-            EitherT(getXlsx[F](data))
-          })
-          .value
+        EitherT(getDocx[F](data)).recoverWith { case _ =>
+          EitherT(getXlsx[F](data))
+        }.value
       case mt =>
         Sync[F].pure(Left(new Exception(s"Unsupported content: ${mt.asString}")))
     }

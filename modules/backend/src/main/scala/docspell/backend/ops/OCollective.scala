@@ -1,6 +1,13 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
-import cats.effect.{Effect, Resource}
+import cats.data.OptionT
+import cats.effect.{Async, Resource}
 import cats.implicits._
 import fs2.Stream
 
@@ -8,12 +15,11 @@ import docspell.backend.JobFactory
 import docspell.backend.PasswordCrypt
 import docspell.backend.ops.OCollective._
 import docspell.common._
+import docspell.scheduler.JobStore
+import docspell.scheduler.usertask.{UserTask, UserTaskScope, UserTaskStore}
 import docspell.store.UpdateResult
-import docspell.store.queries.QCollective
-import docspell.store.queue.JobQueue
+import docspell.store.queries.{QCollective, QUser}
 import docspell.store.records._
-import docspell.store.usertask.UserTask
-import docspell.store.usertask.UserTaskStore
 import docspell.store.{AddResult, Store}
 
 import com.github.eikek.calev._
@@ -22,47 +28,68 @@ trait OCollective[F[_]] {
 
   def find(name: Ident): F[Option[RCollective]]
 
-  def updateSettings(collective: Ident, settings: OCollective.Settings): F[AddResult]
+  def updateSettings(
+      collective: CollectiveId,
+      settings: OCollective.Settings
+  ): F[AddResult]
 
-  def findSettings(collective: Ident): F[Option[OCollective.Settings]]
+  def findSettings(collective: CollectiveId): F[Option[OCollective.Settings]]
 
-  def listUser(collective: Ident): F[Vector[RUser]]
+  def listUser(collective: CollectiveId): F[Vector[RUser]]
 
   def add(s: RUser): F[AddResult]
 
   def update(s: RUser): F[AddResult]
 
-  def deleteUser(login: Ident, collective: Ident): F[AddResult]
+  /** Deletes the user and all its data. */
+  def deleteUser(userId: Ident): F[UpdateResult]
 
-  def insights(collective: Ident): F[InsightData]
+  /** Return an excerpt of what would be deleted, when the user is deleted. */
+  def getDeleteUserData(cid: CollectiveId, userId: Ident): F[DeleteUserData]
 
-  def tagCloud(collective: Ident): F[List[TagCount]]
+  def insights(collective: CollectiveId): F[InsightData]
+
+  def tagCloud(collective: CollectiveId): F[List[TagCount]]
 
   def changePassword(
-      accountId: AccountId,
+      collectiveId: CollectiveId,
+      userId: Ident,
       current: Password,
-      newPass: Password
+      newPass: Password,
+      expectedSources: Set[AccountSource]
   ): F[PassChangeResult]
 
-  def resetPassword(accountId: AccountId): F[PassResetResult]
+  def resetPassword(
+      accountId: AccountId,
+      expectedSources: Set[AccountSource]
+  ): F[PassResetResult]
 
   def getContacts(
-      collective: Ident,
+      collective: CollectiveId,
       query: Option[String],
       kind: Option[ContactKind]
   ): Stream[F, RContact]
 
   def findEnabledSource(sourceId: Ident): F[Option[RSource]]
 
-  def startLearnClassifier(collective: Ident): F[Unit]
+  def addPassword(collective: CollectiveId, pw: Password): F[Unit]
 
-  /** Submits a task that (re)generates the preview images for all
-    * attachments of the given collective.
+  def getPasswords(collective: CollectiveId): F[List[RCollectivePassword]]
+
+  /** Removes a password from the list given the id of `RCollectivePassword` */
+  def removePassword(id: Ident): F[Unit]
+
+  def startLearnClassifier(collective: CollectiveId): F[Unit]
+
+  def startEmptyTrash(args: EmptyTrashArgs): F[Unit]
+
+  /** Submits a task that (re)generates the preview images for all attachments of the
+    * given collective.
     */
   def generatePreviews(
       storeMode: MakePreviewArgs.StoreMode,
-      account: AccountId,
-      notifyJoex: Boolean
+      collectiveId: CollectiveId,
+      submitter: UserTaskScope
   ): F[UpdateResult]
 }
 
@@ -81,166 +108,239 @@ object OCollective {
   val Settings = RCollective.Settings
   type Classifier = RClassifierSetting.Classifier
   val Classifier = RClassifierSetting.Classifier
+  type EmptyTrash = REmptyTrashSetting.EmptyTrash
+  val EmptyTrash = REmptyTrashSetting.EmptyTrash
+
+  type DeleteUserData = QUser.UserData
+  val DeleteUserData = QUser.UserData
 
   sealed trait PassResetResult
   object PassResetResult {
     case class Success(newPw: Password) extends PassResetResult
-    case object NotFound                extends PassResetResult
+    case object NotFound extends PassResetResult
+    case class InvalidSource(source: AccountSource) extends PassResetResult
 
     def success(np: Password): PassResetResult = Success(np)
-    def notFound: PassResetResult              = NotFound
+    def notFound: PassResetResult = NotFound
+    def invalidSource(source: AccountSource): PassResetResult = InvalidSource(source)
   }
 
   sealed trait PassChangeResult
   object PassChangeResult {
-    case object UserNotFound     extends PassChangeResult
+    case object UserNotFound extends PassChangeResult
     case object PasswordMismatch extends PassChangeResult
-    case object UpdateFailed     extends PassChangeResult
-    case object Success          extends PassChangeResult
+    case object UpdateFailed extends PassChangeResult
+    case class InvalidSource(source: AccountSource) extends PassChangeResult
+    case object Success extends PassChangeResult
 
-    def userNotFound: PassChangeResult     = UserNotFound
+    def userNotFound: PassChangeResult = UserNotFound
     def passwordMismatch: PassChangeResult = PasswordMismatch
-    def success: PassChangeResult          = Success
-    def updateFailed: PassChangeResult     = UpdateFailed
+    def success: PassChangeResult = Success
+    def updateFailed: PassChangeResult = UpdateFailed
+    def invalidSource(source: AccountSource): PassChangeResult = InvalidSource(source)
   }
 
-  case class RegisterData(
-      collName: Ident,
-      login: Ident,
-      password: Password,
-      invite: Option[Ident]
-  )
-
-  sealed trait RegisterResult {
-    def toEither: Either[Throwable, Unit]
-  }
-  object RegisterResult {
-    case object Success extends RegisterResult {
-      val toEither = Right(())
-    }
-    case class CollectiveExists(id: Ident) extends RegisterResult {
-      val toEither = Left(new Exception())
-    }
-    case class Error(ex: Throwable) extends RegisterResult {
-      val toEither = Left(ex)
-    }
-  }
-
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       store: Store[F],
       uts: UserTaskStore[F],
-      queue: JobQueue[F],
+      jobStore: JobStore[F],
       joex: OJoex[F]
   ): Resource[F, OCollective[F]] =
     Resource.pure[F, OCollective[F]](new OCollective[F] {
       def find(name: Ident): F[Option[RCollective]] =
-        store.transact(RCollective.findById(name))
+        store.transact(RCollective.findByName(name))
 
-      def updateSettings(collective: Ident, sett: Settings): F[AddResult] =
+      def updateSettings(
+          collectiveId: CollectiveId,
+          sett: Settings
+      ): F[AddResult] =
         store
-          .transact(RCollective.updateSettings(collective, sett))
+          .transact(RCollective.updateSettings(collectiveId, sett))
           .attempt
           .map(AddResult.fromUpdate)
-          .flatMap(res => updateLearnClassifierTask(collective, sett) *> res.pure[F])
+          .flatMap(res =>
+            updateLearnClassifierTask(collectiveId, sett) *> updateEmptyTrashTask(
+              collectiveId,
+              sett
+            ) *> res.pure[F]
+          )
 
-      def updateLearnClassifierTask(coll: Ident, sett: Settings) =
+      private def updateLearnClassifierTask(
+          cid: CollectiveId,
+          sett: Settings
+      ): F[Unit] =
         for {
           id <- Ident.randomId[F]
-          on    = sett.classifier.map(_.enabled).getOrElse(false)
+          on = sett.classifier.exists(_.enabled)
           timer = sett.classifier.map(_.schedule).getOrElse(CalEvent.unsafe(""))
+          args = LearnClassifierArgs(cid)
           ut = UserTask(
             id,
             LearnClassifierArgs.taskName,
             on,
             timer,
             None,
-            LearnClassifierArgs(coll)
+            args
           )
-          _ <- uts.updateOneTask(AccountId(coll, LearnClassifierArgs.taskName), ut)
+          _ <- uts.updateOneTask(UserTaskScope.collective(cid), args.makeSubject.some, ut)
           _ <- joex.notifyAllNodes
         } yield ()
 
-      def startLearnClassifier(collective: Ident): F[Unit] =
+      private def updateEmptyTrashTask(
+          cid: CollectiveId,
+          sett: Settings
+      ): F[Unit] =
         for {
           id <- Ident.randomId[F]
-          ut <- UserTask(
+          settings = sett.emptyTrash.getOrElse(EmptyTrash.default)
+          args = EmptyTrashArgs(cid, settings.minAge)
+          ut = UserTask(
             id,
-            LearnClassifierArgs.taskName,
-            true,
-            CalEvent(WeekdayComponent.All, DateEvent.All, TimeEvent.All),
+            EmptyTrashArgs.taskName,
+            enabled = true,
+            settings.schedule,
             None,
-            LearnClassifierArgs(collective)
-          ).encode.toPeriodicTask(AccountId(collective, LearnClassifierArgs.taskName))
-          job <- ut.toJob
-          _   <- queue.insert(job)
-          _   <- joex.notifyAllNodes
+            args
+          )
+          _ <- uts.updateOneTask(UserTaskScope.collective(cid), args.makeSubject.some, ut)
+          _ <- joex.notifyAllNodes
         } yield ()
 
-      def findSettings(collective: Ident): F[Option[OCollective.Settings]] =
+      def addPassword(collective: CollectiveId, pw: Password): F[Unit] =
+        for {
+          cpass <- RCollectivePassword.createNew[F](collective, pw)
+          _ <- store.transact(RCollectivePassword.upsert(cpass))
+        } yield ()
+
+      def getPasswords(collective: CollectiveId): F[List[RCollectivePassword]] =
+        store.transact(RCollectivePassword.findAll(collective))
+
+      def removePassword(id: Ident): F[Unit] =
+        store.transact(RCollectivePassword.deleteById(id)).map(_ => ())
+
+      def startLearnClassifier(
+          collectiveId: CollectiveId
+      ): F[Unit] =
+        for {
+          id <- Ident.randomId[F]
+          args = LearnClassifierArgs(collectiveId)
+          ut = UserTask(
+            id,
+            LearnClassifierArgs.taskName,
+            enabled = true,
+            CalEvent(WeekdayComponent.All, DateEvent.All, TimeEvent.All),
+            None,
+            args
+          )
+          _ <- uts
+            .executeNow(
+              UserTaskScope.collective(args.collectiveId),
+              args.makeSubject.some,
+              ut
+            )
+        } yield ()
+
+      def startEmptyTrash(args: EmptyTrashArgs): F[Unit] =
+        for {
+          id <- Ident.randomId[F]
+          ut = UserTask(
+            id,
+            EmptyTrashArgs.taskName,
+            enabled = true,
+            CalEvent(WeekdayComponent.All, DateEvent.All, TimeEvent.All),
+            None,
+            args
+          )
+          _ <- uts
+            .executeNow(
+              UserTaskScope.collective(args.collective),
+              args.makeSubject.some,
+              ut
+            )
+        } yield ()
+
+      def findSettings(collective: CollectiveId): F[Option[OCollective.Settings]] =
         store.transact(RCollective.getSettings(collective))
 
-      def listUser(collective: Ident): F[Vector[RUser]] =
+      def listUser(collective: CollectiveId): F[Vector[RUser]] =
         store.transact(RUser.findAll(collective, _.login))
 
       def add(s: RUser): F[AddResult] =
-        store.add(
-          RUser.insert(s.copy(password = PasswordCrypt.crypt(s.password))),
-          RUser.exists(s.login)
-        )
+        if (s.source != AccountSource.Local)
+          AddResult.failure(new Exception("Only local accounts can be created!")).pure[F]
+        else
+          store.add(
+            RUser.insert(s.copy(password = PasswordCrypt.crypt(s.password))),
+            RUser.exists(s.login)
+          )
 
       def update(s: RUser): F[AddResult] =
         store.add(RUser.update(s), RUser.exists(s.login))
 
-      def deleteUser(login: Ident, collective: Ident): F[AddResult] =
-        store.transact(RUser.delete(login, collective)).attempt.map(AddResult.fromUpdate)
+      def getDeleteUserData(cid: CollectiveId, userId: Ident): F[DeleteUserData] =
+        store.transact(QUser.getUserData(cid, userId))
 
-      def insights(collective: Ident): F[InsightData] =
+      def deleteUser(userId: Ident): F[UpdateResult] =
+        UpdateResult.fromUpdate(
+          store.transact(QUser.deleteUserAndData(userId))
+        )
+
+      def insights(collective: CollectiveId): F[InsightData] =
         store.transact(QCollective.getInsights(collective))
 
-      def tagCloud(collective: Ident): F[List[TagCount]] =
+      def tagCloud(collective: CollectiveId): F[List[TagCount]] =
         store.transact(QCollective.tagCloud(collective))
 
-      def resetPassword(accountId: AccountId): F[PassResetResult] =
-        for {
-          newPass <- Password.generate[F]
-          n <- store.transact(
-            RUser.updatePassword(accountId, PasswordCrypt.crypt(newPass))
+      def resetPassword(
+          accountId: AccountId,
+          expectedSources: Set[AccountSource]
+      ): F[PassResetResult] =
+        (for {
+          user <- OptionT(store.transact(RUser.findByAccount(accountId)))
+          newPass <- OptionT.liftF(Password.generate[F])
+
+          doUpdate = store.transact(
+            RUser.updatePassword(user.cid, user.uid, PasswordCrypt.crypt(newPass))
           )
-          res =
-            if (n <= 0) PassResetResult.notFound
-            else PassResetResult.success(newPass)
-        } yield res
+          res <-
+            if (!expectedSources.contains(user.source))
+              OptionT.pure[F](PassResetResult.invalidSource(user.source))
+            else OptionT.liftF(doUpdate.as(PassResetResult.success(newPass)))
+        } yield res).getOrElse(PassResetResult.notFound)
 
       def changePassword(
-          accountId: AccountId,
+          collectiveId: CollectiveId,
+          userId: Ident,
           current: Password,
-          newPass: Password
+          newPass: Password,
+          expectedSources: Set[AccountSource]
       ): F[PassChangeResult] = {
         val q = for {
-          optUser <- RUser.findByAccount(accountId)
-          check = optUser.map(_.password).map(p => PasswordCrypt.check(current, p))
-          n <-
-            check
-              .filter(identity)
-              .traverse(_ =>
-                RUser.updatePassword(accountId, PasswordCrypt.crypt(newPass))
+          user <- OptionT(store.transact(RUser.findById(userId, collectiveId.some)))
+          check = user.password.isEmpty || PasswordCrypt.check(current, user.password)
+          res <-
+            if (check && expectedSources.contains(user.source))
+              OptionT.liftF(
+                store
+                  .transact(
+                    RUser
+                      .updatePassword(collectiveId, userId, PasswordCrypt.crypt(newPass))
+                  )
+                  .map {
+                    case 0 => PassChangeResult.updateFailed
+                    case _ => PassChangeResult.success
+                  }
               )
-          res = check match {
-            case Some(true) =>
-              if (n.getOrElse(0) > 0) PassChangeResult.success
-              else PassChangeResult.updateFailed
-            case Some(false) =>
-              PassChangeResult.passwordMismatch
-            case None =>
-              PassChangeResult.userNotFound
-          }
+            else if (check && !expectedSources.contains(user.source))
+              OptionT.some[F](PassChangeResult.invalidSource(user.source))
+            else OptionT.some[F](PassChangeResult.passwordMismatch)
         } yield res
 
-        store.transact(q)
+        q.getOrElse(PassChangeResult.userNotFound)
       }
 
       def getContacts(
-          collective: Ident,
+          collective: CollectiveId,
           query: Option[String],
           kind: Option[ContactKind]
       ): Stream[F, RContact] =
@@ -251,16 +351,15 @@ object OCollective {
 
       def generatePreviews(
           storeMode: MakePreviewArgs.StoreMode,
-          account: AccountId,
-          notifyJoex: Boolean
+          collectiveId: CollectiveId,
+          submitter: UserTaskScope
       ): F[UpdateResult] =
         for {
           job <- JobFactory.allPreviews[F](
-            AllPreviewsArgs(Some(account.collective), storeMode),
-            Some(account.user)
+            AllPreviewsArgs(Some(collectiveId), storeMode),
+            submitter
           )
-          _ <- queue.insertIfNew(job)
-          _ <- if (notifyJoex) joex.notifyAllNodes else ().pure[F]
+          _ <- jobStore.insertIfNew(job.encode)
         } yield UpdateResult.success
 
     })

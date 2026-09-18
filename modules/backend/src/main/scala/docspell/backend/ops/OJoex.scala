@@ -1,45 +1,59 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
-import scala.concurrent.ExecutionContext
-
-import cats.data.OptionT
 import cats.effect._
-import cats.implicits._
+import cats.syntax.all._
+import fs2.Stream
 
 import docspell.common.{Ident, NodeType}
 import docspell.joexapi.client.JoexClient
-import docspell.store.Store
-import docspell.store.records.RNode
+import docspell.joexapi.model.AddonSupport
+import docspell.pubsub.api.PubSubT
+import docspell.scheduler.msg.{CancelJob, JobsNotify, PeriodicTaskNotify}
 
 trait OJoex[F[_]] {
 
   def notifyAllNodes: F[Unit]
 
-  def cancelJob(job: Ident, worker: Ident): F[Boolean]
+  def notifyPeriodicTasks: F[Unit]
 
+  def cancelJob(job: Ident, worker: Ident): F[Unit]
+
+  def getAddonSupport: F[List[AddonSupport]]
 }
 
 object OJoex {
-
-  def apply[F[_]: Sync](client: JoexClient[F], store: Store[F]): Resource[F, OJoex[F]] =
-    Resource.pure[F, OJoex[F]](new OJoex[F] {
-      def notifyAllNodes: F[Unit] =
-        for {
-          nodes <- store.transact(RNode.findAll(NodeType.Joex))
-          _     <- nodes.toList.traverse(n => client.notifyJoexIgnoreErrors(n.url))
-        } yield ()
-
-      def cancelJob(job: Ident, worker: Ident): F[Boolean] =
-        (for {
-          node   <- OptionT(store.transact(RNode.findById(worker)))
-          cancel <- OptionT.liftF(client.cancelJob(node.url, job))
-        } yield cancel.success).getOrElse(false)
-    })
-
-  def create[F[_]: ConcurrentEffect](
-      ec: ExecutionContext,
-      store: Store[F]
+  def apply[F[_]: Async](
+      pubSub: PubSubT[F],
+      nodes: ONode[F],
+      joexClient: JoexClient[F]
   ): Resource[F, OJoex[F]] =
-    JoexClient.resource(ec).flatMap(client => apply(client, store))
+    Resource.pure[F, OJoex[F]](new OJoex[F] {
 
+      def notifyAllNodes: F[Unit] =
+        pubSub.publish1IgnoreErrors(JobsNotify(), ()).void
+
+      def notifyPeriodicTasks: F[Unit] =
+        pubSub.publish1IgnoreErrors(PeriodicTaskNotify(), ()).void
+
+      def cancelJob(job: Ident, worker: Ident): F[Unit] =
+        pubSub.publish1IgnoreErrors(CancelJob.topic, CancelJob(job, worker)).as(())
+
+      def getAddonSupport: F[List[AddonSupport]] =
+        for {
+          joex <- nodes.getNodes(NodeType.Joex)
+          conc = math.max(2, Runtime.getRuntime.availableProcessors() - 1)
+          supp <- Stream
+            .emits(joex)
+            .covary[F]
+            .parEvalMap(conc)(n => joexClient.getAddonSupport(n.url))
+            .compile
+            .toList
+        } yield supp
+    })
 }

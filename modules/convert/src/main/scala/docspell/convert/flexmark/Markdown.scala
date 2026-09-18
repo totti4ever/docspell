@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.convert.flexmark
 
 import java.io.{InputStream, InputStreamReader}
@@ -29,14 +35,14 @@ object Markdown {
     val r = createRenderer()
     Try {
       val reader = new InputStreamReader(is, cs)
-      val doc    = p.parseReader(reader)
+      val doc = p.parseReader(reader)
       wrapHtml(r.render(doc), cfg)
     }.toEither
   }
 
   def toHtml(md: String, cfg: MarkdownConfig): String = {
-    val p   = createParser()
-    val r   = createRenderer()
+    val p = createParser()
+    val r = createRenderer()
     val doc = p.parse(md)
     wrapHtml(r.render(doc), cfg)
   }
@@ -46,7 +52,7 @@ object Markdown {
       cfg: MarkdownConfig,
       cs: Charset
   ): F[String] =
-    data.through(Binary.decode(cs)).compile.foldMonoid.map(str => toHtml(str, cfg))
+    data.through(Binary.decode(cs)).compile.string.map(str => toHtml(str, cfg))
 
   private def wrapHtml(body: String, cfg: MarkdownConfig): String =
     s"""<!DOCTYPE html>

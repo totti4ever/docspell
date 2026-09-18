@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query
 
 import cats.data.{NonEmptyList => Nel}
@@ -10,6 +16,7 @@ import cats.parse.Parser.Expectation.InRange
 import cats.parse.Parser.Expectation.Length
 import cats.parse.Parser.Expectation.OneOfStr
 import cats.parse.Parser.Expectation.StartOfString
+import cats.parse.Parser.Expectation.WithContext
 
 final case class ParseFailure(
     input: String,
@@ -38,7 +45,7 @@ object ParseFailure {
     def render: String = {
       val opts = expected.mkString(", ")
       val dots = if (exhaustive) "" else "…"
-      s"Expected: ${opts}${dots}"
+      s"Expected: $opts$dots"
     }
   }
 
@@ -50,11 +57,11 @@ object ParseFailure {
     )
 
   private[query] def packMsg(msg: Nel[Message]): Nel[Message] = {
-    val expectMsg = combineExpected(msg.collect({ case em: ExpectMessage => em }))
+    val expectMsg = combineExpected(msg.collect { case em: ExpectMessage => em })
       .sortBy(_.offset)
       .headOption
 
-    val simpleMsg = msg.collect({ case sm: SimpleMessage => sm })
+    val simpleMsg = msg.collect { case sm: SimpleMessage => sm }
 
     Nel.fromListUnsafe((simpleMsg ++ expectMsg).sortBy(_.offset))
   }
@@ -62,13 +69,13 @@ object ParseFailure {
   private[query] def combineExpected(msg: List[ExpectMessage]): List[ExpectMessage] =
     msg
       .groupBy(_.offset)
-      .map({ case (offset, es) =>
+      .map { case (offset, es) =>
         ExpectMessage(
           offset,
           es.flatMap(_.expected).distinct.sorted,
           es.forall(_.exhaustive)
         )
-      })
+      }
       .toList
 
   private[query] def expectationToMsg(e: Parser.Expectation): Message =
@@ -80,10 +87,10 @@ object ParseFailure {
         SimpleMessage(offset, message)
 
       case InRange(offset, lower, upper) =>
-        if (lower == upper) ExpectMessage(offset, List(lower.toString), true)
+        if (lower == upper) ExpectMessage(offset, List(lower.toString), exhaustive = true)
         else {
-          val expect = s"${lower}-${upper}"
-          ExpectMessage(offset, List(expect), true)
+          val expect = s"$lower-$upper"
+          ExpectMessage(offset, List(expect), exhaustive = true)
         }
 
       case Length(offset, expected, actual) =>
@@ -101,5 +108,12 @@ object ParseFailure {
       case OneOfStr(offset, strs) =>
         val options = strs.take(8)
         ExpectMessage(offset, options.take(7), options.size < 8)
+
+      case WithContext(ctx, expect) =>
+        ExpectMessage(
+          expect.offset,
+          s"Failed to parse near: $ctx" :: Nil,
+          exhaustive = true
+        )
     }
 }

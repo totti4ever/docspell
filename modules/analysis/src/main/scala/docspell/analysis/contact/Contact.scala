@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.contact
 
 import cats.implicits._
@@ -27,7 +33,7 @@ object Contact {
     if (atIdx <= 0 || str.indexOf('@', atIdx + 1) > 0) false
     else {
       val name = str.substring(0, atIdx)
-      val dom  = str.substring(atIdx + 1)
+      val dom = str.substring(atIdx + 1)
       Domain.isDomain(dom) && name.forall(c => !c.isWhitespace)
     }
   }
@@ -44,9 +50,9 @@ object Contact {
       p match {
         case LenientUri.RootPath  => false
         case LenientUri.EmptyPath => false
-        case LenientUri.NonEmptyPath(segs) =>
+        case LenientUri.NonEmptyPath(segs, _) =>
           Ident.fromString(segs.last).isRight &&
-            segs.init.takeRight(3) == List("open", "upload", "item")
+          segs.init.takeRight(3) == List("open", "upload", "item")
       }
     LenientUri
       .parse(str)

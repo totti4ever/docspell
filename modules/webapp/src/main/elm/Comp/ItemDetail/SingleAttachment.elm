@@ -1,11 +1,29 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.SingleAttachment exposing (view)
 
 import Api
 import Api.Model.Attachment exposing (Attachment)
 import Comp.AttachmentMeta
-import Comp.ConfirmModal
-import Comp.ItemDetail.Model exposing (Model, Msg(..), NotesField(..), SaveNameState(..), ViewMode(..))
+import Comp.ItemDetail.ConfirmModalView
+import Comp.ItemDetail.Model
+    exposing
+        ( Model
+        , Msg(..)
+        , NotesField(..)
+        , SaveNameState(..)
+        , ViewMode(..)
+        , isShowQrAttach
+        )
+import Comp.ItemDetail.ShowQrCode
 import Comp.MenuBar as MB
+import Data.Flags exposing (Flags)
+import Data.Icons as Icons
 import Data.UiSettings exposing (UiSettings)
 import Dict
 import Html exposing (..)
@@ -20,8 +38,8 @@ import Util.Size
 import Util.String
 
 
-view : Texts -> UiSettings -> Model -> Int -> Attachment -> Html Msg
-view texts settings model pos attach =
+view : Texts -> Flags -> UiSettings -> Model -> Int -> Attachment -> Html Msg
+view texts flags settings model pos attach =
     let
         fileUrl =
             Api.fileURL attach.id
@@ -32,7 +50,7 @@ view texts settings model pos attach =
             [ ( "hidden", not (attachmentVisible model pos) )
             ]
         ]
-        [ renderModal model
+        [ renderModal texts model
         , div
             [ class "flex flex-row px-2 py-2 text-sm"
             , class S.border
@@ -47,31 +65,32 @@ view texts settings model pos attach =
                     Html.map (AttachMetaMsg attach.id)
                         (Comp.AttachmentMeta.view2
                             texts.attachmentMeta
-                            [ class "border-r border-l border-b dark:border-bluegray-600 px-2" ]
+                            [ class "border-r border-l border-b dark:border-slate-600 px-2" ]
                             am
                         )
 
                 Nothing ->
                     span [ class "hidden" ] []
 
+          else if isShowQrAttach model.showQrModel then
+            Comp.ItemDetail.ShowQrCode.view1 flags
+                "border-r border-l border-b dark:border-slate-600 h-full"
+                (Comp.ItemDetail.ShowQrCode.Attach attach.id)
+
           else
             div
                 [ class "flex flex-col relative px-2 pt-2 h-full"
-                , class "border-r border-l border-b dark:border-bluegray-600"
+                , class "border-r border-l border-b dark:border-slate-600"
                 , id "ds-pdf-view-parent"
                 , style "max-height" "calc(100vh - 140px)"
                 , style "min-height" "500px"
                 ]
-                [ iframe
-                    [ if Maybe.withDefault settings.nativePdfPreview model.pdfNativeView then
-                        src fileUrl
-
-                      else
-                        src (fileUrl ++ "/view")
-                    , class "absolute h-full w-full top-0 left-0 mx-0 py-0"
+                [ Data.UiSettings.pdfView settings
+                    flags
+                    fileUrl
+                    [ class "absolute h-full w-full top-0 left-0 mx-0 py-0"
                     , id "ds-pdf-view-iframe"
                     ]
-                    []
                 ]
         ]
 
@@ -134,25 +153,30 @@ attachHeader texts settings model _ attach =
                 [ href "#"
                 , onClick ToggleAttachMenu
                 , class S.secondaryBasicButton
+                , class "mr-2"
                 , classList
-                    [ ( "bg-gray-200 dark:bg-bluegray-600 ", model.attachMenuOpen )
+                    [ ( "bg-gray-200 dark:bg-slate-600 ", model.attachMenuOpen )
                     , ( "hidden", not multiAttach )
                     , ( "sm:hidden", multiAttach && mobile )
                     , ( "hidden sm:block", multiAttach && not mobile )
                     ]
                 ]
-                [ i [ class "fa fa-images font-thin" ] []
+                [ if model.attachMenuOpen then
+                    i [ class "fa fa-chevron-up" ] []
+
+                  else
+                    i [ class "fa fa-chevron-down" ] []
                 ]
     in
     div [ class "flex flex-col sm:flex-row items-center w-full" ]
         [ attachSelectToggle False
-        , div [ class "ml-2 text-base font-bold flex-grow w-full text-center sm:text-left break-all" ]
+        , div [ class "text-base font-bold flex-grow w-full text-left break-all" ]
             [ text attachName
             , text " ("
             , text (Util.Size.bytesReadable Util.Size.B (toFloat attach.size))
             , text ")"
             ]
-        , div [ class "flex flex-row justify-end items-center" ]
+        , div [ class "flex flex-row justify-end items-center w-full" ]
             [ attachSelectToggle True
             , a
                 [ href fileUrl
@@ -167,7 +191,7 @@ attachHeader texts settings model _ attach =
             , a
                 [ classList
                     [ ( S.secondaryBasicButton ++ " text-sm", True )
-                    , ( "bg-gray-200 dark:bg-bluegray-600", selectView )
+                    , ( "bg-gray-200 dark:bg-slate-600", selectView )
                     , ( "hidden", not selectPossible )
                     , ( "ml-2", True )
                     ]
@@ -193,6 +217,7 @@ attachHeader texts settings model _ attach =
             , MB.viewItem <|
                 MB.Dropdown
                     { linkIcon = "fa fa-bars"
+                    , label = ""
                     , linkClass =
                         [ ( "ml-2", True )
                         , ( S.secondaryBasicButton, True )
@@ -201,30 +226,34 @@ attachHeader texts settings model _ attach =
                     , toggleMenu = ToggleAttachmentDropdown
                     , menuOpen = model.attachmentDropdownOpen
                     , items =
-                        [ { icon = "fa fa-download"
+                        [ { icon = i [ class "fa fa-download" ] []
                           , label = texts.downloadFile
+                          , disabled = False
                           , attrs =
                                 [ download attachName
                                 , href fileUrl
                                 ]
                           }
-                        , { icon = "fa fa-file"
+                        , { icon = i [ class "fa fa-file" ] []
                           , label = texts.renameFile
+                          , disabled = False
                           , attrs =
                                 [ href "#"
                                 , onClick (EditAttachNameStart attach.id)
                                 ]
                           }
-                        , { icon = "fa fa-file-archive"
+                        , { icon = i [ class "fa fa-file-archive" ] []
                           , label = texts.downloadOriginalArchiveFile
+                          , disabled = False
                           , attrs =
                                 [ href (fileUrl ++ "/archive")
                                 , target "_new"
                                 , classList [ ( "hidden", not hasArchive ) ]
                                 ]
                           }
-                        , { icon = "fa fa-external-link-alt"
+                        , { icon = i [ class "fa fa-external-link-alt" ] []
                           , label = texts.originalFile
+                          , disabled = False
                           , attrs =
                                 [ href (fileUrl ++ "/original")
                                 , target "_new"
@@ -232,38 +261,37 @@ attachHeader texts settings model _ attach =
                                 ]
                           }
                         , { icon =
-                                if Maybe.withDefault settings.nativePdfPreview model.pdfNativeView then
-                                    "fa fa-toggle-on"
-
-                                else
-                                    "fa fa-toggle-off"
-                          , label = texts.renderPdfByBrowser
-                          , attrs =
-                                [ onClick (TogglePdfNativeView settings.nativePdfPreview)
-                                , href "#"
-                                ]
-                          }
-                        , { icon =
                                 if isAttachMetaOpen model attach.id then
-                                    "fa fa-toggle-on"
+                                    i [ class "fa fa-toggle-on" ] []
 
                                 else
-                                    "fa fa-toggle-off"
+                                    i [ class "fa fa-toggle-off" ] []
                           , label = texts.viewExtractedData
+                          , disabled = False
                           , attrs =
                                 [ onClick (AttachMetaClick attach.id)
                                 , href "#"
                                 ]
                           }
-                        , { icon = "fa fa-redo-alt"
+                        , { icon = i [ class "fa fa-redo-alt" ] []
                           , label = texts.reprocessFile
+                          , disabled = False
                           , attrs =
                                 [ onClick (RequestReprocessFile attach.id)
                                 , href "#"
                                 ]
                           }
-                        , { icon = "fa fa-trash"
+                        , { icon = i [ class Icons.showQr ] []
+                          , label = texts.showQrCode
+                          , disabled = False
+                          , attrs =
+                                [ onClick (ToggleShowQrAttach attach.id)
+                                , href "#"
+                                ]
+                          }
+                        , { icon = i [ class "fa fa-trash" ] []
                           , label = texts.deleteThisFile
+                          , disabled = False
                           , attrs =
                                 [ onClick (RequestDeleteAttachment attach.id)
                                 , href "#"
@@ -299,7 +327,7 @@ editAttachmentName model attach =
     in
     case am of
         Just m ->
-            div [ class "flex flex-row border-l border-r px-2 py-2 dark:border-bluegray-600" ]
+            div [ class "flex flex-row border-l border-r px-2 py-2 dark:border-slate-600" ]
                 [ input
                     [ type_ "text"
                     , value m.newName
@@ -329,7 +357,7 @@ editAttachmentName model attach =
 attachmentSelect : Texts -> Model -> Int -> Attachment -> Html Msg
 attachmentSelect texts model _ _ =
     div
-        [ class "flex flex-row border-l border-r px-2 py-2 dark:border-bluegray-600 "
+        [ class "flex flex-row border-l border-r px-2 py-2 dark:border-slate-600 "
         , class "overflow-x-auto overflow-y-none"
         , classList
             [ ( "hidden", not model.attachMenuOpen )
@@ -352,7 +380,7 @@ menuItem texts model pos attach =
                 enable =
                     Just attach.id == dropId && dropId /= dragId
             in
-            [ ( "bg-gray-300 dark:bg-bluegray-700 current-drop-target", enable )
+            [ ( "bg-gray-300 dark:bg-slate-700 current-drop-target", enable )
             ]
 
         iconClass =
@@ -385,12 +413,12 @@ menuItem texts model pos attach =
     in
     a
         ([ classList <|
-            [ ( "border-blue-500 dark:border-lightblue-500", pos == 0 )
-            , ( "dark:border-bluegray-600", pos /= 0 )
+            [ ( "border-blue-500 dark:border-sky-500", pos == 0 )
+            , ( "dark:border-slate-600", pos /= 0 )
             ]
                 ++ highlight
          , class "flex flex-col relative border rounded px-1 py-1 mr-2"
-         , class " hover:shadow dark:hover:border-bluegray-500"
+         , class " hover:shadow dark:hover:border-slate-500"
          , href "#"
          , onClick msg
          ]
@@ -401,7 +429,7 @@ menuItem texts model pos attach =
             [ classList
                 [ ( "hidden", not visible )
                 ]
-            , class "absolute right-1 top-1 text-blue-400 dark:text-lightblue-400 text-xl"
+            , class "absolute right-1 top-1 text-blue-400 dark:text-sky-400 text-xl"
             ]
             [ i [ class iconClass ] []
             ]
@@ -420,11 +448,11 @@ menuItem texts model pos attach =
         ]
 
 
-renderModal : Model -> Html Msg
-renderModal model =
+renderModal : Texts -> Model -> Html Msg
+renderModal texts model =
     case model.attachModal of
-        Just confirmModal ->
-            Comp.ConfirmModal.view confirmModal
+        Just mm ->
+            Comp.ItemDetail.ConfirmModalView.view texts.confirmModal mm model
 
         Nothing ->
             span [ class "hidden" ] []

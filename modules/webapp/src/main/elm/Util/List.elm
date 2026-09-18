@@ -1,13 +1,92 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Util.List exposing
-    ( distinct
+    ( changePosition
+    , distinct
     , dropRight
     , find
     , findIndexed
     , findNext
     , findPrev
     , get
+    , removeByIndex
+    , replaceByIndex
     , sliding
     )
+
+import Html.Attributes exposing (list)
+
+
+removeByIndex : Int -> List a -> List a
+removeByIndex index list =
+    List.indexedMap
+        (\idx ->
+            \e ->
+                if idx == index then
+                    Nothing
+
+                else
+                    Just e
+        )
+        list
+        |> List.filterMap identity
+
+
+replaceByIndex : Int -> a -> List a -> List a
+replaceByIndex index element list =
+    let
+        repl idx e =
+            if idx == index then
+                element
+
+            else
+                e
+    in
+    List.indexedMap repl list
+
+
+changePosition : Int -> Int -> List a -> List a
+changePosition source target list =
+    let
+        len =
+            List.length list
+
+        noChange =
+            source == target || source + 1 == target
+
+        outOfBounds n =
+            n < 0 || n >= len
+
+        concat el acc =
+            let
+                idx =
+                    Tuple.first el
+
+                ela =
+                    Tuple.second el
+            in
+            if idx == source then
+                ( target, ela ) :: acc
+
+            else if idx >= target then
+                ( idx + 1, ela ) :: acc
+
+            else
+                ( idx, ela ) :: acc
+    in
+    if noChange || outOfBounds source || outOfBounds target then
+        list
+
+    else
+        List.indexedMap Tuple.pair list
+            |> List.foldl concat []
+            |> List.sortBy Tuple.first
+            |> List.map Tuple.second
 
 
 get : List a -> Int -> Maybe a

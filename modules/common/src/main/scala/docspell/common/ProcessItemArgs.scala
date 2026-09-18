@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import docspell.common.ProcessItemArgs._
@@ -8,15 +14,15 @@ import io.circe.generic.semiauto._
 
 /** Arguments to the process-item task.
   *
-  * This task is run for each new file to create a new item from it or
-  * to add this file as an attachment to an existing item.
+  * This task is run for each new file to create a new item from it or to add this file as
+  * an attachment to an existing item.
   *
-  * If the `itemId' is set to some value, the item is tried to load to
-  * ammend with the given files. Otherwise a new item is created.
+  * If the `itemId` is set to some value, the item is tried to load to amend with the
+  * given files. Otherwise a new item is created.
   *
   * It is also re-used by the 'ReProcessItem' task.
   */
-case class ProcessItemArgs(meta: ProcessMeta, files: List[File]) {
+case class ProcessItemArgs(meta: ProcessMeta, files: List[File]) extends TaskArguments {
 
   def makeSubject: String =
     files.flatMap(_.name) match {
@@ -34,8 +40,10 @@ object ProcessItemArgs {
 
   val taskName = Ident.unsafe("process-item")
 
+  val multiUploadTaskName = Ident.unsafe("multi-upload-process")
+
   case class ProcessMeta(
-      collective: Ident,
+      collective: CollectiveId,
       itemId: Option[Ident],
       language: Language,
       direction: Option[Direction],
@@ -45,7 +53,9 @@ object ProcessItemArgs {
       skipDuplicate: Boolean,
       fileFilter: Option[Glob],
       tags: Option[List[String]],
-      reprocess: Boolean
+      reprocess: Boolean,
+      attachmentsOnly: Option[Boolean],
+      customData: Option[Json]
   )
 
   object ProcessMeta {
@@ -53,7 +63,7 @@ object ProcessItemArgs {
     implicit val jsonDecoder: Decoder[ProcessMeta] = deriveDecoder[ProcessMeta]
   }
 
-  case class File(name: Option[String], fileMetaId: Ident)
+  case class File(name: Option[String], fileMetaId: FileKey)
   object File {
     implicit val jsonEncoder: Encoder[File] = deriveEncoder[File]
     implicit val jsonDecoder: Decoder[File] = deriveDecoder[File]
@@ -64,5 +74,4 @@ object ProcessItemArgs {
 
   def parse(str: String): Either[Throwable, ProcessItemArgs] =
     str.parseJsonAs[ProcessItemArgs]
-
 }

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import cats.data.NonEmptyList
@@ -18,15 +24,17 @@ sealed trait ItemState { self: Product =>
 
 object ItemState {
 
-  case object Premature  extends ItemState
+  case object Premature extends ItemState
   case object Processing extends ItemState
-  case object Created    extends ItemState
-  case object Confirmed  extends ItemState
+  case object Created extends ItemState
+  case object Confirmed extends ItemState
+  case object Deleted extends ItemState
 
-  def premature: ItemState  = Premature
+  def premature: ItemState = Premature
   def processing: ItemState = Processing
-  def created: ItemState    = Created
-  def confirmed: ItemState  = Confirmed
+  def created: ItemState = Created
+  def confirmed: ItemState = Confirmed
+  def deleted: ItemState = Deleted
 
   def fromString(str: String): Either[String, ItemState] =
     str.toLowerCase match {
@@ -34,6 +42,7 @@ object ItemState {
       case "processing" => Right(Processing)
       case "created"    => Right(Created)
       case "confirmed"  => Right(Confirmed)
+      case "deleted"    => Right(Deleted)
       case _            => Left(s"Invalid item state: $str")
     }
 
@@ -42,6 +51,9 @@ object ItemState {
 
   val invalidStates: NonEmptyList[ItemState] =
     NonEmptyList.of(Premature, Processing)
+
+  val validStatesAndDeleted: NonEmptyList[ItemState] =
+    validStates.append(deleted)
 
   def unsafe(str: String): ItemState =
     fromString(str).fold(sys.error, identity)

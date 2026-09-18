@@ -1,0 +1,21 @@
+name: Publish Website
+on:
+  push:
+    branches:
+      - "current-docs"
+jobs:
+  publish-website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - name: Set current version
+        run:  echo "DOCSPELL_VERSION=$(cat version.sbt | grep version | cut -d= -f2 | xargs)" >> $GITHUB_ENV
+      - name: Build website (${{ env.DOCSPELL_VERSION }})
+        run: nix develop .#ci --command sbt make-website
+      - name: Publish website (${{ env.DOCSPELL_VERSION }})
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix develop .#ci --command sbt publish-website

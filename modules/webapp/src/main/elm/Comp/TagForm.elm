@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.TagForm exposing
     ( Model
     , Msg(..)
@@ -13,6 +20,7 @@ import Comp.Basic as B
 import Comp.Dropdown
 import Data.DropdownStyle as DS
 import Data.Flags exposing (Flags)
+import Data.UiSettings exposing (UiSettings)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput)
@@ -119,8 +127,8 @@ update _ msg model =
 --- View2
 
 
-view2 : Texts -> Model -> Html Msg
-view2 texts model =
+view2 : Texts -> UiSettings -> Model -> Html Msg
+view2 texts settings model =
     let
         categoryCfg =
             { makeOption = \s -> Comp.Dropdown.mkOption s
@@ -163,6 +171,7 @@ view2 texts model =
             , Html.map CatMsg
                 (Comp.Dropdown.viewSingle2
                     categoryCfg
+                    settings
                     model.catDropdown
                 )
             ]

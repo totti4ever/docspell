@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Util.Http exposing
     ( authDelete
     , authGet
@@ -5,9 +12,10 @@ module Util.Http exposing
     , authPostTrack
     , authPut
     , authTask
-    , errorToString
     , executeIn
     , jsonResolver
+    , shareGet
+    , sharePost
     )
 
 import Api.Model.AuthResult exposing (AuthResult)
@@ -43,6 +51,28 @@ authReq req =
         }
 
 
+shareReq :
+    { url : String
+    , token : String
+    , method : String
+    , headers : List Http.Header
+    , body : Http.Body
+    , expect : Http.Expect msg
+    , tracker : Maybe String
+    }
+    -> Cmd msg
+shareReq req =
+    Http.request
+        { url = req.url
+        , method = req.method
+        , headers = Http.header "Docspell-Share-Auth" req.token :: req.headers
+        , expect = req.expect
+        , body = req.body
+        , timeout = Nothing
+        , tracker = req.tracker
+        }
+
+
 authPost :
     { url : String
     , account : AuthResult
@@ -54,6 +84,25 @@ authPost req =
     authReq
         { url = req.url
         , account = req.account
+        , body = req.body
+        , expect = req.expect
+        , method = "POST"
+        , headers = []
+        , tracker = Nothing
+        }
+
+
+sharePost :
+    { url : String
+    , token : String
+    , body : Http.Body
+    , expect : Http.Expect msg
+    }
+    -> Cmd msg
+sharePost req =
+    shareReq
+        { url = req.url
+        , token = req.token
         , body = req.body
         , expect = req.expect
         , method = "POST"
@@ -119,6 +168,24 @@ authGet req =
         }
 
 
+shareGet :
+    { url : String
+    , token : String
+    , expect : Http.Expect msg
+    }
+    -> Cmd msg
+shareGet req =
+    shareReq
+        { url = req.url
+        , token = req.token
+        , body = Http.emptyBody
+        , expect = req.expect
+        , method = "GET"
+        , headers = []
+        , tracker = Nothing
+        }
+
+
 authDelete :
     { url : String
     , account : AuthResult
@@ -135,45 +202,6 @@ authDelete req =
         , headers = []
         , tracker = Nothing
         }
-
-
-
--- Error Utilities
-
-
-errorToStringStatus : Http.Error -> (Int -> String) -> String
-errorToStringStatus error statusString =
-    case error of
-        Http.BadUrl url ->
-            "There is something wrong with this url: " ++ url
-
-        Http.Timeout ->
-            "There was a network timeout."
-
-        Http.NetworkError ->
-            "There was a network error."
-
-        Http.BadStatus status ->
-            statusString status
-
-        Http.BadBody str ->
-            "There was an error decoding the response: " ++ str
-
-
-errorToString : Http.Error -> String
-errorToString error =
-    let
-        f sc =
-            if sc == 404 then
-                "The requested resource doesn't exist."
-
-            else if sc >= 400 && sc < 500 then
-                "Invalid input when processing the request."
-
-            else
-                "There was an invalid response status: " ++ String.fromInt sc ++ "."
-    in
-    errorToStringStatus error f
 
 
 

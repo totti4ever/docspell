@@ -1,19 +1,22 @@
-package docspell.joexapi.client
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
-import scala.concurrent.ExecutionContext
+package docspell.joexapi.client
 
 import cats.effect._
 import cats.implicits._
+import fs2.io.net.Network
 
-import docspell.common.syntax.all._
 import docspell.common.{Ident, LenientUri}
-import docspell.joexapi.model.BasicResult
+import docspell.joexapi.model.{AddonSupport, BasicResult}
 
-import org.http4s.circe.CirceEntityDecoder._
+import org.http4s.circe.CirceEntityDecoder
 import org.http4s.client.Client
-import org.http4s.client.blaze.BlazeClientBuilder
+import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.{Method, Request, Uri}
-import org.log4s.getLogger
 
 trait JoexClient[F[_]] {
 
@@ -23,28 +26,36 @@ trait JoexClient[F[_]] {
 
   def cancelJob(base: LenientUri, job: Ident): F[BasicResult]
 
+  def getAddonSupport(base: LenientUri): F[AddonSupport]
 }
 
 object JoexClient {
 
-  private[this] val logger = getLogger
+  def apply[F[_]: Async](client: Client[F]): JoexClient[F] =
+    new JoexClient[F] with CirceEntityDecoder {
+      private[this] val logger = docspell.logging.getLogger[F]
 
-  def apply[F[_]: Sync](client: Client[F]): JoexClient[F] =
-    new JoexClient[F] {
+      def getAddonSupport(base: LenientUri): F[AddonSupport] = {
+        val getUrl = base / "api" / "v1" / "addon" / "config"
+        val req = Request[F](Method.GET, uri(getUrl))
+        logger.debug(s"Getting addon support") *>
+          client.expect[AddonSupport](req)
+      }
+
       def notifyJoex(base: LenientUri): F[BasicResult] = {
         val notifyUrl = base / "api" / "v1" / "notify"
-        val req       = Request[F](Method.POST, uri(notifyUrl))
-        logger.fdebug(s"Notify joex at ${notifyUrl.asString}") *>
+        val req = Request[F](Method.POST, uri(notifyUrl))
+        logger.debug(s"Notify joex at ${notifyUrl.asString}") *>
           client.expect[BasicResult](req)
       }
 
       def notifyJoexIgnoreErrors(base: LenientUri): F[Unit] =
-        notifyJoex(base).attempt.map {
+        notifyJoex(base).attempt.flatMap {
           case Right(BasicResult(succ, msg)) =>
-            if (succ) ()
+            if (succ) ().pure[F]
             else
               logger.warn(
-                s"Notifying Joex instance '${base.asString}' returned with failure: ${msg}"
+                s"Notifying Joex instance '${base.asString}' returned with failure: $msg"
               )
           case Left(ex) =>
             logger.warn(
@@ -54,7 +65,7 @@ object JoexClient {
 
       def cancelJob(base: LenientUri, job: Ident): F[BasicResult] = {
         val cancelUrl = base / "api" / "v1" / "job" / job.id / "cancel"
-        val req       = Request[F](Method.POST, uri(cancelUrl))
+        val req = Request[F](Method.POST, uri(cancelUrl))
         client.expect[BasicResult](req)
       }
 
@@ -62,6 +73,6 @@ object JoexClient {
         Uri.unsafeFromString(u.asString)
     }
 
-  def resource[F[_]: ConcurrentEffect](ec: ExecutionContext): Resource[F, JoexClient[F]] =
-    BlazeClientBuilder[F](ec).resource.map(apply[F])
+  def resource[F[_]: Async: Network]: Resource[F, JoexClient[F]] =
+    EmberClientBuilder.default[F].build.map(apply[F])
 }

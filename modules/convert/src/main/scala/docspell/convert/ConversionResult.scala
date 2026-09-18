@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.convert
 
 import cats.data.Kleisli
@@ -13,10 +19,9 @@ sealed trait ConversionResult[F[_]] {
 
 object ConversionResult {
 
-  /** The conversion is done by external tools that write files to the
-    * file system. These are temporary files and they will be deleted
-    * once the process finishes. This handler is used to do something
-    * relevant with the resulting files.
+  /** The conversion is done by external tools that write files to the file system. These
+    * are temporary files and they will be deleted once the process finishes. This handler
+    * is used to do something relevant with the resulting files.
     */
   type Handler[F[_], A] = Kleisli[F, ConversionResult[F], A]
 

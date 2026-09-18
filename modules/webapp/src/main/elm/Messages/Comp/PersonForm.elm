@@ -1,4 +1,16 @@
-module Messages.Comp.PersonForm exposing (Texts, gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Comp.PersonForm exposing
+    ( Texts
+    , de
+    , fr
+    , gb
+    )
 
 import Data.ContactType exposing (ContactType)
 import Data.PersonUse exposing (PersonUse)
@@ -39,5 +51,41 @@ gb =
     , address = "Address"
     , contacts = "Contacts"
     , contactTypeLabel = Messages.Data.ContactType.gb
+    , notes = "Notes"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , addressForm = Messages.Comp.AddressForm.de
+    , personUseLabel = Messages.Data.PersonUse.de
+    , useOfPerson = "Wie diese Person verwendet werden soll"
+    , useAsConcerningOnly = "Nur als betreffende Person verwenden"
+    , useAsCorrespondentOnly = "Nur als Korrespondent verwenden"
+    , useAsBoth = "Als Betreffend und Korrespondent verwenden"
+    , dontUseForSuggestions = "Nicht für Vorschläge verwenden"
+    , chooseAnOrg = "Wähle eine Organisation"
+    , address = "Addresse"
+    , contacts = "Kontakte"
+    , contactTypeLabel = Messages.Data.ContactType.de
+    , notes = "Notizen"
+    }
+
+
+fr : Texts
+fr =
+    { basics = Messages.Basics.fr
+    , addressForm = Messages.Comp.AddressForm.fr
+    , personUseLabel = Messages.Data.PersonUse.fr
+    , useOfPerson = "Rôle de cette personne"
+    , useAsConcerningOnly = "Concernée uniquement"
+    , useAsCorrespondentOnly = "Correspondante uniquement"
+    , useAsBoth = "Concernée et correspondante"
+    , dontUseForSuggestions = "ignorer des suggestions."
+    , chooseAnOrg = "Choisir une organisation"
+    , address = "Addresse"
+    , contacts = "Contacts"
+    , contactTypeLabel = Messages.Data.ContactType.fr
     , notes = "Notes"
     }

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query.internal
 
 import cats.parse.{Parser => P}
@@ -29,6 +35,9 @@ object MacroParser {
   val dueDateRangeMacro: P[Expr.DateRangeMacro] =
     dateRangeMacroImpl(C.dueIn, Attr.DueDate)
 
+  val createdDateRangeMacro: P[Expr.DateRangeMacro] =
+    dateRangeMacroImpl(C.createdIn, Attr.CreatedDate)
+
   val yearDateMacro: P[Expr.YearMacro] =
     yearMacroImpl(C.year, Attr.Date)
 
@@ -46,6 +55,7 @@ object MacroParser {
         namesMacro,
         dateRangeMacro,
         dueDateRangeMacro,
+        createdDateRangeMacro,
         yearDateMacro,
         corrMacro,
         concMacro

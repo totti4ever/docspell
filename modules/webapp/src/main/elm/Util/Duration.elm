@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Util.Duration exposing (Duration, toHuman)
 
 -- 486ms -> 12s -> 1:05 -> 59:45 -> 1:02:12

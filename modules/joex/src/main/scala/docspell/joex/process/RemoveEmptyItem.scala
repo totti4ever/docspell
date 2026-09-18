@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.effect._
@@ -5,7 +11,7 @@ import cats.implicits._
 
 import docspell.backend.ops.OItem
 import docspell.common._
-import docspell.joex.scheduler.Task
+import docspell.scheduler.Task
 
 object RemoveEmptyItem {
 

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftsclient
 
 import docspell.common._
@@ -18,12 +24,12 @@ object FtsResult {
 
   sealed trait MatchData
   case class AttachmentData(attachId: Ident, attachName: String) extends MatchData
-  case object ItemData                                           extends MatchData
+  case object ItemData extends MatchData
 
   case class ItemMatch(
       id: Ident,
       itemId: Ident,
-      collectiveId: Ident,
+      collectiveId: CollectiveId,
       score: Double,
       data: MatchData
   )

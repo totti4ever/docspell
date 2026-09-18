@@ -1,17 +1,22 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.Queue.Update exposing (update)
 
 import Api
 import Comp.YesNoDimmer
 import Data.Flags exposing (Flags)
 import Page.Queue.Data exposing (..)
-import Ports
 import Task
 import Time
-import Util.Http
 
 
-update : Flags -> Msg -> Model -> ( Model, Cmd Msg )
-update flags msg model =
+update : Flags -> Bool -> Msg -> Model -> ( Model, Cmd Msg )
+update flags stopRefresh msg model =
     case msg of
         Init ->
             let
@@ -25,12 +30,15 @@ update flags msg model =
                             , getNewTime
                             ]
             in
-            ( { model | init = True, stopRefresh = False }, start )
+            ( { model | init = True }, start )
 
         StateResp (Ok s) ->
             let
+                stop =
+                    model.pollingInterval <= 0 || stopRefresh
+
                 refresh =
-                    if model.pollingInterval <= 0 || model.stopRefresh then
+                    if stop then
                         Cmd.none
 
                     else
@@ -39,13 +47,10 @@ update flags msg model =
                             , getNewTime
                             ]
             in
-            ( { model | state = s, stopRefresh = False }, refresh )
+            ( { model | state = s, init = False }, refresh )
 
         StateResp (Err err) ->
-            ( { model | error = Util.Http.errorToString err }, Cmd.none )
-
-        StopRefresh ->
-            ( { model | stopRefresh = True, init = False }, Cmd.none )
+            ( { model | formState = HttpError err }, Cmd.none )
 
         NewTime t ->
             ( { model | currentMillis = Time.posixToMillis t }, Cmd.none )
@@ -61,7 +66,7 @@ update flags msg model =
                 newModel =
                     { model | cancelJobRequest = Just job.id }
             in
-            update flags (DimmerMsg job Comp.YesNoDimmer.Activate) newModel
+            update flags stopRefresh (DimmerMsg job Comp.YesNoDimmer.Activate) newModel
 
         DimmerMsg job m ->
             let

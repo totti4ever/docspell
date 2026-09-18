@@ -1,13 +1,15 @@
 +++
 title = "Uploads"
-weight = 0
+weight = 8
 +++
+
+# File Uploads
 
 This page describes, how files can get into docspell. Technically,
 there is just one way: via http multipart/form-data requests.
 
 
-# Authenticated Upload
+## Authenticated Upload
 
 From within the web application there is the "Upload Files"
 page. There you can select multiple files to upload. You can also
@@ -25,7 +27,7 @@ This obviously requires an authenticated user. While this is handy for
 ad-hoc uploads, it is very inconvenient for automating it by custom
 scripts. For this the next variant exists.
 
-# Anonymous Upload
+## Anonymous Upload
 
 It is also possible to upload files without authentication. This
 should make tools that interact with docspell much easier to write.
@@ -43,7 +45,7 @@ username is not visible.
 
 Example screenshot:
 
-{{ figure(file="sources-edit.png") }}
+{{ figure2(light="uploading-01.png", dark="uploading-01_dark.png") }}
 
 This example shows a source with name "test". Besides a description
 and a name that is only used for displaying purposes, a priority and a
@@ -60,7 +62,7 @@ The source endpoint defines two urls:
 - `/app/upload/<id>`
 - `/api/v1/open/upload/item/<id>`
 
-{{ figure(file="sources-form.png") }}
+{{ figure2(light="uploading-02.png", dark="uploading-02_dark.png") }}
 
 The first points to a web page where everyone could upload files into
 your account. You could give this url to people for sending files
@@ -75,11 +77,16 @@ line::
 
 ``` bash
 $ curl -XPOST -F file=@test.pdf http://192.168.1.95:7880/api/v1/open/upload/item/3H7hvJcDJuk-NrAW4zxsdfj-K6TMPyb6BGP-xKptVxUdqWa
-{"success":true,"message":"Files submitted."}
+{"success":true,"message":"Files submitted.","fileKeys":["1/attachmentsource/…"],"jobIds":["…"]}
 ```
 
-There is a [script provided](@/docs/tools/ds.md) that uses curl to
-upload files from the command line more conveniently.
+On success the response includes `fileKeys` (stored file identifiers) and
+`jobIds` (submitted processing jobs). Authenticated clients can download
+an original upload immediately via
+`/api/v1/sec/file/{collectiveId}/{category}/{id}` using a returned file
+key.
+There is a [cli](@/docs/tools/cli.md) to upload files from the command
+line more conveniently.
 
 When files are uploaded to an source endpoint, the items resulting
 from this uploads are marked with the name of the source. So you know
@@ -92,7 +99,7 @@ docspell count the files uploaded through the web interface, just
 create a source (can be inactive) with that name (`webapp`).
 
 
-# Other options
+## Other options
 
 More details about the actual http request and other upload options
 can be found [here](@/docs/api/upload.md).

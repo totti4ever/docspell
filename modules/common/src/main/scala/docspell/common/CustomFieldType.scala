@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import java.time.LocalDate
@@ -87,11 +93,11 @@ object CustomFieldType {
       v.setScale(2, BigDecimal.RoundingMode.HALF_EVEN)
   }
 
-  def text: CustomFieldType    = Text
+  def text: CustomFieldType = Text
   def numeric: CustomFieldType = Numeric
-  def date: CustomFieldType    = Date
-  def bool: CustomFieldType    = Bool
-  def money: CustomFieldType   = Money
+  def date: CustomFieldType = Date
+  def bool: CustomFieldType = Bool
+  def money: CustomFieldType = Money
 
   val all: NonEmptyList[CustomFieldType] =
     NonEmptyList.of(Text, Numeric, Date, Bool, Money)

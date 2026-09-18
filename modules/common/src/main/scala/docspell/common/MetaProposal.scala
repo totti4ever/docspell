@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import java.time.LocalDate
@@ -14,14 +20,12 @@ import io.circe.generic.semiauto._
 
 /** A proposed meta data to an item.
   *
-  * There is only one value for each proposal type. The list of
-  * candidates is meant to be ordered from the best match to the
-  * lowest match.
+  * There is only one value for each proposal type. The list of candidates is meant to be
+  * ordered from the best match to the lowest match.
   *
-  * The candidate is already "resolved" against the database and
-  * contains a valid record (with its ID and a human readable name).
-  * Additionally it carries a set of "labels" (which may be empty)
-  * that are the source of this candidate.
+  * The candidate is already "resolved" against the database and contains a valid record
+  * (with its ID and a human readable name). Additionally it carries a set of "labels"
+  * (which may be empty) that are the source of this candidate.
   */
 case class MetaProposal(proposalType: MetaProposalType, values: NonEmptyList[Candidate]) {
 
@@ -77,8 +81,7 @@ object MetaProposal {
     implicit val order: Order[Candidate] =
       Order.by(_.ref)
 
-    /** This deviates from standard order to sort None at last.
-      */
+    /** This deviates from standard order to sort None at last. */
     val weightOrder: Order[Option[Double]] = new Order[Option[Double]] {
       def compare(x: Option[Double], y: Option[Double]) =
         (x, y) match {
@@ -90,8 +93,8 @@ object MetaProposal {
     }
   }
 
-  /** Merges candidates with same `IdRef` values and concatenates their
-    * respective labels. The candidate order is preserved.
+  /** Merges candidates with same `IdRef` values and concatenates their respective labels.
+    * The candidate order is preserved.
     */
   def flatten(s: NonEmptyList[Candidate]): NonEmptyList[Candidate] = {
     def mergeInto(

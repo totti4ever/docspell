@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftsclient
 
 import cats.Functor
@@ -22,12 +28,12 @@ object FtsMigration {
 
   sealed trait Result
   object Result {
-    case object WorkDone   extends Result
+    case object WorkDone extends Result
     case object ReIndexAll extends Result
-    case object IndexAll   extends Result
+    case object IndexAll extends Result
 
-    def workDone: Result   = WorkDone
+    def workDone: Result = WorkDone
     def reIndexAll: Result = ReIndexAll
-    def indexAll: Result   = IndexAll
+    def indexAll: Result = IndexAll
   }
 }

@@ -1,6 +1,14 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.MenuBar exposing
     ( ButtonData
     , CheckboxData
+    , DropdownMenu
     , Item(..)
     , MenuBar
     , TextInputData
@@ -18,6 +26,7 @@ import Styles as S
 type Item msg
     = TextInput (TextInputData msg)
     | Checkbox (CheckboxData msg)
+    | RadioButton (CheckboxData msg)
     | PrimaryButton (ButtonData msg)
     | SecondaryButton (ButtonData msg)
     | DeleteButton (ButtonData msg)
@@ -32,6 +41,7 @@ type alias MenuBar msg =
     { start : List (Item msg)
     , end : List (Item msg)
     , rootClasses : String
+    , sticky : Bool
     }
 
 
@@ -78,6 +88,7 @@ type alias LabelData =
 type alias DropdownData msg =
     { linkIcon : String
     , linkClass : List ( String, Bool )
+    , label : String
     , toggleMenu : msg
     , menuOpen : Bool
     , items : List (DropdownMenu msg)
@@ -85,20 +96,21 @@ type alias DropdownData msg =
 
 
 type alias DropdownMenu msg =
-    { icon : String
+    { icon : Html msg
     , label : String
+    , disabled : Bool
     , attrs : List (Attribute msg)
     }
 
 
 view : MenuBar msg -> Html msg
 view =
-    view1 "bg-white dark:bg-bluegray-800"
+    view1 "bg-white dark:bg-slate-800"
 
 
 viewSide : MenuBar msg -> Html msg
 viewSide =
-    view1 "bg-blue-50 dark:bg-bluegray-700"
+    view1 "bg-blue-50 dark:bg-slate-700"
 
 
 view1 : String -> MenuBar msg -> Html msg
@@ -109,12 +121,13 @@ view1 classes mb =
                 (List.map viewItem mb.start)
 
         right =
-            div [ class "flex-grow flex-row flex justify-end space-x-2 w-full" ]
+            div [ class "flex-grow flex-row items-center flex justify-end space-x-2 w-full" ]
                 (List.map viewItem mb.end)
     in
     div
         [ class mb.rootClasses
-        , class "flex flex-col sm:flex-row space-y-1 sm:space-y-0 sticky top-0 z-40"
+        , class "flex flex-col md:flex-row space-y-1 md:space-y-0"
+        , classList [ ( "sticky top-0 z-40", mb.sticky ) ]
         , class classes
         ]
         [ left
@@ -129,7 +142,10 @@ viewItem item =
             makeInput model
 
         Checkbox model ->
-            makeCheckbox model
+            makeCheckbox False model
+
+        RadioButton model ->
+            makeCheckbox True model
 
         PrimaryButton model ->
             makeButton [ ( S.primaryButton, True ) ] model
@@ -160,19 +176,21 @@ makeDropdown : DropdownData msg -> Html msg
 makeDropdown model =
     let
         menuStyle =
-            "absolute right-0 bg-white dark:bg-bluegray-800 border dark:border-bluegray-700 z-50 dark:text-bluegray-300 shadow-lg transition duration-200 min-w-max  "
+            "absolute right-0 bg-white dark:bg-slate-800 border dark:border-slate-700 z-50 dark:text-slate-300 shadow-lg transition duration-200 min-w-max  "
+
+        itemStyleBase =
+            "transition-colors duration-200 items-center block px-4 py-2 text-normal z-50 "
+
+        itemStyleHover =
+            " hover:bg-gray-200 dark:hover:bg-slate-700 dark:hover:text-slate-50"
 
         itemStyle =
-            "transition-colors duration-200 items-center block px-4 py-2 text-normal hover:bg-gray-200 dark:hover:bg-bluegray-700 dark:hover:text-bluegray-50"
+            itemStyleBase ++ itemStyleHover
 
-        menuItem m =
+        menuLink m =
             a
                 (class itemStyle :: m.attrs)
-                [ i
-                    [ class m.icon
-                    , classList [ ( "hidden", m.icon == "" ) ]
-                    ]
-                    []
+                [ m.icon
                 , span
                     [ class "ml-2"
                     , classList [ ( "hidden", m.label == "" ) ]
@@ -180,6 +198,34 @@ makeDropdown model =
                     [ text m.label
                     ]
                 ]
+
+        disabledLink m =
+            a
+                ([ href "#"
+                 , disabled True
+                 , class itemStyleBase
+                 , class "disabled"
+                 ]
+                    ++ m.attrs
+                )
+                [ m.icon
+                , span
+                    [ class "ml-2"
+                    , classList [ ( "hidden", m.label == "" ) ]
+                    ]
+                    [ text m.label
+                    ]
+                ]
+
+        menuItem m =
+            if m.label == "separator" then
+                div [ class "py-1" ] [ hr [ class S.border ] [] ]
+
+            else if m.disabled then
+                disabledLink m
+
+            else
+                menuLink m
     in
     div [ class "relative" ]
         [ a
@@ -189,6 +235,13 @@ makeDropdown model =
             , onClick model.toggleMenu
             ]
             [ i [ class model.linkIcon ] []
+            , if model.label == "" then
+                span [ class "hidden" ] []
+
+              else
+                span [ class "ml-2" ]
+                    [ text model.label
+                    ]
             ]
         , div
             [ class menuStyle
@@ -245,7 +298,7 @@ makeButton btnType model =
                 []
 
             else
-                [ span [ class (iconMargin ++ " hidden sm:inline") ]
+                [ span [ class (iconMargin ++ " hidden md:inline") ]
                     [ text model.label
                     ]
                 ]
@@ -259,20 +312,36 @@ makeButton btnType model =
         (icon ++ label)
 
 
-makeCheckbox : CheckboxData msg -> Html msg
-makeCheckbox model =
+makeCheckbox : Bool -> CheckboxData msg -> Html msg
+makeCheckbox radio model =
+    let
+        withId list =
+            if model.id == "" then
+                list
+
+            else
+                id model.id :: list
+
+        fold rd ck =
+            if radio then
+                rd
+
+            else
+                ck
+    in
     div [ class "" ]
         [ label
             [ class "inline-flex space-x-2 items-center"
             , for model.id
             ]
             [ input
-                [ type_ "checkbox"
-                , onCheck model.tagger
-                , checked model.value
-                , class S.checkboxInput
-                , id model.id
-                ]
+                (withId
+                    [ type_ (fold "radio" "checkbox")
+                    , onCheck model.tagger
+                    , checked model.value
+                    , class (fold S.radioInput S.checkboxInput)
+                    ]
+                )
                 []
             , span [ class "truncate" ]
                 [ text model.label

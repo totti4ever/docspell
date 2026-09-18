@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.ItemInfoHeader exposing (view)
 
 import Api.Model.IdName exposing (IdName)
@@ -18,11 +25,10 @@ import Html.Attributes exposing (..)
 import Messages.Comp.ItemDetail.ItemInfoHeader exposing (Texts)
 import Page exposing (Page(..))
 import Styles as S
-import Util.Maybe
 
 
-view : Texts -> UiSettings -> Model -> Html Msg
-view texts settings model =
+view : Texts -> UiSettings -> Model -> Html Msg -> Html Msg
+view texts settings model beforeTags =
     let
         date =
             ( div
@@ -38,24 +44,27 @@ view texts settings model =
             )
 
         itemStyle =
-            "ml-2 sm:ml-4 py-1 whitespace-nowrap "
+            "ml-2 sm:ml-4 py-1 whitespace-nowrap truncate"
 
         linkStyle =
-            "opacity-75 hover:opacity-100"
+            "opacity-75 hover:opacity-100 "
 
         duedate =
             ( div
-                [ class "ml-2 sm:ml-4 py-1 max-w-min whitespace-nowrap opacity-100"
-                , class S.basicLabel
+                [ class "ml-2 sm:ml-0 py-1 whitespace-nowrap "
+                , classList
+                    [ ( "dark:text-amber-400 text-amber-800 italic underline"
+                      , model.item.dueDate /= Nothing
+                      )
+                    ]
                 , title texts.dueDate
                 ]
                 [ Icons.dueDateIcon2 "mr-2"
                 , Maybe.map texts.formatDate model.item.dueDate
-                    |> Maybe.withDefault ""
+                    |> Maybe.withDefault "-"
                     |> text
                 ]
             , Data.UiSettings.fieldVisible settings Data.Fields.DueDate
-                && Util.Maybe.nonEmpty model.item.dueDate
             )
 
         corr =
@@ -91,7 +100,7 @@ view texts settings model =
                 [ class itemStyle
                 , title texts.basics.folder
                 ]
-                [ Icons.folderIcon2 "mr-2"
+                [ Icons.folderIcon "mr-2"
                 , Comp.LinkTarget.makeFolderLink model.item
                     [ ( linkStyle, True ) ]
                     SetLinkTarget
@@ -111,61 +120,93 @@ view texts settings model =
                 ]
             , True
             )
+
+        isDeleted =
+            model.item.state == "deleted"
+
+        isCreated =
+            model.item.state == "created"
     in
     div [ class "flex flex-col pb-2" ]
-        [ div [ class "flex flex-row items-center text-2xl" ]
-            [ i
-                [ classList
-                    [ ( "hidden", Data.UiSettings.fieldHidden settings Data.Fields.Direction )
+        [ div [ class "flex flex-row items-center text-2xl order-1" ]
+            [ if isDeleted then
+                div
+                    [ classList
+                        [ ( " text-4xl", True )
+                        , ( "hidden", not isDeleted )
+                        ]
+                    , title texts.basics.deleted
                     ]
-                , class (Data.Direction.iconFromString2 model.item.direction)
-                , class "mr-2"
-                , title model.item.direction
-                ]
-                []
+                    [ Icons.trashIcon "mr-2"
+                    ]
+
+              else
+                i
+                    [ classList
+                        [ ( "hidden", Data.UiSettings.fieldHidden settings Data.Fields.Direction )
+                        ]
+                    , class (Data.Direction.iconFromString2 model.item.direction)
+                    , class "mr-2"
+                    , title model.item.direction
+                    ]
+                    []
             , div [ class "flex-grow ml-1 flex flex-col" ]
                 [ div [ class "flex flex-row items-center font-semibold" ]
                     [ text model.item.name
                     , div
                         [ classList
-                            [ ( "hidden", model.item.state /= "created" )
+                            [ ( "hidden", not isCreated )
                             ]
-                        , class "ml-3 text-base label bg-blue-500 dark:bg-lightblue-500 text-white rounded-lg"
+                        , class "ml-3 text-base label bg-blue-500 dark:bg-sky-500 text-white rounded-lg"
                         ]
                         [ text texts.new
+                        , i [ class "fa fa-exclamation ml-2" ] []
+                        ]
+                    , div
+                        [ classList
+                            [ ( "hidden", not isDeleted )
+                            ]
+                        , class "ml-3 text-base label bg-red-500 dark:bg-orange-500 text-white rounded-lg"
+                        ]
+                        [ text texts.basics.deleted
                         , i [ class "fa fa-exclamation ml-2" ] []
                         ]
                     ]
                 ]
             ]
-        , ul [ class "flex flex-col sm:flex-row flex-wrap text-base " ]
+        , div [ class "flex flex-col sm:flex-row flex-wrap text-base order-2" ]
             (List.filter Tuple.second
                 [ date
                 , corr
                 , conc
                 , itemfolder
                 , src
-                , duedate
                 ]
                 |> List.map Tuple.first
             )
+        , div [ class "flex flex-col sm:flex-row flex-wrap text-base order-3" ]
+            (List.filter Tuple.second [ duedate ] |> List.map Tuple.first)
+        , div [ class "order-4 md:order-5" ]
+            [ beforeTags
+            ]
         , renderTagsAndFields settings model
         ]
 
 
 renderTagsAndFields : UiSettings -> Model -> Html Msg
 renderTagsAndFields settings model =
-    div [ class "flex flex-row flex-wrap items-center font-semibold sm:justify-end mt-1 min-h-7" ]
+    div [ class "flex flex-row flex-wrap items-center font-semibold justify-end mt-1 min-h-7 order-5 md:order-4" ]
         (renderTags settings model ++ renderCustomValues settings model)
 
 
 renderTags : UiSettings -> Model -> List (Html Msg)
 renderTags settings model =
     let
-        tagView t =
+        tagView index t =
             Comp.LinkTarget.makeTagLink
                 (IdName t.id t.name)
-                [ ( "label md:text-sm inline-flex ml-2 hover:opacity-90 mt-1 items-center", True )
+                [ ( "label md:text-sm inline-flex hover:opacity-90 mt-1 items-center", True )
+                , ( "mr-0 ml-2", index > 0 )
                 , ( Data.UiSettings.tagColorString2 t settings, True )
                 ]
                 SetLinkTarget
@@ -174,7 +215,7 @@ renderTags settings model =
         []
 
     else
-        List.map tagView model.item.tags
+        List.indexedMap tagView model.item.tags
 
 
 renderCustomValues : UiSettings -> Model -> List (Html Msg)

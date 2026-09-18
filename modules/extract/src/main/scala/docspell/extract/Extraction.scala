@@ -1,8 +1,15 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract
 
 import cats.effect._
 import cats.implicits._
 import fs2.Stream
+import fs2.io.file.Files
 
 import docspell.common._
 import docspell.extract.internal.Text
@@ -12,6 +19,7 @@ import docspell.extract.poi.{PoiExtract, PoiType}
 import docspell.extract.rtf.RtfExtract
 import docspell.files.ImageSize
 import docspell.files.TikaMimetype
+import docspell.logging.Logger
 
 trait Extraction[F[_]] {
 
@@ -25,8 +33,7 @@ trait Extraction[F[_]] {
 
 object Extraction {
 
-  def create[F[_]: Sync: ContextShift](
-      blocker: Blocker,
+  def create[F[_]: Async: Files](
       logger: Logger[F],
       cfg: ExtractConfig
   ): Extraction[F] =
@@ -39,7 +46,7 @@ object Extraction {
         TikaMimetype.resolve(dataType, data).flatMap {
           case MimeType.PdfMatch(_) =>
             PdfExtract
-              .get(data, blocker, lang, cfg.pdf.minTextLen, cfg.ocr, logger)
+              .get(data, lang, cfg.pdf.minTextLen, cfg.ocr, logger)
               .map(ExtractResult.fromEitherResult)
 
           case PoiType(mt) =>
@@ -59,7 +66,7 @@ object Extraction {
 
           case OcrType(mt) =>
             val doExtract = TextExtract
-              .extractOCR(data, blocker, logger, lang.iso3, cfg.ocr)
+              .extractOCR(data, logger, lang.iso3, cfg.ocr)
               .compile
               .lastOrError
               .map(_.value)

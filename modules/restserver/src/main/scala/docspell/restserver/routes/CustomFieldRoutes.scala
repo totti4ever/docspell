@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.data.OptionT
@@ -7,7 +13,7 @@ import cats.implicits._
 import docspell.backend.BackendApp
 import docspell.backend.auth.AuthToken
 import docspell.backend.ops.OCustomFields
-import docspell.backend.ops.OCustomFields.CustomFieldData
+import docspell.backend.ops.OCustomFields.{CustomFieldData, CustomFieldOrder}
 import docspell.common._
 import docspell.restapi.model._
 import docspell.restserver.conv.Conversions
@@ -23,40 +29,45 @@ import org.http4s.dsl.Http4sDsl
 
 object CustomFieldRoutes {
 
-  def apply[F[_]: Effect](backend: BackendApp[F], user: AuthToken): HttpRoutes[F] = {
+  def apply[F[_]: Async](backend: BackendApp[F], user: AuthToken): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 
     HttpRoutes.of {
-      case GET -> Root :? QueryParam.QueryOpt(param) =>
+      case GET -> Root :? QueryParam.QueryOpt(param) +& QueryParam.FieldSort(sort) =>
+        val order = sort.getOrElse(CustomFieldOrder.NameAsc)
         for {
-          fs  <- backend.customFields.findAll(user.account.collective, param.map(_.q))
+          fs <- backend.customFields.findAll(
+            user.account.collectiveId,
+            param.map(_.q),
+            order
+          )
           res <- Ok(CustomFieldList(fs.map(convertField).toList))
         } yield res
 
       case req @ POST -> Root =>
         for {
           data <- req.as[NewCustomField]
-          res  <- backend.customFields.create(convertNewField(user, data))
+          res <- backend.customFields.create(convertNewField(user, data))
           resp <- Ok(convertResult(res))
         } yield resp
 
       case GET -> Root / Ident(id) =>
         (for {
-          field <- OptionT(backend.customFields.findById(user.account.collective, id))
-          res   <- OptionT.liftF(Ok(convertField(field)))
-        } yield res).getOrElseF(NotFound(BasicResult(false, "Not found")))
+          field <- OptionT(backend.customFields.findById(user.account.collectiveId, id))
+          res <- OptionT.liftF(Ok(convertField(field)))
+        } yield res).getOrElseF(NotFound(BasicResult(success = false, "Not found")))
 
       case req @ PUT -> Root / Ident(id) =>
         for {
           data <- req.as[NewCustomField]
-          res  <- backend.customFields.change(convertChangeField(id, user, data))
+          res <- backend.customFields.change(convertChangeField(id, user, data))
           resp <- Ok(convertResult(res))
         } yield resp
 
       case DELETE -> Root / Ident(id) =>
         for {
-          res  <- backend.customFields.delete(user.account.collective, id)
+          res <- backend.customFields.delete(user.account.collectiveId, id)
           resp <- Ok(convertResult(res))
         } yield resp
     }
@@ -77,7 +88,7 @@ object CustomFieldRoutes {
       id,
       in.name,
       in.label,
-      user.account.collective,
+      user.account.collectiveId,
       in.ftype,
       Timestamp.Epoch
     )
@@ -90,7 +101,7 @@ object CustomFieldRoutes {
       in.name,
       in.label,
       in.ftype,
-      user.account.collective
+      user.account.collectiveId
     )
 
   private def convertField(f: CustomFieldData): CustomField =

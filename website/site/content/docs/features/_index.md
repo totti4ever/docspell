@@ -1,8 +1,9 @@
 +++
-title = "Features and Limitations"
-weight = 10
+title = "Features"
+weight = 9
 insert_anchor_links = "right"
 description = "A list of features and limitations."
+template = "docs.html"
 +++
 
 # Features
@@ -13,12 +14,17 @@ description = "A list of features and limitations."
 - Handle multiple documents as one unit
 - OCR using [tesseract](https://github.com/tesseract-ocr/tesseract)
 - [Full-Text Search](@/docs/webapp/finding.md#full-text-search) based
-  on [Apache SOLR](https://lucene.apache.org/solr)
+  on [Apache SOLR](@/docs/configure/fulltext-search.md#solr) or
+  [PostgreSQL's text
+  search](@/docs/configure/fulltext-search.md#postgresql)
 - Conversion to PDF: all files are converted into a PDF file. PDFs
   with only images (as often returned from scanners) are converted
   into searchable PDF/A pdfs.
 - A powerful [query language](@/docs/query/_index.md) to find
   documents
+- The possibility to download all the filtered documents (once at least one filter has been selected). 
+- use [bookmarks](@/docs/webapp/bookmarks.md) to save more complex queries
+- customizable [dashboards](@/docs/webapp/dashboards.md) as the main page
 - Non-destructive: all your uploaded files are never modified and can
   always be downloaded untouched
 - Organize files using tags, folders, [Custom
@@ -31,25 +37,39 @@ description = "A list of features and limitations."
   jobs, set priorities
 - Everything available via a [documented](https://www.openapis.org/)
   [REST Api](@/docs/api/_index.md); allows to [generate
-  clients](https://openapi-generator.tech/docs/generators) for
-  (almost) any language
+  clients](https://openapi-generator.tech/docs/generators) for many
+  languages
+- [OpenID
+  Connect](@/docs/configure/authentication.md#openid-connect-oauth2)
+  support allows Docspell to integrate into your SSO setup, for
+  example with keycloak.
+- Two-Factor Authentication using [TOTP](@/docs/webapp/totp.md) built
+  in
 - mobile-friendly Web-UI with dark and light theme
 - [Create anonymous
   “upload-urls”](@/docs/webapp/uploading.md#anonymous-upload) to
   upload files; these urls allow to be configured with metadata like
   tags, folder etc that are applied to all files uploaded through this
   url
+- [Share](@/docs/webapp/share.md) documents via cryptic public links
+  (optionally protected by a password)
 - [Send documents via e-mail](@/docs/webapp/mailitem.md)
-- [E-Mail notification](@/docs/webapp/notifydueitems.md) for documents
-  with due dates
+- [Notifications](@/docs/webapp/notification.md) for documents with
+  due dates or events via E-Mail, [Matrix](https://matrix.org) or
+  [Gotify](https://gotify.net)
 - [Read your mailboxes](@/docs/webapp/scanmailbox.md) via IMAP to
   import mails into docspell
 - [Edit multiple items](@/docs/webapp/multiedit.md) at once
+- [Merge](@/docs/webapp/merge.md) multiple items
 - REST server and document processing are separate applications which
   can be scaled-out independently
 - Everything stored in a SQL database: PostgreSQL, MariaDB or H2
   - H2 is embedded, a "one-file-only" database, avoids installing db
     servers
+- Choose a [file backend](@/docs/configure/file-backends.md) to store
+  files right in the database, in a S3 compatible storage or also use
+  the filesystem directly
+- Support for encrypted PDFs
 - Files supported:
   - Documents:
     - PDF
@@ -63,21 +83,15 @@ description = "A list of features and limitations."
     - zip
     - [eml](https://en.wikipedia.org/wiki/Email#Filename_extensions)
       (e-mail files in plain text MIME)
+- Extend Docspell via [addons](@/docs/addons/basics.md)
 - Tooling:
+  - [Command Line Interface](@/docs/tools/cli.md) allowing to upload
+    files, watch folders and many more!
   - [Android App](@/docs/tools/android.md) to quickly upload files
     from your android devices
-  - [Watch a folder](@/docs/tools/consumedir.md): watch folders for
-    changes and send files to docspell
-  - [Simple CLI for uploading files](@/docs/tools/ds.md)
-  - [Firefox plugin](@/docs/tools/browserext.md): right click on a
-    link and send the file to docspell
   - [SMTP Gateway](@/docs/tools/smtpgateway.md): Setup a SMTP server
     that delivers mails directly to docspell.
-  - [Paperless Import](@/docs/tools/paperless-import.md) for importing
-    your data from paperless
-  - [Directory Cleaner](@/docs/tools/consumedir-cleaner.md) clean
-    directories with files that have been uploaded to docspell
-- License: GPLv3
+- License: AGPLv3
 
 
 # Limitations
@@ -87,3 +101,4 @@ considering docspell at the moment.
 
 - Documents cannot be modified.
 - You can remove and add documents but there is no versioning.
+- There is no fine grained permission management

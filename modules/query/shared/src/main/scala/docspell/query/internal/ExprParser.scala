@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query.internal
 
 import cats.parse.{Parser => P}
@@ -25,9 +31,9 @@ object ExprParser {
 
   val exprParser: P[Expr] =
     P.recursive[Expr] { recurse =>
-      val andP   = and(recurse)
-      val orP    = or(recurse)
-      val notP   = not(recurse)
+      val andP = and(recurse)
+      val orP = or(recurse)
+      val notP = not(recurse)
       val macros = MacroParser.all
       P.oneOf(macros :: SimpleExprParser.simpleExpr :: andP :: orP :: notP :: Nil)
     }

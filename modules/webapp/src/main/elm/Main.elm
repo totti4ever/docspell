@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Main exposing (init, main)
 
 import Api
@@ -55,7 +62,7 @@ init flags url key =
 
           else
             Cmd.none
-        , Ports.getUiSettings flags
+        , Api.getClientSettings flags GetUiSettings
         ]
     )
 
@@ -85,5 +92,5 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ model.subs
-        , Ports.loadUiSettings GetUiSettings
+        , Ports.receiveServerEvent ReceiveWsMessage
         ]

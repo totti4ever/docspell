@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import java.util.concurrent.ForkJoinPool
@@ -26,7 +32,7 @@ object ThreadFactories {
 
   def ofNameFJ(prefix: String): ForkJoinWorkerThreadFactory =
     new ForkJoinWorkerThreadFactory {
-      val tf      = ForkJoinPool.defaultForkJoinWorkerThreadFactory
+      val tf = ForkJoinPool.defaultForkJoinWorkerThreadFactory
       val counter = new AtomicLong(0)
 
       def newThread(pool: ForkJoinPool): ForkJoinWorkerThread = {

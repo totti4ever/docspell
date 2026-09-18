@@ -1,116 +1,150 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver
+
+import scala.concurrent.duration._
 
 import cats.effect._
 import cats.implicits._
 import fs2.Stream
+import fs2.concurrent.Topic
+import fs2.io.file.Files
+import fs2.io.net.Network
 
-import docspell.backend.auth.AuthToken
+import docspell.backend.msg.Topics
+import docspell.backend.ops.ONode
 import docspell.common._
-import docspell.restserver.http4s.EnvMiddleware
-import docspell.restserver.routes._
-import docspell.restserver.webapp._
+import docspell.pubsub.naive.NaivePubSub
+import docspell.restserver.http4s.InternalHeader
+import docspell.restserver.ws.OutputEvent
+import docspell.restserver.ws.OutputEvent.KeepAlive
+import docspell.store.Store
+import docspell.store.records.RInternalSetting
 
 import org.http4s._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.ember.client.EmberClientBuilder
+import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.headers.Location
 import org.http4s.implicits._
 import org.http4s.server.Router
-import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.middleware.Logger
+import org.http4s.server.websocket.WebSocketBuilder2
 
 object RestServer {
 
-  def stream[F[_]: ConcurrentEffect](
+  def serve[F[_]: Async: Files: Network](
       cfg: Config,
       pools: Pools
-  )(implicit T: Timer[F], CS: ContextShift[F]): Stream[F, Nothing] = {
+  ): F[ExitCode] =
+    for {
+      wsTopic <- Topic[F, OutputEvent]
+      keepAlive = Stream
+        .awakeEvery[F](30.seconds)
+        .map(_ => KeepAlive)
+        .through(wsTopic.publish)
 
-    val templates = TemplateRoutes[F](pools.blocker, cfg)
-    val app = for {
-      restApp <-
-        RestAppImpl
-          .create[F](cfg, pools.connectEC, pools.httpClientEC, pools.blocker)
-      httpApp = Router(
-        "/api/info"     -> routes.InfoRoutes(),
-        "/api/v1/open/" -> openRoutes(cfg, restApp),
-        "/api/v1/sec/" -> Authenticate(restApp.backend.login, cfg.auth) { token =>
-          securedRoutes(cfg, pools, restApp, token)
-        },
-        "/api/v1/admin" -> AdminRoutes(cfg.adminEndpoint) {
-          adminRoutes(cfg, restApp)
-        },
-        "/api/doc"    -> templates.doc,
-        "/app/assets" -> EnvMiddleware(WebjarRoutes.appRoutes[F](pools.blocker)),
-        "/app"        -> EnvMiddleware(templates.app),
-        "/sw.js"      -> EnvMiddleware(templates.serviceWorker),
-        "/"           -> redirectTo("/app")
-      ).orNotFound
+      logger = docspell.logging.getLogger[F]
+      _ <- logger.info(s"Starting server with options ${cfg.serverOptions}")
 
-      finalHttpApp = Logger.httpApp(logHeaders = false, logBody = false)(httpApp)
+      server =
+        Stream
+          .resource(createApp(cfg, pools, wsTopic))
+          .flatMap { case (restApp, pubSub, setting) =>
+            Stream(
+              restApp.subscriptions,
+              restApp.eventConsume(maxConcurrent = 2),
+              Stream.eval {
+                EmberServerBuilder
+                  .default[F]
+                  .withHost(cfg.bind.address)
+                  .withPort(cfg.bind.port)
+                  .withMaxConnections(cfg.serverOptions.maxConnections)
+                  .withHttpWebSocketApp(createHttpApp(setting, pubSub, restApp))
+                  .toggleHttp2(cfg.serverOptions.enableHttp2)
+                  .build
+                  .useForever
+              }
+            )
+          }
+      exit <-
+        (server ++ Stream(keepAlive)).parJoinUnbounded.compile.drain.as(ExitCode.Success)
+    } yield exit
 
-    } yield finalHttpApp
-
-    Stream
-      .resource(app)
-      .flatMap(httpApp =>
-        BlazeServerBuilder[F](pools.restEC)
-          .bindHttp(cfg.bind.port, cfg.bind.address)
-          .withHttpApp(httpApp)
-          .withoutBanner
-          .serve
-      )
-  }.drain
-
-  def securedRoutes[F[_]: Effect: ContextShift](
+  def createApp[F[_]: Async: Files: Network](
       cfg: Config,
       pools: Pools,
-      restApp: RestApp[F],
-      token: AuthToken
-  ): HttpRoutes[F] =
+      wsTopic: Topic[F, OutputEvent]
+  ): Resource[
+    F,
+    (RestApp[F], NaivePubSub[F], RInternalSetting)
+  ] =
+    for {
+      httpClient <- EmberClientBuilder.default[F].build
+      store <- Store.create[F](
+        cfg.backend.jdbc,
+        cfg.backend.databaseSchema,
+        cfg.backend.files.defaultFileRepositoryConfig,
+        pools.connectEC
+      )
+      setting <- Resource.eval(store.transact(RInternalSetting.create))
+      pubSub <- NaivePubSub(
+        cfg.pubSubConfig(setting.internalRouteKey),
+        store,
+        httpClient
+      )(Topics.all.map(_.topic))
+
+      nodes <- ONode(store)
+      _ <- nodes.withRegistered(
+        cfg.appId,
+        NodeType.Restserver,
+        cfg.internalUrl,
+        cfg.auth.serverSecret.some
+      )
+
+      restApp <- RestAppImpl
+        .create[F](cfg, pools, store, httpClient, pubSub, wsTopic)
+    } yield (restApp, pubSub, setting)
+
+  def createHttpApp[F[_]: Async](
+      internSettings: RInternalSetting,
+      pubSub: NaivePubSub[F],
+      restApp: RestApp[F]
+  )(
+      wsB: WebSocketBuilder2[F]
+  ) = {
+    val logger = docspell.logging.getLogger[F]
+    val internal = Router(
+      "/" -> redirectTo("/app"),
+      "/internal" -> InternalHeader(internSettings.internalRouteKey) {
+        internalRoutes(pubSub)
+      }
+    )
+    val httpApp = (internal <+> restApp.routes(wsB)).orNotFound
+      .mapF(
+        _.attempt
+          .flatMap { eab =>
+            eab.fold(
+              ex =>
+                logger.error(ex)("Processing the request resulted in an error.").as(eab),
+              _ => eab.pure[F]
+            )
+          }
+          .rethrow
+      )
+    Logger.httpApp(logHeaders = false, logBody = false)(httpApp)
+  }
+
+  def internalRoutes[F[_]: Async](pubSub: NaivePubSub[F]): HttpRoutes[F] =
     Router(
-      "auth"                    -> LoginRoutes.session(restApp.backend.login, cfg, token),
-      "tag"                     -> TagRoutes(restApp.backend, token),
-      "equipment"               -> EquipmentRoutes(restApp.backend, token),
-      "organization"            -> OrganizationRoutes(restApp.backend, token),
-      "person"                  -> PersonRoutes(restApp.backend, token),
-      "source"                  -> SourceRoutes(restApp.backend, token),
-      "user"                    -> UserRoutes(restApp.backend, token),
-      "collective"              -> CollectiveRoutes(restApp.backend, token),
-      "queue"                   -> JobQueueRoutes(restApp.backend, token),
-      "item"                    -> ItemRoutes(cfg, pools.blocker, restApp.backend, token),
-      "items"                   -> ItemMultiRoutes(restApp.backend, token),
-      "attachment"              -> AttachmentRoutes(pools.blocker, restApp.backend, token),
-      "attachments"             -> AttachmentMultiRoutes(restApp.backend, token),
-      "upload"                  -> UploadRoutes.secured(restApp.backend, cfg, token),
-      "checkfile"               -> CheckFileRoutes.secured(restApp.backend, token),
-      "email/send"              -> MailSendRoutes(restApp.backend, token),
-      "email/settings"          -> MailSettingsRoutes(restApp.backend, token),
-      "email/sent"              -> SentMailRoutes(restApp.backend, token),
-      "usertask/notifydueitems" -> NotifyDueItemsRoutes(cfg, restApp.backend, token),
-      "usertask/scanmailbox"    -> ScanMailboxRoutes(restApp.backend, token),
-      "calevent/check"          -> CalEventCheckRoutes(),
-      "fts"                     -> FullTextIndexRoutes.secured(cfg, restApp.backend, token),
-      "folder"                  -> FolderRoutes(restApp.backend, token),
-      "customfield"             -> CustomFieldRoutes(restApp.backend, token)
+      "pubsub" -> pubSub.receiveRoute
     )
 
-  def openRoutes[F[_]: Effect](cfg: Config, restApp: RestApp[F]): HttpRoutes[F] =
-    Router(
-      "auth"        -> LoginRoutes.login(restApp.backend.login, cfg),
-      "signup"      -> RegisterRoutes(restApp.backend, cfg),
-      "upload"      -> UploadRoutes.open(restApp.backend, cfg),
-      "checkfile"   -> CheckFileRoutes.open(restApp.backend),
-      "integration" -> IntegrationEndpointRoutes.open(restApp.backend, cfg)
-    )
-
-  def adminRoutes[F[_]: Effect](cfg: Config, restApp: RestApp[F]): HttpRoutes[F] =
-    Router(
-      "fts"  -> FullTextIndexRoutes.admin(cfg, restApp.backend),
-      "user" -> UserRoutes.admin(restApp.backend),
-      "info" -> InfoRoutes.admin(cfg)
-    )
-
-  def redirectTo[F[_]: Effect](path: String): HttpRoutes[F] = {
+  def redirectTo[F[_]: Async](path: String): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] {}
     import dsl._
 
@@ -118,8 +152,13 @@ object RestServer {
       Response[F](
         Status.SeeOther,
         body = Stream.empty,
-        headers = Headers.of(Location(Uri(path = path)))
+        headers = Headers(Location(Uri(path = Uri.Path.unsafeFromString(path))))
       ).pure[F]
     }
+  }
+
+  implicit final class EmberServerBuilderExt[F[_]](self: EmberServerBuilder[F]) {
+    def toggleHttp2(flag: Boolean) =
+      if (flag) self.withHttp2 else self.withoutHttp2
   }
 }

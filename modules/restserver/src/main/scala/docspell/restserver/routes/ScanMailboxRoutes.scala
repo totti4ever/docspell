@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.data.OptionT
@@ -9,7 +15,7 @@ import docspell.backend.auth.AuthToken
 import docspell.common._
 import docspell.restapi.model._
 import docspell.restserver.conv.Conversions
-import docspell.store.usertask._
+import docspell.scheduler.usertask._
 
 import org.http4s._
 import org.http4s.circe.CirceEntityDecoder._
@@ -18,29 +24,37 @@ import org.http4s.dsl.Http4sDsl
 
 object ScanMailboxRoutes {
 
-  def apply[F[_]: Effect](
+  def apply[F[_]: Async](
       backend: BackendApp[F],
       user: AuthToken
   ): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] {}
-    val ut  = backend.userTask
+    val ut = backend.userTask
     import dsl._
 
     HttpRoutes.of {
+      case GET -> Root =>
+        ut.getScanMailbox(UserTaskScope(user.account))
+          .evalMap(task => taskToSettings(user.account.userId, backend, task))
+          .compile
+          .toVector
+          .map(v => ScanMailboxSettingsList(v.toList))
+          .flatMap(Ok(_))
+
       case GET -> Root / Ident(id) =>
         (for {
-          task <- ut.findScanMailbox(id, user.account)
-          res  <- OptionT.liftF(taskToSettings(user.account, backend, task))
+          task <- ut.findScanMailbox(id, UserTaskScope(user.account))
+          res <- OptionT.liftF(taskToSettings(user.account.userId, backend, task))
           resp <- OptionT.liftF(Ok(res))
         } yield resp).getOrElseF(NotFound())
 
       case req @ POST -> Root / "startonce" =>
         for {
-          data  <- req.as[ScanMailboxSettings]
+          data <- req.as[ScanMailboxSettings]
           newId <- Ident.randomId[F]
-          task  <- makeTask(newId, user.account, data)
+          task <- makeTask(newId, user.account, data)
           res <-
-            ut.executeNow(user.account, task)
+            ut.executeNow(UserTaskScope(user.account), None, task)
               .attempt
               .map(Conversions.basicResult(_, "Submitted successfully."))
           resp <- Ok(res)
@@ -49,7 +63,7 @@ object ScanMailboxRoutes {
       case DELETE -> Root / Ident(id) =>
         for {
           res <-
-            ut.deleteTask(user.account, id)
+            ut.deleteTask(UserTaskScope(user.account), id)
               .attempt
               .map(Conversions.basicResult(_, "Deleted successfully."))
           resp <- Ok(res)
@@ -60,7 +74,7 @@ object ScanMailboxRoutes {
           for {
             task <- makeTask(data.id, user.account, data)
             res <-
-              ut.submitScanMailbox(user.account, task)
+              ut.submitScanMailbox(UserTaskScope(user.account), None, task)
                 .attempt
                 .map(Conversions.basicResult(_, "Saved successfully."))
             resp <- Ok(res)
@@ -68,35 +82,28 @@ object ScanMailboxRoutes {
         for {
           data <- req.as[ScanMailboxSettings]
           resp <-
-            if (data.id.isEmpty) Ok(BasicResult(false, "Empty id is not allowed"))
+            if (data.id.isEmpty)
+              Ok(BasicResult(success = false, "Empty id is not allowed"))
             else run(data)
         } yield resp
 
       case req @ POST -> Root =>
         for {
-          data  <- req.as[ScanMailboxSettings]
+          data <- req.as[ScanMailboxSettings]
           newId <- Ident.randomId[F]
-          task  <- makeTask(newId, user.account, data)
+          task <- makeTask(newId, user.account, data)
           res <-
-            ut.submitScanMailbox(user.account, task)
+            ut.submitScanMailbox(UserTaskScope(user.account), None, task)
               .attempt
               .map(Conversions.basicResult(_, "Saved successfully."))
           resp <- Ok(res)
         } yield resp
-
-      case GET -> Root =>
-        ut.getScanMailbox(user.account)
-          .evalMap(task => taskToSettings(user.account, backend, task))
-          .compile
-          .toVector
-          .map(v => ScanMailboxSettingsList(v.toList))
-          .flatMap(Ok(_))
     }
   }
 
   def makeTask[F[_]: Sync](
       id: Ident,
-      user: AccountId,
+      user: AccountInfo,
       settings: ScanMailboxSettings
   ): F[UserTask[ScanMailboxArgs]] =
     Sync[F].pure(
@@ -109,6 +116,7 @@ object ScanMailboxRoutes {
         ScanMailboxArgs(
           user,
           settings.imapConnection,
+          Option(settings.scanRecursively),
           settings.folders,
           settings.receivedSinceHours.map(_.toLong).map(Duration.hours),
           settings.targetFolder,
@@ -119,20 +127,21 @@ object ScanMailboxRoutes {
           settings.tags.map(_.items),
           settings.subjectFilter,
           settings.language,
-          settings.postHandleAll
+          settings.postHandleAll,
+          settings.attachmentsOnly
         )
       )
     )
 
   def taskToSettings[F[_]: Sync](
-      account: AccountId,
+      userId: Ident,
       backend: BackendApp[F],
       task: UserTask[ScanMailboxArgs]
   ): F[ScanMailboxSettings] =
     for {
       conn <-
         backend.mail
-          .getImapSettings(account, None)
+          .getImapSettings(userId, None)
           .map(
             _.find(_.name == task.args.imapConnection)
               .map(_.name)
@@ -143,6 +152,7 @@ object ScanMailboxRoutes {
       task.summary,
       conn.getOrElse(Ident.unsafe("")),
       task.args.folders,
+      task.args.scanRecursively.getOrElse(false),
       task.timer,
       task.args.receivedSince.map(_.hours.toInt),
       task.args.targetFolder,
@@ -153,6 +163,7 @@ object ScanMailboxRoutes {
       task.args.fileFilter,
       task.args.subjectFilter,
       task.args.language,
-      task.args.postHandleAll
+      task.args.postHandleAll,
+      task.args.attachmentsOnly
     )
 }

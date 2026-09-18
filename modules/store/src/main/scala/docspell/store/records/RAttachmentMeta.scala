@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -11,7 +17,7 @@ import doobie._
 import doobie.implicits._
 
 case class RAttachmentMeta(
-    id: Ident, //same as RAttachment.id
+    id: Ident, // same as RAttachment.id
     content: Option[String],
     nerlabels: List[NerLabel],
     proposals: MetaProposalList,
@@ -34,12 +40,12 @@ object RAttachmentMeta {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "attachmentmeta"
 
-    val id        = Column[Ident]("attachid", this)
-    val content   = Column[String]("content", this)
+    val id = Column[Ident]("attachid", this)
+    val content = Column[String]("content", this)
     val nerlabels = Column[List[NerLabel]]("nerlabels", this)
     val proposals = Column[MetaProposalList]("itemproposals", this)
-    val pages     = Column[Int]("page_count", this)
-    val language  = Column[Language]("language", this)
+    val pages = Column[Int]("page_count", this)
+    val language = Column[Language]("language", this)
     val all =
       NonEmptyList.of[Column[_]](
         id,
@@ -112,6 +118,9 @@ object RAttachmentMeta {
 
   def updatePageCount(mid: Ident, pageCount: Option[Int]): ConnectionIO[Int] =
     DML.update(T, T.id === mid, DML.set(T.pages.setTo(pageCount)))
+
+  def updateContent(id: Ident, text: String): ConnectionIO[Int] =
+    DML.update(T, T.id === id, DML.set(T.content.setTo(text)))
 
   def delete(attachId: Ident): ConnectionIO[Int] =
     DML.delete(T, T.id === attachId)

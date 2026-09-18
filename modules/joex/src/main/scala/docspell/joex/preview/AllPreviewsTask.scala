@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.preview
 
 import cats.effect._
@@ -5,26 +11,26 @@ import cats.implicits._
 import fs2.{Chunk, Stream}
 
 import docspell.backend.JobFactory
-import docspell.backend.ops.OJoex
 import docspell.common.MakePreviewArgs.StoreMode
 import docspell.common._
-import docspell.joex.scheduler.Context
-import docspell.joex.scheduler.Task
-import docspell.store.queue.JobQueue
+import docspell.scheduler._
+import docspell.scheduler.usertask.UserTaskScope
+import docspell.store.Store
 import docspell.store.records.RAttachment
-import docspell.store.records.RJob
 
 object AllPreviewsTask {
 
   type Args = AllPreviewsArgs
 
-  def apply[F[_]: Sync](queue: JobQueue[F], joex: OJoex[F]): Task[F, Args, Unit] =
+  def apply[F[_]: Sync](
+      jobStore: JobStore[F],
+      store: Store[F]
+  ): Task[F, Args, Unit] =
     Task { ctx =>
       for {
         _ <- ctx.logger.info("Generating previews for attachments")
-        n <- submitConversionJobs(ctx, queue)
+        n <- submitConversionJobs(ctx, store, jobStore)
         _ <- ctx.logger.info(s"Submitted $n jobs")
-        _ <- joex.notifyAllNodes
       } yield ()
     }
 
@@ -33,14 +39,17 @@ object AllPreviewsTask {
 
   def submitConversionJobs[F[_]: Sync](
       ctx: Context[F, Args],
-      queue: JobQueue[F]
+      store: Store[F],
+      jobStore: JobStore[F]
   ): F[Int] =
-    ctx.store
+    store
       .transact(findAttachments(ctx))
       .chunks
       .flatMap(createJobs[F](ctx))
       .chunks
-      .evalMap(jobs => queue.insertAllIfNew(jobs.toVector).map(_ => jobs.size))
+      .evalMap(jobs =>
+        jobStore.insertAllIfNew(jobs.map(_.encode).toVector).map(_ => jobs.size)
+      )
       .evalTap(n => ctx.logger.debug(s"Submitted $n jobs …"))
       .compile
       .foldMonoid
@@ -55,23 +64,24 @@ object AllPreviewsTask {
 
   private def createJobs[F[_]: Sync](
       ctx: Context[F, Args]
-  )(ras: Chunk[RAttachment]): Stream[F, RJob] = {
-    val collectiveOrSystem = {
-      val cid = ctx.args.collective.getOrElse(DocspellSystem.taskGroup)
-      AccountId(cid, DocspellSystem.user)
-    }
-
-    def mkJob(ra: RAttachment): F[RJob] =
+  )(ras: Chunk[RAttachment]): Stream[F, Job[MakePreviewArgs]] = {
+    def mkJob(ra: RAttachment): F[Job[MakePreviewArgs]] =
       JobFactory.makePreview(
         MakePreviewArgs(ra.id, ctx.args.storeMode),
-        collectiveOrSystem.some
+        ctx.args.collective
+          .map(UserTaskScope.collective)
+          .getOrElse(UserTaskScope.system)
       )
 
     val jobs = ras.traverse(mkJob)
     Stream.evalUnChunk(jobs)
   }
 
-  def job[F[_]: Sync](storeMode: MakePreviewArgs.StoreMode, cid: Option[Ident]): F[RJob] =
-    JobFactory.allPreviews(AllPreviewsArgs(cid, storeMode), None)
-
+  def job[F[_]: Sync](
+      storeMode: MakePreviewArgs.StoreMode,
+      cid: Option[CollectiveId]
+  ): F[Job[String]] =
+    JobFactory
+      .allPreviews(AllPreviewsArgs(cid, storeMode), UserTaskScope.system)
+      .map(_.encode)
 }

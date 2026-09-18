@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.Color exposing
     ( Color(..)
     , all
@@ -236,7 +243,7 @@ toStringFg2 color =
             "text-purple-600 dark:text-purple-400"
 
         Pink ->
-            "text-pink-600 text:text-pink-400"
+            "text-pink-600 dark:text-pink-400"
 
         Brown ->
             "text-amber-700 dark:text-amber-700"

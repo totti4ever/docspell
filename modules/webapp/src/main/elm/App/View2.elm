@@ -1,9 +1,19 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module App.View2 exposing (view)
 
 import Api.Model.AuthResult exposing (AuthResult)
 import App.Data exposing (..)
 import Comp.Basic as B
+import Data.Environment as Env
 import Data.Flags
+import Data.Icons as Icons
+import Data.UiSettings
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
@@ -12,14 +22,17 @@ import Messages.App exposing (Texts)
 import Messages.UiLanguage
 import Page exposing (Page(..))
 import Page.CollectiveSettings.View2 as CollectiveSettings
-import Page.Home.Data
-import Page.Home.View2 as Home
+import Page.Dashboard.View as Dashboard
 import Page.ItemDetail.View2 as ItemDetail
 import Page.Login.View2 as Login
 import Page.ManageData.View2 as ManageData
 import Page.NewInvite.View2 as NewInvite
 import Page.Queue.View2 as Queue
 import Page.Register.View2 as Register
+import Page.Search.Data
+import Page.Search.View2 as Search
+import Page.Share.View as Share
+import Page.ShareDetail.View as ShareDetail
 import Page.Upload.View2 as Upload
 import Page.UserSettings.View2 as UserSettings
 import Styles as S
@@ -34,7 +47,7 @@ view model =
 
 topNavbar : Model -> Html Msg
 topNavbar model =
-    case model.flags.account of
+    case Data.Flags.getAccount model.flags of
         Just acc ->
             topNavUser acc model
 
@@ -46,7 +59,7 @@ topNavUser : AuthResult -> Model -> Html Msg
 topNavUser auth model =
     let
         texts =
-            Messages.get <| App.Data.getUiLanguage model
+            Messages.get (App.Data.getUiLanguage model) model.uiSettings.timeZone
     in
     nav
         [ id "top-nav"
@@ -59,10 +72,26 @@ topNavUser auth model =
             , disabled = not (Page.hasSidebar model.page)
             , attrs = [ href "#" ]
             , baseStyle = "font-bold inline-flex items-center px-4 py-2"
-            , activeStyle = "hover:bg-blue-200 dark:hover:bg-bluegray-800 w-12"
+            , activeStyle = "hover:bg-blue-200 dark:hover:bg-slate-800 w-12"
             }
-        , headerNavItem model
-        , div [ class "flex flex-grow justify-end" ]
+        , headerNavItem True model
+        , div [ class "flex flex-grow justify-center" ]
+            [ a
+                [ class S.infoMessageBase
+                , class "my-2 px-1 py-1 rounded-lg inline-block hover:opacity-50"
+                , classList [ ( "hidden", not model.showNewItemsArrived ) ]
+                , if Page.isSearchPage model.page || Page.isDashboardPage model.page then
+                    href "#"
+
+                  else
+                    Page.href (SearchPage Nothing)
+                , onClick ToggleShowNewItemsArrived
+                ]
+                [ i [ class "fa fa-exclamation-circle mr-1" ] []
+                , text texts.app.newItemsArrived
+                ]
+            ]
+        , div [ class "flex justify-end" ]
             [ userMenu texts.app auth model
             , dataMenu texts.app auth model
             ]
@@ -75,7 +104,16 @@ topNavAnon model =
         [ id "top-nav"
         , class styleTopNav
         ]
-        [ headerNavItem model
+        [ B.genericButton
+            { label = ""
+            , icon = "fa fa-bars"
+            , handler = onClick ToggleSidebar
+            , disabled = not (Page.hasSidebar model.page)
+            , attrs = [ href "#" ]
+            , baseStyle = "font-bold inline-flex items-center px-4 py-2"
+            , activeStyle = "hover:bg-blue-200 dark:hover:bg-slate-800 w-12"
+            }
+        , headerNavItem False model
         , div [ class "flex flex-grow justify-end" ]
             [ langMenu model
             , a
@@ -89,11 +127,24 @@ topNavAnon model =
         ]
 
 
-headerNavItem : Model -> Html Msg
-headerNavItem model =
-    a
-        [ class "inline-flex font-bold hover:bg-blue-200 dark:hover:bg-bluegray-800 items-center px-4"
-        , Page.href HomePage
+headerNavItem : Bool -> Model -> Html Msg
+headerNavItem authenticated model =
+    let
+        tag =
+            if authenticated then
+                a
+
+            else
+                div
+    in
+    tag
+        [ class "inline-flex font-bold items-center px-4"
+        , classList [ ( "hover:bg-blue-200 dark:hover:bg-slate-800", authenticated ) ]
+        , if authenticated then
+            Page.href DashboardPage
+
+          else
+            href "#"
         ]
         [ img
             [ src (model.flags.config.docspellAssetPath ++ "/img/logo-96.png")
@@ -110,15 +161,18 @@ mainContent : Model -> Html Msg
 mainContent model =
     let
         texts =
-            Messages.get <| App.Data.getUiLanguage model
+            Messages.get (App.Data.getUiLanguage model) model.uiSettings.timeZone
     in
     div
         [ id "main"
         , class styleMain
         ]
         (case model.page of
-            HomePage ->
-                viewHome texts model
+            DashboardPage ->
+                viewDashboard texts model
+
+            SearchPage bmId ->
+                viewSearch texts bmId model
 
             CollectiveSettingPage ->
                 viewCollectiveSettings texts model
@@ -146,6 +200,12 @@ mainContent model =
 
             ItemDetailPage id ->
                 viewItemDetail texts id model
+
+            SharePage id ->
+                viewShare texts id model
+
+            ShareDetailPage shareId itemId ->
+                viewShareDetail texts shareId itemId model
         )
 
 
@@ -155,29 +215,29 @@ mainContent model =
 
 styleTopNav : String
 styleTopNav =
-    "top-0 fixed z-50 w-full flex flex-row justify-start shadow-sm h-12 bg-blue-100 dark:bg-bluegray-900 text-gray-800 dark:text-bluegray-200 antialiased"
+    "top-0 fixed z-50 w-full flex flex-row justify-start shadow-sm h-12 bg-blue-100 dark:bg-slate-900 text-gray-800 dark:text-slate-200 antialiased"
 
 
 styleMain : String
 styleMain =
-    "mt-12 flex md:flex-row flex-col w-full h-screen-12 overflow-y-hidden bg-white dark:bg-bluegray-800 text-gray-800 dark:text-bluegray-300 antialiased"
+    "mt-12 flex md:flex-row flex-col w-full h-screen-12 overflow-y-hidden bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-300 antialiased"
 
 
 langMenu : Model -> Html Msg
 langMenu model =
     let
         texts =
-            Messages.get <| App.Data.getUiLanguage model
+            Messages.get (App.Data.getUiLanguage model) model.uiSettings.timeZone
 
         langItem lang =
             let
                 langMsg =
-                    Messages.get lang
+                    Messages.get lang model.uiSettings.timeZone
             in
             a
                 [ classList
                     [ ( dropdownItem, True )
-                    , ( "bg-gray-200 dark:bg-bluegray-700", lang == texts.lang )
+                    , ( "bg-gray-200 dark:bg-slate-700", lang == texts.lang )
                     ]
                 , onClick (SetLanguage lang)
                 , href "#"
@@ -210,17 +270,28 @@ dataMenu texts _ model =
     div [ class "relative" ]
         [ a
             [ class dropdownLink
+            , class "inline-block relative"
             , onClick ToggleNavMenu
             , href "#"
             ]
             [ i [ class "fa fa-cogs" ] []
+            , div
+                [ class "h-5 w-5 rounded-full text-xs px-1 py-1 absolute top-1 left-1 font-bold"
+                , class "dark:bg-sky-500 dark:text-gray-200"
+                , class "bg-blue-500 text-gray-50"
+                , classList [ ( "hidden", model.jobsWaiting <= 0 ) ]
+                ]
+                [ div [ class "-mt-0.5 mx-auto text-center" ]
+                    [ text (String.fromInt model.jobsWaiting)
+                    ]
+                ]
             ]
         , div
             [ class dropdownMenu
             , classList [ ( "hidden", not model.navMenuOpen ) ]
             ]
             [ dataPageLink model
-                HomePage
+                DashboardPage
                 []
                 [ img
                     [ class "w-4 inline-block"
@@ -228,14 +299,22 @@ dataMenu texts _ model =
                     ]
                     []
                 , div [ class "inline-block ml-2" ]
-                    [ text texts.items
+                    [ text texts.dashboard
                     ]
                 ]
             , div [ class "py-1" ] [ hr [ class S.border ] [] ]
             , dataPageLink model
+                (SearchPage Nothing)
+                []
+                [ Icons.searchIcon "w-6"
+                , span [ class "ml-1" ]
+                    [ text texts.items
+                    ]
+                ]
+            , dataPageLink model
                 ManageDataPage
                 []
-                [ i [ class "fa fa-cubes w-6" ] []
+                [ Icons.metadataIcon "w-6"
                 , span [ class "ml-1" ]
                     [ text texts.manageData
                     ]
@@ -244,7 +323,7 @@ dataMenu texts _ model =
             , dataPageLink model
                 (UploadPage Nothing)
                 []
-                [ i [ class "fa fa-upload w-6" ] []
+                [ Icons.fileUploadIcon "w-6"
                 , span [ class "ml-1" ]
                     [ text texts.uploadFiles
                     ]
@@ -252,7 +331,14 @@ dataMenu texts _ model =
             , dataPageLink model
                 QueuePage
                 []
-                [ i [ class "fa fa-tachometer-alt w-6" ] []
+                [ i
+                    [ if model.jobsWaiting <= 0 then
+                        class "fa fa-tachometer-alt w-6"
+
+                      else
+                        class "fa fa-tachometer-alt w-6 animate-pulse dark:text-sky-500 text-blue-500"
+                    ]
+                    []
                 , span [ class "ml-1" ]
                     [ text texts.processingQueue
                     ]
@@ -278,11 +364,11 @@ dataMenu texts _ model =
                 ]
             , a
                 [ class dropdownItem
-                , href "https://docspell.org/docs"
+                , href Data.UiSettings.documentationSite
                 , target "_new"
-                , title "Opens https://docspell.org/docs"
+                , title ("Opens " ++ Data.UiSettings.documentationSite)
                 ]
-                [ i [ class "fa fa-question-circle w-6" ] []
+                [ Icons.documentationIcon "w-6"
                 , span [ class "ml-1" ] [ text texts.help ]
                 , span [ class "float-right" ]
                     [ i [ class "fa fa-external-link-alt w-6" ] []
@@ -357,7 +443,7 @@ userPageLink model page children =
     a
         [ classList
             [ ( dropdownItem, True )
-            , ( "bg-gray-200 dark:bg-bluegray-700", model.page == page )
+            , ( "bg-gray-200 dark:bg-slate-700", model.page == page )
             ]
         , onClick ToggleUserMenu
         , Page.href page
@@ -370,7 +456,7 @@ dataPageLink model page classes children =
     a
         [ classList
             ([ ( dropdownItem, True )
-             , ( "bg-gray-200 dark:bg-bluegray-700", model.page == page )
+             , ( "bg-gray-200 dark:bg-slate-700", model.page == page )
              ]
                 ++ classes
             )
@@ -382,12 +468,12 @@ dataPageLink model page classes children =
 
 dropdownLink : String
 dropdownLink =
-    "px-4 py-2 w-12 font-bold inline-flex h-full items-center hover:bg-blue-200 dark:hover:bg-bluegray-800"
+    "px-4 py-2 w-12 font-bold inline-flex h-full items-center hover:bg-blue-200 dark:hover:bg-slate-800"
 
 
 dropdownItem : String
 dropdownItem =
-    "transition-colors duration-200 items-center block px-4 py-2 text-normal hover:bg-gray-200 dark:hover:bg-bluegray-700 dark:hover:text-bluegray-50"
+    "transition-colors duration-200 items-center block px-4 py-2 text-normal hover:bg-gray-200 dark:hover:bg-slate-700 dark:hover:text-slate-50"
 
 
 dropdownHeadItem : String
@@ -397,23 +483,95 @@ dropdownHeadItem =
 
 dropdownMenu : String
 dropdownMenu =
-    " absolute right-0 bg-white dark:bg-bluegray-800 border dark:border-bluegray-700 dark:text-bluegray-300 shadow-lg opacity-1 transition duration-200 min-w-max "
+    " absolute right-0 bg-white dark:bg-slate-800 border dark:border-slate-700 dark:text-slate-300 shadow-lg opacity-1 transition duration-200 min-w-max "
 
 
-viewHome : Messages -> Model -> List (Html Msg)
-viewHome texts model =
-    [ Html.map HomeMsg
-        (Home.viewSidebar texts.home
+modelEnv : Model -> Env.View
+modelEnv model =
+    { sidebarVisible = model.sidebarVisible
+    , flags = model.flags
+    , settings = model.uiSettings
+    , selectedItems = model.selectedItems
+    }
+
+
+viewDashboard : Messages -> Model -> List (Html Msg)
+viewDashboard texts model =
+    [ Html.map DashboardMsg
+        (Dashboard.viewSidebar texts.dashboard
+            model.sidebarVisible
+            model.flags
+            model.version
+            model.uiSettings
+            model.dashboardModel
+        )
+    , Html.map DashboardMsg
+        (Dashboard.viewContent texts.dashboard
+            model.flags
+            model.uiSettings
+            model.dashboardModel
+        )
+    ]
+
+
+viewShare : Messages -> String -> Model -> List (Html Msg)
+viewShare texts shareId model =
+    [ Html.map ShareMsg
+        (Share.viewSidebar texts.share
             model.sidebarVisible
             model.flags
             model.uiSettings
-            model.homeModel
+            model.shareModel
         )
-    , Html.map HomeMsg
-        (Home.viewContent texts.home
+    , Html.map ShareMsg
+        (Share.viewContent texts.share
+            model.flags
+            model.version
+            model.uiSettings
+            shareId
+            model.shareModel
+        )
+    ]
+
+
+viewShareDetail : Messages -> String -> String -> Model -> List (Html Msg)
+viewShareDetail texts shareId itemId model =
+    [ Html.map ShareDetailMsg
+        (ShareDetail.viewSidebar texts.shareDetail
+            model.sidebarVisible
             model.flags
             model.uiSettings
-            model.homeModel
+            shareId
+            itemId
+            model.shareDetailModel
+        )
+    , Html.map ShareDetailMsg
+        (ShareDetail.viewContent texts.shareDetail
+            model.flags
+            model.uiSettings
+            model.version
+            shareId
+            itemId
+            model.shareDetailModel
+        )
+    ]
+
+
+viewSearch : Messages -> Maybe String -> Model -> List (Html Msg)
+viewSearch texts bmId model =
+    let
+        env =
+            modelEnv model
+    in
+    [ Html.map SearchMsg
+        (Search.viewSidebar texts.search
+            env
+            model.searchModel
+        )
+    , Html.map SearchMsg
+        (Search.viewContent texts.search
+            env
+            model.searchModel
         )
     ]
 
@@ -537,20 +695,20 @@ viewItemDetail : Messages -> String -> Model -> List (Html Msg)
 viewItemDetail texts id model =
     let
         inav =
-            Page.Home.Data.itemNav id model.homeModel
+            Page.Search.Data.itemNav id model.searchModel
+
+        env =
+            modelEnv model
     in
     [ Html.map ItemDetailMsg
         (ItemDetail.viewSidebar texts.itemDetail
-            model.sidebarVisible
-            model.flags
-            model.uiSettings
+            env
             model.itemDetailModel
         )
     , Html.map ItemDetailMsg
         (ItemDetail.viewContent texts.itemDetail
             inav
-            model.flags
-            model.uiSettings
+            env
             model.itemDetailModel
         )
     ]

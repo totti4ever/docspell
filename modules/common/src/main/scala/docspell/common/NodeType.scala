@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 sealed trait NodeType { self: Product =>
@@ -10,7 +16,7 @@ sealed trait NodeType { self: Product =>
 object NodeType {
 
   case object Restserver extends NodeType
-  case object Joex       extends NodeType
+  case object Joex extends NodeType
 
   def fromString(str: String): Either[String, NodeType] =
     str.toLowerCase match {

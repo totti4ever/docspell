@@ -1,19 +1,24 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.nlp
 
 import scala.concurrent.duration.{Duration => _, _}
 
-import cats.Applicative
+import cats.effect.Ref
 import cats.effect._
-import cats.effect.concurrent.Ref
 import cats.implicits._
+import fs2.io.file.Files
 
 import docspell.analysis.NlpSettings
 import docspell.common._
+import docspell.common.util.File
 
-import org.log4s.getLogger
-
-/** Creating the StanfordCoreNLP pipeline is quite expensive as it
-  * involves IO and initializing large objects.
+/** Creating the StanfordCoreNLP pipeline is quite expensive as it involves IO and
+  * initializing large objects.
   *
   * Therefore, the instances are cached, because they are thread-safe.
   *
@@ -26,19 +31,21 @@ trait PipelineCache[F[_]] {
 }
 
 object PipelineCache {
-  private[this] val logger = getLogger
+  private[this] val logger = docspell.logging.unsafeLogger
 
-  def apply[F[_]: Concurrent: Timer](clearInterval: Duration)(
+  def apply[F[_]: Async: Files](clearInterval: Duration)(
       creator: NlpSettings => Annotator[F],
       release: F[Unit]
-  ): F[PipelineCache[F]] =
+  ): F[PipelineCache[F]] = {
+    val log = docspell.logging.getLogger[F]
     for {
-      data       <- Ref.of(Map.empty[String, Entry[Annotator[F]]])
+      data <- Ref.of(Map.empty[String, Entry[Annotator[F]]])
       cacheClear <- CacheClearing.create(data, clearInterval, release)
-      _          <- Logger.log4s(logger).info("Creating nlp pipeline cache")
+      _ <- log.info("Creating nlp pipeline cache")
     } yield new Impl[F](data, creator, cacheClear)
+  }
 
-  final private class Impl[F[_]: Sync](
+  final private class Impl[F[_]: Async: Files](
       data: Ref[F, Map[String, Entry[Annotator[F]]]],
       creator: NlpSettings => Annotator[F],
       cacheClear: CacheClearing[F]
@@ -46,7 +53,7 @@ object PipelineCache {
 
     def obtain(key: String, settings: NlpSettings): Resource[F, Annotator[F]] =
       for {
-        _  <- cacheClear.withCache
+        _ <- cacheClear.withCache
         id <- Resource.eval(makeSettingsId(settings))
         nlp <- Resource.eval(
           data.modify(cache => getOrCreate(key, id, cache, settings, creator))
@@ -68,13 +75,13 @@ object PipelineCache {
               s"StanfordNLP settings changed for key $key. Creating new classifier"
             )
             val nlp = creator(settings)
-            val e   = Entry(id, nlp)
+            val e = Entry(id, nlp)
             (cache.updated(key, e), nlp)
           }
 
         case None =>
           val nlp = creator(settings)
-          val e   = Entry(id, nlp)
+          val e = Entry(id, nlp)
           (cache.updated(key, e), nlp)
       }
 
@@ -97,21 +104,21 @@ object PipelineCache {
   }
 
   object CacheClearing {
-    def none[F[_]: Applicative]: CacheClearing[F] =
+    def none[F[_]]: CacheClearing[F] =
       new CacheClearing[F] {
         def withCache: Resource[F, Unit] =
           Resource.pure[F, Unit](())
       }
 
-    def create[F[_]: Concurrent: Timer, A](
+    def create[F[_]: Async, A](
         data: Ref[F, Map[String, Entry[A]]],
         interval: Duration,
         release: F[Unit]
     ): F[CacheClearing[F]] =
       for {
-        counter  <- Ref.of(0L)
-        cleaning <- Ref.of(None: Option[Fiber[F, Unit]])
-        log = Logger.log4s(logger)
+        counter <- Ref.of(0L)
+        cleaning <- Ref.of(None: Option[Fiber[F, Throwable, Unit]])
+        log = docspell.logging.getLogger[F]
         result <-
           if (interval.millis <= 0)
             log
@@ -135,12 +142,12 @@ object PipelineCache {
   final private class CacheClearingImpl[F[_], A](
       data: Ref[F, Map[String, Entry[A]]],
       counter: Ref[F, Long],
-      cleaningFiber: Ref[F, Option[Fiber[F, Unit]]],
+      cleaningFiber: Ref[F, Option[Fiber[F, Throwable, Unit]]],
       clearInterval: FiniteDuration,
       release: F[Unit]
-  )(implicit T: Timer[F], F: Concurrent[F])
+  )(implicit F: Async[F])
       extends CacheClearing[F] {
-    private[this] val log = Logger.log4s[F](logger)
+    private[this] val log = docspell.logging.getLogger[F]
 
     def withCache: Resource[F, Unit] =
       Resource.make(counter.update(_ + 1) *> cancelClear)(_ =>
@@ -157,8 +164,8 @@ object PipelineCache {
         case None        => ().pure[F]
       }
 
-    private def clearAllLater: F[Fiber[F, Unit]] =
-      F.start(T.sleep(clearInterval) *> clearAll)
+    private def clearAllLater: F[Fiber[F, Throwable, Unit]] =
+      F.start(F.sleep(clearInterval) *> clearAll)
 
     private def logDontClear: F[Unit] =
       log.info("Cancel stanford cache clearing, as it has been used in between.")

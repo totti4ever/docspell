@@ -1,6 +1,12 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
-import cats.effect.concurrent.Ref
+import cats.effect.Ref
 import cats.implicits._
 import fs2.Stream
 
@@ -11,8 +17,7 @@ import docspell.store.qb._
 import doobie._
 import doobie.implicits._
 
-/** Combines a source record (RSource) and a list of associated tags.
-  */
+/** Combines a source record (RSource) and a list of associated tags. */
 case class SourceData(source: RSource, tags: Vector[RTag])
 
 object SourceData {
@@ -21,7 +26,7 @@ object SourceData {
     SourceData(s, Vector.empty)
 
   def findAll(
-      coll: Ident,
+      coll: CollectiveId,
       order: RSource.Table => Column[_]
   ): Stream[ConnectionIO, SourceData] =
     findAllWithTags(RSource.findAllSql(coll, order).query[RSource].stream)
@@ -50,9 +55,9 @@ object SourceData {
 
     for {
       resolvedTags <- Stream.eval(Ref.of[ConnectionIO, Map[Ident, RTag]](Map.empty))
-      source       <- select
-      tagSources   <- Stream.eval(RTagSource.findBySource(source.sid))
-      tags         <- Stream.eval(tagSources.traverse(ti => findTag(resolvedTags, ti)))
+      source <- select
+      tagSources <- Stream.eval(RTagSource.findBySource(source.sid))
+      tags <- Stream.eval(tagSources.traverse(ti => findTag(resolvedTags, ti)))
     } yield SourceData(source, tags.flatten)
   }
 
@@ -61,7 +66,7 @@ object SourceData {
 
   def insert(data: RSource, tags: List[String]): ConnectionIO[Int] =
     for {
-      n0   <- RSource.insert(data)
+      n0 <- RSource.insert(data)
       tags <- RTag.findAllByNameOrId(tags, data.cid)
       n1 <- tags.traverse(tag =>
         RTagSource.createNew[ConnectionIO](data.sid, tag.tagId).flatMap(RTagSource.insert)
@@ -70,15 +75,15 @@ object SourceData {
 
   def update(data: RSource, tags: List[String]): ConnectionIO[Int] =
     for {
-      n0   <- RSource.updateNoCounter(data)
+      n0 <- RSource.updateNoCounter(data)
       tags <- RTag.findAllByNameOrId(tags, data.cid)
-      _    <- RTagSource.deleteSourceTags(data.sid)
+      _ <- RTagSource.deleteSourceTags(data.sid)
       n1 <- tags.traverse(tag =>
         RTagSource.createNew[ConnectionIO](data.sid, tag.tagId).flatMap(RTagSource.insert)
       )
     } yield n0 + n1.sum
 
-  def delete(source: Ident, coll: Ident): ConnectionIO[Int] =
+  def delete(source: Ident, coll: CollectiveId): ConnectionIO[Int] =
     for {
       n0 <- RTagSource.deleteSourceTags(source)
       n1 <- RSource.delete(source, coll)

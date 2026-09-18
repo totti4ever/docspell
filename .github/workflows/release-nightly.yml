@@ -1,0 +1,32 @@
+name: Release Nightly
+on:
+  push:
+    branches:
+      - "master"
+jobs:
+  release-nightly:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - name: Set current version
+        run:  echo "DOCSPELL_VERSION=$(cat version.sbt | grep version | cut -d= -f2 | xargs)" >> $GITHUB_ENV
+      - name: sbt ci ${{ github.ref }}
+        run: nix develop .#ci --command sbt ci
+      - name: sbt make-pkg (${{ env.DOCSPELL_VERSION }})
+        run: nix develop .#ci --command sbt make-pkg
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "nightly"
+          prerelease: true
+          title: "Docspell Nightly"
+          files: |
+            modules/restserver/target/docspell-restserver_${{ env.DOCSPELL_VERSION }}_all.deb
+            modules/restserver/target/universal/docspell-restserver-${{ env.DOCSPELL_VERSION }}.zip
+            modules/joex/target/docspell-joex_${{ env.DOCSPELL_VERSION }}_all.deb
+            modules/joex/target/universal/docspell-joex-${{ env.DOCSPELL_VERSION }}.zip

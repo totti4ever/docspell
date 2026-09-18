@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.pdfconv
 
 import cats.data.Kleisli
@@ -5,24 +11,21 @@ import cats.data.OptionT
 import cats.effect._
 import cats.implicits._
 import fs2.Stream
+import fs2.io.file.Files
 
 import docspell.common._
 import docspell.convert.ConversionResult
 import docspell.convert.extern.OcrMyPdf
 import docspell.joex.Config
-import docspell.joex.scheduler.{Context, Task}
+import docspell.scheduler.{Context, Task}
+import docspell.store.Store
 import docspell.store.records._
 
-import bitpeace.FileMeta
-import bitpeace.Mimetype
-import bitpeace.MimetypeHint
-import bitpeace.RangeDef
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 
-/** Converts the given attachment file using ocrmypdf if it is a pdf
-  * and has not already been converted (the source file is the same as
-  * in the attachment).
+/** Converts the given attachment file using ocrmypdf if it is a pdf and has not already
+  * been converted (the source file is the same as in the attachment).
   */
 object PdfConvTask {
   case class Args(attachId: Ident)
@@ -33,14 +36,14 @@ object PdfConvTask {
       deriveEncoder[Args]
   }
 
-  val taskName = Ident.unsafe("pdf-files-migration")
+  val taskName: Ident = Ident.unsafe("pdf-files-migration")
 
-  def apply[F[_]: Sync: ContextShift](cfg: Config): Task[F, Args, Unit] =
+  def apply[F[_]: Async: Files](cfg: Config, store: Store[F]): Task[F, Args, Unit] =
     Task { ctx =>
       for {
-        _    <- ctx.logger.info(s"Converting pdf file ${ctx.args} using ocrmypdf")
-        meta <- checkInputs(cfg, ctx)
-        _    <- meta.traverse(fm => convert(cfg, ctx, fm))
+        _ <- ctx.logger.info(s"Converting pdf file ${ctx.args} using ocrmypdf")
+        meta <- checkInputs(cfg, ctx, store)
+        _ <- meta.traverse(fm => convert(cfg, ctx, store, fm))
       } yield ()
     }
 
@@ -50,19 +53,23 @@ object PdfConvTask {
   // --- Helper
 
   // check if file exists and if it is pdf and if source id is the same and if ocrmypdf is enabled
-  def checkInputs[F[_]: Sync](cfg: Config, ctx: Context[F, Args]): F[Option[FileMeta]] = {
-    val none: Option[FileMeta] = None
+  def checkInputs[F[_]: Sync](
+      cfg: Config,
+      ctx: Context[F, Args],
+      store: Store[F]
+  ): F[Option[RFileMeta]] = {
+    val none: Option[RFileMeta] = None
     val checkSameFiles =
       (for {
-        ra <- OptionT(ctx.store.transact(RAttachment.findById(ctx.args.attachId)))
+        ra <- OptionT(store.transact(RAttachment.findById(ctx.args.attachId)))
         isSame <- OptionT.liftF(
-          ctx.store.transact(RAttachmentSource.isSameFile(ra.id, ra.fileId))
+          store.transact(RAttachmentSource.isSameFile(ra.id, ra.fileId))
         )
       } yield isSame).getOrElse(false)
     val existsPdf =
       for {
-        meta <- ctx.store.transact(RAttachment.findMeta(ctx.args.attachId))
-        res = meta.filter(_.mimetype.matches(Mimetype.`application/pdf`))
+        meta <- store.transact(RAttachment.findMeta(ctx.args.attachId))
+        res = meta.filter(_.mimetype.matches(MimeType.pdf))
         _ <-
           if (res.isEmpty)
             ctx.logger.info(
@@ -83,73 +90,71 @@ object PdfConvTask {
     else none.pure[F]
   }
 
-  def convert[F[_]: Sync: ContextShift](
+  def convert[F[_]: Async: Files](
       cfg: Config,
       ctx: Context[F, Args],
-      in: FileMeta
+      store: Store[F],
+      in: RFileMeta
   ): F[Unit] = {
-    val bp = ctx.store.bitpeace
-    val data = Stream
-      .emit(in)
-      .through(bp.fetchData2(RangeDef.all))
+    val fs = store.fileRepo
+    val data = fs.getBytes(in.id)
 
     val storeResult: ConversionResult.Handler[F, Unit] =
-      Kleisli({
+      Kleisli {
         case ConversionResult.SuccessPdf(file) =>
-          storeToAttachment(ctx, in, file)
+          storeToAttachment(ctx, store, in, file)
 
         case ConversionResult.SuccessPdfTxt(file, _) =>
-          storeToAttachment(ctx, in, file)
+          storeToAttachment(ctx, store, in, file)
 
         case ConversionResult.UnsupportedFormat(mime) =>
           ctx.logger.warn(
-            s"Unable to convert '${mime}' file ${ctx.args}: unsupported format."
+            s"Unable to convert '$mime' file ${ctx.args}: unsupported format."
           )
 
         case ConversionResult.InputMalformed(mime, reason) =>
-          ctx.logger.warn(s"Unable to convert '${mime}' file ${ctx.args}: $reason")
+          ctx.logger.warn(s"Unable to convert '$mime' file ${ctx.args}: $reason")
 
         case ConversionResult.Failure(ex) =>
           Sync[F].raiseError(ex)
-      })
+      }
 
     def ocrMyPdf(lang: Language): F[Unit] =
       OcrMyPdf.toPDF[F, Unit](
         cfg.convert.ocrmypdf,
         lang,
-        in.chunksize,
-        ctx.blocker,
+        cfg.files.chunkSize,
         ctx.logger
       )(data, storeResult)
 
     for {
-      lang <- getLanguage(ctx)
-      _    <- ocrMyPdf(lang)
+      lang <- getLanguage(ctx, store)
+      _ <- ocrMyPdf(lang)
     } yield ()
   }
 
-  def getLanguage[F[_]: Sync](ctx: Context[F, Args]): F[Language] =
+  def getLanguage[F[_]: Sync](ctx: Context[F, Args], store: Store[F]): F[Language] =
     (for {
-      coll <- OptionT(ctx.store.transact(RCollective.findByAttachment(ctx.args.attachId)))
+      coll <- OptionT(store.transact(RCollective.findByAttachment(ctx.args.attachId)))
       lang = coll.language
     } yield lang).getOrElse(Language.German)
 
   def storeToAttachment[F[_]: Sync](
       ctx: Context[F, Args],
-      meta: FileMeta,
+      store: Store[F],
+      meta: RFileMeta,
       newFile: Stream[F, Byte]
   ): F[Unit] = {
-    val mimeHint = MimetypeHint.advertised(meta.mimetype.asString)
+    val mimeHint = MimeTypeHint.advertised(meta.mimetype)
+    val collective = meta.id.collective
+    val cat = FileCategory.AttachmentConvert
     for {
-      time <- Timestamp.current[F]
-      fid  <- Ident.randomId[F]
-      _ <-
-        ctx.store.bitpeace
-          .saveNew(newFile, meta.chunksize, mimeHint, Some(fid.id), time.value)
+      fid <-
+        newFile
+          .through(store.fileRepo.save(collective, cat, mimeHint))
           .compile
           .lastOrError
-      _ <- ctx.store.transact(RAttachment.updateFileId(ctx.args.attachId, fid))
+      _ <- store.transact(RAttachment.updateFileId(ctx.args.attachId, fid))
     } yield ()
   }
-
 }

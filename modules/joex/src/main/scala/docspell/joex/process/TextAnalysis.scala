@@ -1,8 +1,15 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.process
 
 import cats.Traverse
 import cats.effect._
 import cats.implicits._
+import fs2.io.file.Files
 
 import docspell.analysis.classifier.TextClassifier
 import docspell.analysis.{NlpSettings, TextAnalyser}
@@ -12,17 +19,19 @@ import docspell.joex.Config
 import docspell.joex.analysis.RegexNerFile
 import docspell.joex.learn.{ClassifierName, Classify, LearnClassifierTask}
 import docspell.joex.process.ItemData.AttachmentDates
-import docspell.joex.scheduler.Context
-import docspell.joex.scheduler.Task
+import docspell.scheduler.Context
+import docspell.scheduler.Task
+import docspell.store.Store
 import docspell.store.records.{RAttachmentMeta, RClassifierSetting}
 
 object TextAnalysis {
   type Args = ProcessItemArgs
 
-  def apply[F[_]: Sync: ContextShift](
+  def apply[F[_]: Async: Files](
       cfg: Config.TextAnalysis,
       analyser: TextAnalyser[F],
-      nerFile: RegexNerFile[F]
+      nerFile: RegexNerFile[F],
+      store: Store[F]
   )(item: ItemData): Task[F, Args, ItemData] =
     Task { ctx =>
       for {
@@ -35,18 +44,19 @@ object TextAnalysis {
             )
         _ <- ctx.logger.debug(s"Storing tags: ${t.map(_._1.copy(content = None))}")
         _ <- t.traverse(m =>
-          ctx.store.transact(RAttachmentMeta.updateLabels(m._1.id, m._1.nerlabels))
+          store.transact(RAttachmentMeta.updateLabels(m._1.id, m._1.nerlabels))
         )
 
         v = t.toVector
-        autoTagEnabled <- getActiveAutoTag(ctx, cfg)
+        autoTagEnabled <- getActiveAutoTag(ctx, store, cfg)
         tag <-
-          if (autoTagEnabled) predictTags(ctx, cfg, item.metas, analyser.classifier)
+          if (autoTagEnabled)
+            predictTags(ctx, store, cfg, item.metas, analyser.classifier)
           else List.empty[String].pure[F]
 
         classProposals <-
           if (cfg.classification.enabled)
-            predictItemEntities(ctx, cfg, item.metas, analyser.classifier)
+            predictItemEntities(ctx, store, cfg, item.metas, analyser.classifier)
           else MetaProposalList.empty.pure[F]
 
         e <- s
@@ -65,40 +75,42 @@ object TextAnalysis {
       analyser: TextAnalyser[F],
       nerFile: RegexNerFile[F]
   )(rm: RAttachmentMeta): F[(RAttachmentMeta, AttachmentDates)] = {
-    val settings = NlpSettings(ctx.args.meta.language, false, None)
+    val settings = NlpSettings(ctx.args.meta.language, highRecall = false, None)
     for {
       customNer <- nerFile.makeFile(ctx.args.meta.collective)
       sett = settings.copy(regexNer = customNer)
       labels <- analyser.annotate(
         ctx.logger,
         sett,
-        ctx.args.meta.collective,
+        ctx.args.meta.collective.valueAsIdent,
         rm.content.getOrElse("")
       )
     } yield (rm.copy(nerlabels = labels.all.toList), AttachmentDates(rm, labels.dates))
   }
 
-  def predictTags[F[_]: Sync: ContextShift](
+  def predictTags[F[_]: Async: Files](
       ctx: Context[F, Args],
+      store: Store[F],
       cfg: Config.TextAnalysis,
       metas: Vector[RAttachmentMeta],
       classifier: TextClassifier[F]
   ): F[List[String]] = {
     val text = metas.flatMap(_.content).mkString(LearnClassifierTask.pageSep)
     val classifyWith: ClassifierName => F[Option[String]] =
-      makeClassify(ctx, cfg, classifier)(text)
+      makeClassify(ctx, store, cfg, classifier)(text)
 
     for {
-      names <- ctx.store.transact(
+      names <- store.transact(
         ClassifierName.findTagClassifiers(ctx.args.meta.collective)
       )
-      _    <- ctx.logger.debug(s"Guessing tags for ${names.size} categories")
+      _ <- ctx.logger.debug(s"Guessing tags for ${names.size} categories")
       tags <- names.traverse(classifyWith)
     } yield tags.flatten
   }
 
-  def predictItemEntities[F[_]: Sync: ContextShift](
+  def predictItemEntities[F[_]: Async: Files](
       ctx: Context[F, Args],
+      store: Store[F],
       cfg: Config.TextAnalysis,
       metas: Vector[RAttachmentMeta],
       classifier: TextClassifier[F]
@@ -110,7 +122,7 @@ object TextAnalysis {
         mtype: MetaProposalType
     ): F[Option[MetaProposal]] =
       for {
-        label <- makeClassify(ctx, cfg, classifier)(text).apply(cname)
+        label <- makeClassify(ctx, store, cfg, classifier)(text).apply(cname)
       } yield label.map(str =>
         MetaProposal(mtype, Candidate(IdRef(Ident.unsafe(""), str), Set.empty))
       )
@@ -128,16 +140,16 @@ object TextAnalysis {
       .map(MetaProposalList.apply)
   }
 
-  private def makeClassify[F[_]: Sync: ContextShift](
+  private def makeClassify[F[_]: Async: Files](
       ctx: Context[F, Args],
+      store: Store[F],
       cfg: Config.TextAnalysis,
       classifier: TextClassifier[F]
   )(text: String): ClassifierName => F[Option[String]] =
     Classify[F](
-      ctx.blocker,
       ctx.logger,
       cfg.workingDir,
-      ctx.store,
+      store,
       classifier,
       ctx.args.meta.collective,
       text
@@ -145,10 +157,11 @@ object TextAnalysis {
 
   private def getActiveAutoTag[F[_]: Sync](
       ctx: Context[F, Args],
+      store: Store[F],
       cfg: Config.TextAnalysis
   ): F[Boolean] =
     if (cfg.classification.enabled)
-      ctx.store
+      store
         .transact(RClassifierSetting.findById(ctx.args.meta.collective))
         .map(_.exists(_.autoTagEnabled))
         .flatTap(enabled =>

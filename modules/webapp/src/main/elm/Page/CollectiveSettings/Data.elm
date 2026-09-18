@@ -1,5 +1,13 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.CollectiveSettings.Data exposing
-    ( Model
+    ( FormState(..)
+    , Model
     , Msg(..)
     , Tab(..)
     , init
@@ -9,6 +17,7 @@ import Api.Model.BasicResult exposing (BasicResult)
 import Api.Model.CollectiveSettings exposing (CollectiveSettings)
 import Api.Model.ItemInsights exposing (ItemInsights)
 import Comp.CollectiveSettingsForm
+import Comp.ShareManage
 import Comp.SourceManage
 import Comp.UserManage
 import Data.Flags exposing (Flags)
@@ -20,9 +29,17 @@ type alias Model =
     , sourceModel : Comp.SourceManage.Model
     , userModel : Comp.UserManage.Model
     , settingsModel : Comp.CollectiveSettingsForm.Model
+    , shareModel : Comp.ShareManage.Model
     , insights : ItemInsights
-    , submitResult : Maybe BasicResult
+    , formState : FormState
     }
+
+
+type FormState
+    = InitialState
+    | SubmitSuccessful
+    | SubmitFailed String
+    | SubmitError Http.Error
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -33,17 +50,22 @@ init flags =
 
         ( cm, cc ) =
             Comp.CollectiveSettingsForm.init flags Api.Model.CollectiveSettings.empty
+
+        ( shm, shc ) =
+            Comp.ShareManage.init flags
     in
     ( { currentTab = Just InsightsTab
       , sourceModel = sm
       , userModel = Comp.UserManage.emptyModel
+      , shareModel = shm
       , settingsModel = cm
       , insights = Api.Model.ItemInsights.empty
-      , submitResult = Nothing
+      , formState = InitialState
       }
     , Cmd.batch
         [ Cmd.map SourceMsg sc
         , Cmd.map SettingsFormMsg cc
+        , Cmd.map ShareMsg shc
         ]
     )
 
@@ -53,6 +75,7 @@ type Tab
     | UserTab
     | InsightsTab
     | SettingsTab
+    | ShareTab
 
 
 type Msg
@@ -64,3 +87,4 @@ type Msg
     | GetInsightsResp (Result Http.Error ItemInsights)
     | CollectiveSettingsResp (Result Http.Error CollectiveSettings)
     | SubmitResp (Result Http.Error BasicResult)
+    | ShareMsg Comp.ShareManage.Msg

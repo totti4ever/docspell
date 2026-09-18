@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.impl
 
 import cats.data.NonEmptyList
@@ -8,10 +14,10 @@ import _root_.doobie.implicits._
 import _root_.doobie.{Query => _, _}
 
 object ConditionBuilder {
-  val or         = fr" OR"
-  val and        = fr" AND"
-  val comma      = fr","
-  val parenOpen  = Fragment.const0("(")
+  val or = fr" OR"
+  val and = fr" AND"
+  val comma = fr","
+  val parenOpen = Fragment.const0("(")
   val parenClose = Fragment.const0(")")
 
   final def reduce(c: Condition): Condition =
@@ -64,7 +70,7 @@ object ConditionBuilder {
   final def build(expr: Condition): Fragment =
     reduce(expr) match {
       case c @ Condition.CompareVal(col, op, value) =>
-        val opFrag  = operator(op)
+        val opFrag = operator(op)
         val valFrag = buildValue(value)(c.P)
         val colFrag = op match {
           case Operator.LowerLike =>
@@ -77,7 +83,7 @@ object ConditionBuilder {
         colFrag ++ opFrag ++ valFrag
 
       case c @ Condition.CompareFVal(dbf, op, value) =>
-        val opFrag  = operator(op)
+        val opFrag = operator(op)
         val valFrag = buildValue(value)(c.P)
         val dbfFrag = op match {
           case Operator.LowerLike =>
@@ -99,6 +105,19 @@ object ConditionBuilder {
             (SelectExprBuilder.column(c1), SelectExprBuilder.column(c2))
         }
         c1Frag ++ operator(op) ++ c2Frag
+
+      case Condition.CompareSelect(col, op, subsel) =>
+        val opFrag = operator(op)
+        val colFrag = op match {
+          case Operator.LowerLike =>
+            lower(col)
+          case Operator.LowerEq =>
+            lower(col)
+          case _ =>
+            SelectExprBuilder.build(col)
+        }
+        val sub = SelectBuilder(subsel)
+        colFrag ++ opFrag ++ sql"(" ++ sub ++ sql")"
 
       case Condition.InSubSelect(col, subsel) =>
         val sub = SelectBuilder(subsel)

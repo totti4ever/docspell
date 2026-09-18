@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -16,9 +22,9 @@ object RJobGroupUse {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "jobgroupuse"
 
-    val group  = Column[Ident]("groupid", this)
+    val group = Column[Ident]("groupid", this)
     val worker = Column[Ident]("workerid", this)
-    val all    = NonEmptyList.of[Column[_]](group, worker)
+    val all = NonEmptyList.of[Column[_]](group, worker)
   }
 
   val T = Table(None)
@@ -36,4 +42,7 @@ object RJobGroupUse {
 
   def findGroup(workerId: Ident): ConnectionIO[Option[Ident]] =
     run(select(T.group), from(T), T.worker === workerId).query[Ident].option
+
+  def deleteAll: ConnectionIO[Int] =
+    DML.delete(T, T.group.isNotNull)
 }

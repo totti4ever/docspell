@@ -1,17 +1,25 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.CollectiveSettings.Update exposing (update)
 
 import Api
-import Api.Model.BasicResult exposing (BasicResult)
 import Comp.CollectiveSettingsForm
+import Comp.ShareManage
 import Comp.SourceManage
 import Comp.UserManage
-import Data.Flags exposing (Flags)
+import Data.Environment as Env
+import Data.Flags
+import Messages.Page.CollectiveSettings exposing (Texts)
 import Page.CollectiveSettings.Data exposing (..)
-import Util.Http
 
 
-update : Flags -> Msg -> Model -> ( Model, Cmd Msg )
-update flags msg model =
+update : Texts -> Env.Update -> Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+update texts env msg model =
     case msg of
         SetTab t ->
             let
@@ -20,35 +28,45 @@ update flags msg model =
             in
             case t of
                 SourceTab ->
-                    update flags (SourceMsg Comp.SourceManage.LoadSources) m
+                    update texts env (SourceMsg Comp.SourceManage.LoadSources) m
 
                 UserTab ->
-                    update flags (UserMsg Comp.UserManage.LoadUsers) m
+                    update texts env (UserMsg Comp.UserManage.LoadUsers) m
 
                 InsightsTab ->
-                    update flags Init m
+                    update texts env Init m
 
                 SettingsTab ->
-                    update flags Init m
+                    update texts env Init m
+
+                ShareTab ->
+                    update texts env (ShareMsg Comp.ShareManage.loadShares) m
 
         SourceMsg m ->
             let
                 ( m2, c2 ) =
-                    Comp.SourceManage.update flags m model.sourceModel
+                    Comp.SourceManage.update env.flags m model.sourceModel
             in
-            ( { model | sourceModel = m2 }, Cmd.map SourceMsg c2 )
+            ( { model | sourceModel = m2 }, Cmd.map SourceMsg c2, Sub.none )
+
+        ShareMsg lm ->
+            let
+                ( sm, sc, ss ) =
+                    Comp.ShareManage.update texts.shareManage env.flags lm model.shareModel
+            in
+            ( { model | shareModel = sm }, Cmd.map ShareMsg sc, Sub.map ShareMsg ss )
 
         UserMsg m ->
             let
                 ( m2, c2 ) =
-                    Comp.UserManage.update flags m model.userModel
+                    Comp.UserManage.update env.flags m model.userModel
             in
-            ( { model | userModel = m2 }, Cmd.map UserMsg c2 )
+            ( { model | userModel = m2 }, Cmd.map UserMsg c2, Sub.none )
 
         SettingsFormMsg m ->
             let
                 ( m2, c2, msett ) =
-                    Comp.CollectiveSettingsForm.update flags m model.settingsModel
+                    Comp.CollectiveSettingsForm.update env.flags env.settings.timeZone m model.settingsModel
 
                 cmd =
                     case msett of
@@ -56,44 +74,53 @@ update flags msg model =
                             Cmd.none
 
                         Just sett ->
-                            Api.setCollectiveSettings flags sett SubmitResp
+                            Api.setCollectiveSettings env.flags sett SubmitResp
             in
-            ( { model | settingsModel = m2, submitResult = Nothing }
+            ( { model | settingsModel = m2, formState = InitialState }
             , Cmd.batch [ cmd, Cmd.map SettingsFormMsg c2 ]
+            , Sub.none
             )
 
         Init ->
-            ( { model | submitResult = Nothing }
+            ( { model | formState = InitialState }
             , Cmd.batch
-                [ Api.getInsights flags GetInsightsResp
-                , Api.getCollectiveSettings flags CollectiveSettingsResp
+                [ Api.getInsights env.flags GetInsightsResp
+                , Api.getCollectiveSettings env.flags CollectiveSettingsResp
                 ]
+            , Sub.none
             )
 
         GetInsightsResp (Ok data) ->
-            ( { model | insights = data }, Cmd.none )
+            ( { model | insights = data }, Cmd.none, Sub.none )
 
         GetInsightsResp (Err _) ->
-            ( model, Cmd.none )
+            ( model, Cmd.none, Sub.none )
 
         CollectiveSettingsResp (Ok data) ->
             let
                 ( cm, cc ) =
-                    Comp.CollectiveSettingsForm.init flags data
+                    Comp.CollectiveSettingsForm.init env.flags data
             in
             ( { model | settingsModel = cm }
             , Cmd.map SettingsFormMsg cc
+            , Sub.none
             )
 
         CollectiveSettingsResp (Err _) ->
-            ( model, Cmd.none )
+            ( model, Cmd.none, Sub.none )
 
         SubmitResp (Ok res) ->
-            ( { model | submitResult = Just res }, Cmd.none )
+            ( { model
+                | formState =
+                    if res.success then
+                        SubmitSuccessful
+
+                    else
+                        SubmitFailed res.message
+              }
+            , Cmd.none
+            , Sub.none
+            )
 
         SubmitResp (Err err) ->
-            let
-                res =
-                    BasicResult False (Util.Http.errorToString err)
-            in
-            ( { model | submitResult = Just res }, Cmd.none )
+            ( { model | formState = SubmitError err }, Cmd.none, Sub.none )

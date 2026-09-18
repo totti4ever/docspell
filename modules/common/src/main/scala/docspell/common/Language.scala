@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import cats.data.NonEmptyList
@@ -24,7 +30,7 @@ object Language {
     override val allowsNLP = true
   }
   object NLPLanguage {
-    val all: NonEmptyList[NLPLanguage] = NonEmptyList.of(German, English, French)
+    val all: NonEmptyList[NLPLanguage] = NonEmptyList.of(German, English, French, Spanish)
   }
 
   case object German extends NLPLanguage {
@@ -47,9 +53,14 @@ object Language {
     val iso3 = "ita"
   }
 
-  case object Spanish extends Language {
+  case object Spanish extends NLPLanguage {
     val iso2 = "es"
     val iso3 = "spa"
+  }
+
+  case object Hungarian extends Language {
+    val iso2 = "hu"
+    val iso3 = "hun"
   }
 
   case object Portuguese extends Language {
@@ -60,6 +71,11 @@ object Language {
   case object Czech extends Language {
     val iso2 = "cs"
     val iso3 = "ces"
+  }
+
+  case object Khmer extends Language {
+    val iso2 = "kh"
+    val iso3 = "khm"
   }
 
   case object Danish extends Language {
@@ -102,6 +118,46 @@ object Language {
     val iso3 = "lav"
   }
 
+  case object Japanese extends Language {
+    val iso2 = "ja"
+    val iso3 = "jpn"
+  }
+
+  /*It's not an ISO value, but this needs to be unique and tesseract will need jpn_vert for it's scan from the config of /etc/docspell-joex/docspell-joex.conf.*/
+  case object JpnVert extends Language {
+    val iso2 = "ja_vert"
+    val iso3 = "jpn_vert"
+  }
+  case object Hebrew extends Language {
+    val iso2 = "he"
+    val iso3 = "heb"
+  }
+
+  case object Lithuanian extends Language {
+    val iso2 = "lt"
+    val iso3 = "lit"
+  }
+
+  case object Polish extends Language {
+    val iso2 = "pl"
+    val iso3 = "pol"
+  }
+
+  case object Estonian extends Language {
+    val iso2 = "et"
+    val iso3 = "est"
+  }
+
+  case object Ukrainian extends Language {
+    val iso2 = "uk"
+    val iso3 = "ukr"
+  }
+
+  case object Slovak extends Language {
+    val iso2 = "sk"
+    val iso3 = "svk"
+  }
+
   val all: List[Language] =
     List(
       German,
@@ -109,6 +165,7 @@ object Language {
       French,
       Italian,
       Spanish,
+      Hungarian,
       Dutch,
       Portuguese,
       Czech,
@@ -118,7 +175,16 @@ object Language {
       Swedish,
       Russian,
       Romanian,
-      Latvian
+      Latvian,
+      Japanese,
+      JpnVert,
+      Hebrew,
+      Lithuanian,
+      Polish,
+      Estonian,
+      Ukrainian,
+      Slovak,
+      Khmer
     )
 
   def fromString(str: String): Either[String, Language] = {

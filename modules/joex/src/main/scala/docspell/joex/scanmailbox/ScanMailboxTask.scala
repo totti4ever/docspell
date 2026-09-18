@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.scanmailbox
 
 import cats.data.Kleisli
@@ -10,12 +16,15 @@ import fs2._
 import docspell.backend.ops.{OJoex, OUpload}
 import docspell.common._
 import docspell.joex.Config
-import docspell.joex.scheduler.{Context, Task}
+import docspell.logging.Logger
+import docspell.scheduler.{Context, Task}
+import docspell.store.Store
 import docspell.store.queries.QOrganization
 import docspell.store.records._
 
 import _root_.io.circe.syntax._
 import emil.SearchQuery.{All, ReceivedDate}
+import emil.SearchResult.searchResultMonoid
 import emil.javamail.syntax._
 import emil.{MimeType => _, _}
 
@@ -25,6 +34,7 @@ object ScanMailboxTask {
 
   def apply[F[_]: Sync](
       cfg: Config.ScanMailbox,
+      store: Store[F],
       emil: Emil[F],
       upload: OUpload[F],
       joex: OJoex[F]
@@ -32,26 +42,26 @@ object ScanMailboxTask {
     Task { ctx =>
       for {
         _ <- ctx.logger.info(
-          s"=== Start importing mails for user ${ctx.args.account.user.id}"
+          s"=== Start importing mails for user ${ctx.args.account.login.id}"
         )
-        _       <- ctx.logger.debug(s"Settings: ${ctx.args.asJson.noSpaces}")
-        mailCfg <- getMailSettings(ctx)
-        folders  = ctx.args.folders.mkString(", ")
-        userId   = ctx.args.account.user
+        _ <- ctx.logger.debug(s"Settings: ${ctx.args.asJson.noSpaces}")
+        mailCfg <- getMailSettings(ctx, store)
+        folders = ctx.args.folders.mkString(", ")
+        login = ctx.args.account.login
         imapConn = ctx.args.imapConnection
         _ <- ctx.logger.info(
-          s"Reading mails for user ${userId.id} from ${imapConn.id}/${folders}"
+          s"Reading mails for user ${login.id} from ${imapConn.id}/$folders"
         )
-        _ <- importMails(cfg, mailCfg, emil, upload, joex, ctx)
+        _ <- importMails(cfg, mailCfg, emil, upload, joex, ctx, store)
       } yield ()
     }
 
   def onCancel[F[_]]: Task[F, ScanMailboxArgs, Unit] =
     Task.log(_.warn("Cancelling scan-mailbox task"))
 
-  def getMailSettings[F[_]: Sync](ctx: Context[F, Args]): F[RUserImap] =
-    ctx.store
-      .transact(RUserImap.getByName(ctx.args.account, ctx.args.imapConnection))
+  def getMailSettings[F[_]: Sync](ctx: Context[F, Args], store: Store[F]): F[RUserImap] =
+    store
+      .transact(RUserImap.getByName(ctx.args.account.userId, ctx.args.imapConnection))
       .flatMap {
         case Some(c) => c.pure[F]
         case None =>
@@ -68,10 +78,11 @@ object ScanMailboxTask {
       theEmil: Emil[F],
       upload: OUpload[F],
       joex: OJoex[F],
-      ctx: Context[F, Args]
+      ctx: Context[F, Args],
+      store: Store[F]
   ): F[Unit] = {
-    val mailer    = theEmil(mailCfg.toMailConfig)
-    val impl      = new Impl[F](cfg, ctx)
+    val mailer = theEmil(mailCfg.toMailConfig)
+    val impl = new Impl[F](cfg, ctx, store)
     val inFolders = ctx.args.folders.take(cfg.maxFolders)
 
     val getInitialInput =
@@ -88,7 +99,12 @@ object ScanMailboxTask {
       if (acc.noneLeft(name)) acc.pure[F]
       else
         mailer
-          .run(impl.handleFolder(theEmil.access, upload)(name))
+          .run(
+            impl.handleFolder(theEmil.access, upload)(
+              name,
+              ctx.args.scanRecursively.getOrElse(false)
+            )
+          )
           .map(_ ++ acc)
 
     Stream
@@ -135,18 +151,25 @@ object ScanMailboxTask {
       ScanResult(List(folder -> left), processed)
   }
 
-  final private class Impl[F[_]: Sync](cfg: Config.ScanMailbox, ctx: Context[F, Args]) {
+  final private class Impl[F[_]: Sync](
+      cfg: Config.ScanMailbox,
+      ctx: Context[F, Args],
+      store: Store[F]
+  ) {
 
     private def logOp[C](f: Logger[F] => F[Unit]): MailOp[F, C, Unit] =
       MailOp(_ => f(ctx.logger))
 
     def handleFolder[C](a: Access[F, C], upload: OUpload[F])(
-        name: String
+        name: String,
+        scanRecursively: Boolean
     ): MailOp[F, C, ScanResult] =
       for {
-        _      <- Kleisli.liftF(ctx.logger.info(s"Processing folder $name"))
+        _ <- Kleisli.liftF(ctx.logger.info(s"Processing folder $name"))
         folder <- requireFolder(a)(name)
-        search <- searchMails(a)(folder)
+        search <-
+          if (scanRecursively) searchMailsRecursively(a)(folder)
+          else searchMails(a)(folder)
         items = search.mails.map(MailHeaderItem(_))
         headers <- Kleisli.liftF(
           filterSubjects(items).flatMap(filterMessageIds)
@@ -156,10 +179,19 @@ object ScanMailboxTask {
 
     def requireFolder[C](a: Access[F, C])(name: String): MailOp[F, C, MailFolder] =
       if ("INBOX".equalsIgnoreCase(name)) a.getInbox
-      else //TODO resolve sub-folders
+      else // TODO resolve sub-folders
         a.findFolder(None, name)
           .map(_.toRight(new Exception(s"Folder '$name' not found")))
           .mapF(_.rethrow)
+
+    def searchMailsRecursively[C](
+        a: Access[F, C]
+    )(folder: MailFolder): MailOp[F, C, SearchResult[MailHeader]] =
+      for {
+        subFolders <- a.listFoldersRecursive(Some(folder))
+        foldersToSearch = Vector(folder) ++ subFolders
+        search <- foldersToSearch.traverse(searchMails(a))
+      } yield searchResultMonoid.combineAll(search)
 
     def searchMails[C](
         a: Access[F, C]
@@ -202,13 +234,13 @@ object ScanMailboxTask {
           ctx.logger.debug("Not matching on subjects. No filter given") *> headers.pure[F]
       }
 
-    def filterMessageIds[C](headers: Vector[MailHeaderItem]): F[Vector[MailHeaderItem]] =
+    def filterMessageIds(headers: Vector[MailHeaderItem]): F[Vector[MailHeaderItem]] =
       NonEmptyList.fromFoldable(headers.flatMap(_.mh.messageId)) match {
         case Some(nl) =>
           for {
-            archives <- ctx.store.transact(
+            archives <- store.transact(
               RAttachmentArchive
-                .findByMessageIdAndCollective(nl, ctx.args.account.collective)
+                .findByMessageIdAndCollective(nl, ctx.args.account.collectiveId)
             )
             existing = archives.flatMap(_.messageId).toSet
             mails <- headers
@@ -230,10 +262,10 @@ object ScanMailboxTask {
         for {
           from <- OptionT.fromOption[F](mh.from)
           _ <- OptionT(
-            ctx.store.transact(
+            store.transact(
               QOrganization
                 .findPersonByContact(
-                  ctx.args.account.collective,
+                  ctx.args.account.collectiveId,
                   from.address,
                   Some(ContactKind.Email),
                   Some(NonEmptyList.of(PersonUse.concerning))
@@ -284,17 +316,21 @@ object ScanMailboxTask {
         mail.toByteStream
       )
       for {
-        _   <- ctx.logger.debug(s"Submitting mail '${mail.header.subject}'")
+        _ <- ctx.logger.debug(s"Submitting mail '${mail.header.subject}'")
         dir <- getDirection(mail.header)
         meta = OUpload.UploadMeta(
           Some(dir),
-          s"mailbox-${ctx.args.account.user.id}",
+          s"mailbox-${ctx.args.account.login.id}",
           args.itemFolder,
           Seq.empty,
-          true,
+          skipDuplicates = true,
           args.fileFilter.getOrElse(Glob.all),
           args.tags.getOrElse(Nil),
-          args.language
+          args.language,
+          args.attachmentsOnly,
+          None,
+          None,
+          None
         )
         data = OUpload.UploadData(
           multiple = false,
@@ -303,7 +339,12 @@ object ScanMailboxTask {
           priority = Priority.Low,
           tracker = None
         )
-        res <- upload.submit(data, ctx.args.account, false, None)
+        res <- upload.submit(
+          data,
+          ctx.args.account.collectiveId,
+          ctx.args.account.userId.some,
+          None
+        )
       } yield res
     }
 
@@ -333,7 +374,7 @@ object ScanMailboxTask {
   }
 
   case class MailHeaderItem(mh: MailHeader, process: Boolean = true) {
-    def skip       = copy(process = false)
+    def skip = copy(process = false)
     def notProcess = !process
   }
 }

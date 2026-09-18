@@ -1,7 +1,13 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.Eq
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList => Nel}
 import cats.effect._
 import fs2.Stream
 
@@ -14,7 +20,7 @@ import doobie.implicits._
 
 case class RPerson(
     pid: Ident,
-    cid: Ident,
+    cid: CollectiveId,
     name: String,
     street: String,
     zip: String,
@@ -34,19 +40,19 @@ object RPerson {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "person"
 
-    val pid     = Column[Ident]("pid", this)
-    val cid     = Column[Ident]("cid", this)
-    val name    = Column[String]("name", this)
-    val street  = Column[String]("street", this)
-    val zip     = Column[String]("zip", this)
-    val city    = Column[String]("city", this)
+    val pid = Column[Ident]("pid", this)
+    val cid = Column[CollectiveId]("coll_id", this)
+    val name = Column[String]("name", this)
+    val street = Column[String]("street", this)
+    val zip = Column[String]("zip", this)
+    val city = Column[String]("city", this)
     val country = Column[String]("country", this)
-    val notes   = Column[String]("notes", this)
+    val notes = Column[String]("notes", this)
     val created = Column[Timestamp]("created", this)
     val updated = Column[Timestamp]("updated", this)
-    val oid     = Column[Ident]("oid", this)
-    val use     = Column[PersonUse]("person_use", this)
-    val all = NonEmptyList.of[Column[_]](
+    val oid = Column[Ident]("oid", this)
+    val use = Column[PersonUse]("person_use", this)
+    val all = Nel.of[Column[_]](
       pid,
       cid,
       name,
@@ -93,30 +99,30 @@ object RPerson {
       )
     for {
       now <- Timestamp.current[ConnectionIO]
-      n   <- sql(now)
+      n <- sql(now)
     } yield n
   }
 
-  def existsByName(coll: Ident, pname: String): ConnectionIO[Boolean] =
+  def existsByName(coll: CollectiveId, pname: String): ConnectionIO[Boolean] =
     run(select(count(T.pid)), from(T), T.cid === coll && T.name === pname)
       .query[Int]
       .unique
       .map(_ > 0)
 
   def findById(id: Ident): ConnectionIO[Option[RPerson]] = {
-    val sql = run(select(T.all), from(T), T.cid === id)
+    val sql = run(select(T.all), from(T), T.pid === id)
     sql.query[RPerson].option
   }
 
-  def find(coll: Ident, personName: String): ConnectionIO[Option[RPerson]] = {
+  def find(coll: CollectiveId, personName: String): ConnectionIO[Option[RPerson]] = {
     val sql = run(select(T.all), from(T), T.cid === coll && T.name === personName)
     sql.query[RPerson].option
   }
 
   def findLike(
-      coll: Ident,
+      coll: CollectiveId,
       personName: String,
-      use: NonEmptyList[PersonUse]
+      use: Nel[PersonUse]
   ): ConnectionIO[Vector[IdRef]] =
     run(
       select(T.pid, T.name),
@@ -125,10 +131,10 @@ object RPerson {
     ).query[IdRef].to[Vector]
 
   def findLike(
-      coll: Ident,
+      coll: CollectiveId,
       contactKind: ContactKind,
       value: String,
-      use: NonEmptyList[PersonUse]
+      use: Nel[PersonUse]
   ): ConnectionIO[Vector[IdRef]] = {
     val p = RPerson.as("p")
     val c = RContact.as("c")
@@ -146,7 +152,7 @@ object RPerson {
   }
 
   def findAll(
-      coll: Ident,
+      coll: CollectiveId,
       order: Table => Column[_]
   ): Stream[ConnectionIO, RPerson] = {
     val sql = Select(select(T.all), from(T), T.cid === coll).orderBy(order(T))
@@ -154,9 +160,9 @@ object RPerson {
   }
 
   def findAllRef(
-      coll: Ident,
+      coll: CollectiveId,
       nameQ: Option[String],
-      order: Table => Column[_]
+      order: Table => Nel[OrderBy]
   ): ConnectionIO[Vector[IdRef]] = {
 
     val nameFilter = nameQ.map(s => T.name.like(s"%${s.toLowerCase}%"))
@@ -166,11 +172,11 @@ object RPerson {
     sql.build.query[IdRef].to[Vector]
   }
 
-  def delete(personId: Ident, coll: Ident): ConnectionIO[Int] =
+  def delete(personId: Ident, coll: CollectiveId): ConnectionIO[Int] =
     DML.delete(T, T.pid === personId && T.cid === coll)
 
   def findOrganization(ids: Set[Ident]): ConnectionIO[Vector[PersonRef]] =
-    NonEmptyList.fromList(ids.toList) match {
+    Nel.fromList(ids.toList) match {
       case Some(nel) =>
         run(select(T.pid, T.name, T.oid), from(T), T.pid.in(nel))
           .query[PersonRef]

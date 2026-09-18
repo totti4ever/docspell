@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.FolderDetail exposing
     ( Model
     , Msg
@@ -26,12 +33,11 @@ import Html.Events exposing (onClick, onInput)
 import Http
 import Messages.Comp.FolderDetail exposing (Texts)
 import Styles as S
-import Util.Http
 import Util.Maybe
 
 
 type alias Model =
-    { result : Maybe BasicResult
+    { formState : FormState
     , folder : FolderDetail
     , name : Maybe String
     , members : List IdName
@@ -41,6 +47,59 @@ type alias Model =
     , loading : Bool
     , deleteDimmer : Comp.YesNoDimmer.Model
     }
+
+
+type FormState
+    = FormStateInitial
+    | FormStateHttpError Http.Error
+    | FormStateFolderCreated
+    | FormStateGenericError String
+    | FormStateNameChangeSuccessful
+    | FormStateDeleteSuccessful
+
+
+isError : FormState -> Bool
+isError state =
+    case state of
+        FormStateInitial ->
+            False
+
+        FormStateHttpError _ ->
+            True
+
+        FormStateGenericError _ ->
+            True
+
+        FormStateFolderCreated ->
+            False
+
+        FormStateNameChangeSuccessful ->
+            False
+
+        FormStateDeleteSuccessful ->
+            False
+
+
+isSuccess : FormState -> Bool
+isSuccess state =
+    case state of
+        FormStateInitial ->
+            False
+
+        FormStateHttpError _ ->
+            False
+
+        FormStateGenericError _ ->
+            False
+
+        FormStateFolderCreated ->
+            True
+
+        FormStateNameChangeSuccessful ->
+            True
+
+        FormStateDeleteSuccessful ->
+            True
 
 
 type Msg
@@ -61,7 +120,7 @@ type Msg
 
 init : List User -> FolderDetail -> Model
 init users folder =
-    { result = Nothing
+    { formState = FormStateInitial
     , folder = folder
     , name = Util.Maybe.fromString folder.name
     , members = folder.members
@@ -143,7 +202,7 @@ update flags msg model =
                     in
                     ( { model
                         | loading = True
-                        , result = Nothing
+                        , formState = FormStateInitial
                       }
                     , cmd
                     , False
@@ -159,7 +218,12 @@ update flags msg model =
             else
                 ( { model
                     | loading = False
-                    , result = Just (BasicResult ir.success ir.message)
+                    , formState =
+                        if ir.success then
+                            FormStateFolderCreated
+
+                        else
+                            FormStateGenericError ir.message
                   }
                 , Cmd.none
                 , False
@@ -168,7 +232,7 @@ update flags msg model =
         NewFolderResp (Err err) ->
             ( { model
                 | loading = False
-                , result = Just (BasicResult False (Util.Http.errorToString err))
+                , formState = FormStateHttpError err
               }
             , Cmd.none
             , False
@@ -182,7 +246,7 @@ update flags msg model =
                 )
 
             else
-                ( { model | loading = False, result = Just r }
+                ( { model | loading = False, formState = FormStateGenericError r.message }
                 , Cmd.none
                 , False
                 )
@@ -190,7 +254,7 @@ update flags msg model =
         ChangeFolderResp (Err err) ->
             ( { model
                 | loading = False
-                , result = Just (BasicResult False (Util.Http.errorToString err))
+                , formState = FormStateHttpError err
               }
             , Cmd.none
             , False
@@ -199,13 +263,21 @@ update flags msg model =
         ChangeNameResp (Ok r) ->
             let
                 model_ =
-                    { model | result = Just r, loading = False }
+                    { model
+                        | formState =
+                            if r.success then
+                                FormStateNameChangeSuccessful
+
+                            else
+                                FormStateGenericError r.message
+                        , loading = False
+                    }
             in
             ( model_, Cmd.none, False )
 
         ChangeNameResp (Err err) ->
             ( { model
-                | result = Just (BasicResult False (Util.Http.errorToString err))
+                | formState = FormStateHttpError err
                 , loading = False
               }
             , Cmd.none
@@ -218,7 +290,7 @@ update flags msg model =
         FolderDetailResp (Err err) ->
             ( { model
                 | loading = False
-                , result = Just (BasicResult False (Util.Http.errorToString err))
+                , formState = FormStateHttpError err
               }
             , Cmd.none
             , False
@@ -263,10 +335,20 @@ update flags msg model =
             ( { model | deleteDimmer = dm }, cmd, False )
 
         DeleteResp (Ok r) ->
-            ( { model | result = Just r }, Cmd.none, r.success )
+            ( { model
+                | formState =
+                    if r.success then
+                        FormStateDeleteSuccessful
+
+                    else
+                        FormStateGenericError r.message
+              }
+            , Cmd.none
+            , r.success
+            )
 
         DeleteResp (Err err) ->
-            ( { model | result = Just (BasicResult False (Util.Http.errorToString err)) }
+            ( { model | formState = FormStateHttpError err }
             , Cmd.none
             , False
             )
@@ -291,76 +373,91 @@ view2 texts flags model =
                 texts.basics.no
     in
     div [ class "flex flex-col md:relative" ]
-        (viewButtons2 texts model
-            :: [ Html.map DeleteMsg
-                    (Comp.YesNoDimmer.viewN
-                        True
-                        dimmerSettings
-                        model.deleteDimmer
-                    )
-               , div
-                    [ class "py-2 text-lg opacity-75"
-                    , classList [ ( "hidden", model.folder.id /= "" ) ]
+        ([ viewButtons2 texts model
+         , Html.map DeleteMsg
+            (Comp.YesNoDimmer.viewN
+                True
+                dimmerSettings
+                model.deleteDimmer
+            )
+         , div
+            [ class "py-2 text-lg opacity-75"
+            , classList [ ( "hidden", model.folder.id /= "" ) ]
+            ]
+            [ text texts.autoOwnerInfo
+            ]
+         , div
+            [ class "py-2 text-lg opacity-75"
+            , classList [ ( "hidden", model.folder.id == "" ) ]
+            ]
+            [ text texts.modifyInfo
+            ]
+         , div
+            [ class S.message
+            , classList [ ( "hidden", model.folder.id == "" || isOwner ) ]
+            ]
+            [ text texts.notOwnerInfo
+            ]
+         , div [ class "mb-4 flex flex-col" ]
+            [ label
+                [ class S.inputLabel
+                , for "folder-name"
+                ]
+                [ text texts.basics.name
+                , B.inputRequired
+                ]
+            , div [ class "flex flex-row space-x-2" ]
+                [ input
+                    [ type_ "text"
+                    , onInput SetName
+                    , Maybe.withDefault "" model.name
+                        |> value
+                    , classList [ ( S.inputErrorBorder, model.name == Nothing ) ]
+                    , class S.textInput
+                    , id "folder-name"
                     ]
-                    [ text texts.autoOwnerInfo
+                    []
+                , a
+                    [ class S.primaryButton
+                    , class "rounded-r -ml-1"
+                    , onClick SaveName
+                    , href "#"
                     ]
-               , div
-                    [ class "py-2 text-lg opacity-75"
-                    , classList [ ( "hidden", model.folder.id == "" ) ]
-                    ]
-                    [ text texts.modifyInfo
-                    ]
-               , div
-                    [ class S.message
-                    , classList [ ( "hidden", model.folder.id == "" || isOwner ) ]
-                    ]
-                    [ text texts.notOwnerInfo
-                    ]
-               , div [ class "mb-4 flex flex-col" ]
-                    [ label
-                        [ class S.inputLabel
-                        , for "folder-name"
-                        ]
-                        [ text texts.basics.name
-                        , B.inputRequired
-                        ]
-                    , div [ class "flex flex-row space-x-2" ]
-                        [ input
-                            [ type_ "text"
-                            , onInput SetName
-                            , Maybe.withDefault "" model.name
-                                |> value
-                            , classList [ ( S.inputErrorBorder, model.name == Nothing ) ]
-                            , class S.textInput
-                            , id "folder-name"
-                            ]
-                            []
-                        , a
-                            [ class S.primaryButton
-                            , class "rounded-r -ml-1"
-                            , onClick SaveName
-                            , href "#"
-                            ]
-                            [ i [ class "fa fa-save" ] []
-                            , span [ class "ml-2 hidden sm:inline" ]
-                                [ text texts.basics.submit
-                                ]
-                            ]
+                    [ i [ class "fa fa-save" ] []
+                    , span [ class "ml-2 hidden sm:inline" ]
+                        [ text texts.basics.submit
                         ]
                     ]
-               , div
-                    [ classList
-                        [ ( "hidden", model.result == Nothing )
-                        , ( S.errorMessage, Maybe.map .success model.result == Just False )
-                        , ( S.successMessage, Maybe.map .success model.result == Just True )
-                        ]
-                    , class "my-4"
-                    ]
-                    [ Maybe.map .message model.result
-                        |> Maybe.withDefault ""
-                        |> text
-                    ]
-               ]
+                ]
+            ]
+         , div
+            [ classList
+                [ ( "hidden", model.formState == FormStateInitial )
+                , ( S.errorMessage, isError model.formState )
+                , ( S.successMessage, isSuccess model.formState )
+                ]
+            , class "my-4"
+            ]
+            [ case model.formState of
+                FormStateInitial ->
+                    text ""
+
+                FormStateHttpError err ->
+                    text (texts.httpError err)
+
+                FormStateGenericError m ->
+                    text m
+
+                FormStateFolderCreated ->
+                    text texts.folderCreated
+
+                FormStateNameChangeSuccessful ->
+                    text texts.nameChangeSuccessful
+
+                FormStateDeleteSuccessful ->
+                    text texts.deleteSuccessful
+            ]
+         ]
             ++ viewMembers2 texts model
         )
 
@@ -412,7 +509,7 @@ viewMembers2 texts model =
             ]
         , div
             [ class "flex flex-col space-y-4 md:space-y-2 mt-2"
-            , class "px-2 border-0 border-l dark:border-bluegray-600"
+            , class "px-2 border-0 border-l dark:border-slate-600"
             ]
             (List.map (viewMember2 texts) model.members)
         ]
@@ -461,4 +558,5 @@ viewButtons2 texts model =
                 }
             ]
         , rootClasses = "mb-4"
+        , sticky = True
         }

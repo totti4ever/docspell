@@ -1,15 +1,22 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.ItemSelection exposing
     ( ItemSelection(..)
     , isActive
     , isSelected
     )
 
-import Set exposing (Set)
+import Data.ItemIds exposing (ItemIds)
 
 
 type ItemSelection
     = Inactive
-    | Active (Set String)
+    | Active ItemIds
 
 
 isSelected : String -> ItemSelection -> Bool
@@ -19,7 +26,7 @@ isSelected id set =
             False
 
         Active ids ->
-            Set.member id ids
+            Data.ItemIds.isMember ids id
 
 
 isActive : ItemSelection -> Bool

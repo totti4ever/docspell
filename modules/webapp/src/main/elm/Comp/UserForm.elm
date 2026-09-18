@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.UserForm exposing
     ( Model
     , Msg(..)
@@ -78,6 +85,7 @@ getUser model =
         , email = model.email
         , state = state
         , password = model.password
+        , source = "local"
     }
 
 

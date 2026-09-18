@@ -1,6 +1,11 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.generator
 
-import docspell.store.queries.AttachCountTable
 import docspell.store.records._
 
 final case class Tables(
@@ -11,6 +16,5 @@ final case class Tables(
     concEquip: REquipment.Table,
     folder: RFolder.Table,
     attach: RAttachment.Table,
-    meta: RAttachmentMeta.Table,
-    attachCount: AttachCountTable
+    meta: RAttachmentMeta.Table
 )

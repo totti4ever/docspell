@@ -1,74 +1,75 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract.ocr
 
-import java.nio.file.Path
-
-import cats.effect.{Blocker, ContextShift, Sync}
+import cats.effect._
 import fs2.Stream
+import fs2.io.file.{Files, Path}
 
-import docspell.common._
+import docspell.common.exec.ExternalCommand
+import docspell.common.exec.SysExec
+import docspell.common.util.File
+import docspell.logging.Logger
 
 object Ocr {
 
-  /** Extract the text of all pages in the given pdf file.
-    */
-  def extractPdf[F[_]: Sync: ContextShift](
+  /** Extract the text of all pages in the given pdf file. */
+  def extractPdf[F[_]: Async: Files](
       pdf: Stream[F, Byte],
-      blocker: Blocker,
       logger: Logger[F],
       lang: String,
       config: OcrConfig
   ): F[Option[String]] =
     File.withTempDir(config.ghostscript.workingDir, "extractpdf").use { wd =>
-      runGhostscript(pdf, config, wd, blocker, logger)
-        .flatMap(tmpImg => runTesseractFile(tmpImg, blocker, logger, lang, config))
+      runGhostscript(pdf, config, wd, logger)
+        .flatMap(tmpImg => runTesseractFile(tmpImg, logger, lang, config))
         .fold1(_ + "\n\n\n" + _)
         .compile
         .last
     }
 
-  /** Extract the text from the given image file
-    */
-  def extractImage[F[_]: Sync: ContextShift](
+  /** Extract the text from the given image file */
+  def extractImage[F[_]: Async](
       img: Stream[F, Byte],
-      blocker: Blocker,
       logger: Logger[F],
       lang: String,
       config: OcrConfig
   ): Stream[F, String] =
-    runTesseractStdin(img, blocker, logger, lang, config)
+    runTesseractStdin(img, logger, lang, config)
 
-  def extractPdFFile[F[_]: Sync: ContextShift](
+  def extractPdFFile[F[_]: Async: Files](
       pdf: Path,
-      blocker: Blocker,
       logger: Logger[F],
       lang: String,
       config: OcrConfig
   ): F[Option[String]] =
     File.withTempDir(config.ghostscript.workingDir, "extractpdf").use { wd =>
-      runGhostscriptFile(pdf, config.ghostscript.command, wd, blocker, logger)
-        .flatMap(tif => runTesseractFile(tif, blocker, logger, lang, config))
+      runGhostscriptFile(pdf, config.ghostscript.command, wd, logger)
+        .flatMap(tif => runTesseractFile(tif, logger, lang, config))
         .fold1(_ + "\n\n\n" + _)
         .compile
         .last
     }
 
-  def extractImageFile[F[_]: Sync: ContextShift](
+  def extractImageFile[F[_]: Async](
       img: Path,
-      blocker: Blocker,
       logger: Logger[F],
       lang: String,
       config: OcrConfig
   ): Stream[F, String] =
-    runTesseractFile(img, blocker, logger, lang, config)
+    runTesseractFile(img, logger, lang, config)
 
-  /** Run ghostscript to extract all pdf pages into tiff files. The
-    * files are stored to a temporary location on disk and returned.
+  /** Run ghostscript to extract all pdf pages into tiff files. The files are stored to a
+    * temporary location on disk and returned.
     */
-  private[extract] def runGhostscript[F[_]: Sync: ContextShift](
+  private[extract] def runGhostscript[F[_]: Async: Files](
       pdf: Stream[F, Byte],
       cfg: OcrConfig,
       wd: Path,
-      blocker: Blocker,
       logger: Logger[F]
   ): Stream[F, Path] = {
     val xargs =
@@ -77,62 +78,69 @@ object Ocr {
       else cfg.ghostscript.command.args
     val cmd = cfg.ghostscript.command
       .copy(args = xargs)
-      .replace(
+      .withVars(
         Map(
-          "{{infile}}"  -> "-",
-          "{{outfile}}" -> "%d.tif"
+          "infile" -> "-",
+          "outfile" -> "%d.tif"
         )
       )
-    SystemCommand
-      .execSuccess(cmd, blocker, logger, wd = Some(wd), stdin = pdf)
-      .evalMap(_ => File.listFiles(pathEndsWith(".tif"), wd))
-      .flatMap(fs => Stream.emits(fs))
+      .resolved
+
+    Stream
+      .resource(SysExec(cmd, logger, Some(wd), Some(pdf)))
+      .evalMap(_.runToSuccess(logger))
+      .flatMap(_ => File.listFiles(pathEndsWith(".tif"), wd))
   }
 
-  /** Run ghostscript to extract all pdf pages into tiff files. The
-    * files are stored to a temporary location on disk and returned.
+  /** Run ghostscript to extract all pdf pages into tiff files. The files are stored to a
+    * temporary location on disk and returned.
     */
-  private[extract] def runGhostscriptFile[F[_]: Sync: ContextShift](
+  private[extract] def runGhostscriptFile[F[_]: Async: Files](
       pdf: Path,
-      ghostscript: SystemCommand.Config,
+      ghostscript: ExternalCommand,
       wd: Path,
-      blocker: Blocker,
       logger: Logger[F]
   ): Stream[F, Path] = {
-    val cmd = ghostscript.replace(
-      Map(
-        "{{infile}}"  -> pdf.toAbsolutePath.toString,
-        "{{outfile}}" -> "%d.tif"
+    val cmd = ghostscript
+      .withVars(
+        Map(
+          "infile" -> pdf.absolute.toString,
+          "outfile" -> "%d.tif"
+        )
       )
-    )
-    SystemCommand
-      .execSuccess[F](cmd, blocker, logger, wd = Some(wd))
-      .evalMap(_ => File.listFiles(pathEndsWith(".tif"), wd))
-      .flatMap(fs => Stream.emits(fs))
+      .resolved
+
+    Stream
+      .resource(SysExec(cmd, logger, Some(wd)))
+      .evalMap(_.runToSuccess(logger))
+      .flatMap(_ => File.listFiles(pathEndsWith(".tif"), wd))
   }
 
   private def pathEndsWith(ext: String): Path => Boolean =
-    p => p.getFileName.toString.endsWith(ext)
+    p => p.fileName.toString.endsWith(ext)
 
-  /** Run unpaper to optimize the image for ocr. The
-    * files are stored to a temporary location on disk and returned.
+  /** Run unpaper to optimize the image for ocr. The files are stored to a temporary
+    * location on disk and returned.
     */
-  private[extract] def runUnpaperFile[F[_]: Sync: ContextShift](
+  private[extract] def runUnpaperFile[F[_]: Async](
       img: Path,
-      unpaper: SystemCommand.Config,
-      wd: Path,
-      blocker: Blocker,
+      unpaper: ExternalCommand,
+      wd: Option[Path],
       logger: Logger[F]
   ): Stream[F, Path] = {
-    val targetFile = img.resolveSibling("u-" + img.getFileName.toString).toAbsolutePath
-    val cmd = unpaper.replace(
-      Map(
-        "{{infile}}"  -> img.toAbsolutePath.toString,
-        "{{outfile}}" -> targetFile.toString
+    val targetFile = img.resolveSibling("u-" + img.fileName.toString).absolute
+    val cmd = unpaper
+      .withVars(
+        Map(
+          "infile" -> img.absolute.toString,
+          "outfile" -> targetFile.toString
+        )
       )
-    )
-    SystemCommand
-      .execSuccess[F](cmd, blocker, logger, wd = Some(wd))
+      .resolved
+
+    Stream
+      .resource(SysExec(cmd, logger, wd))
+      .evalMap(_.runToSuccess(logger))
       .map(_ => targetFile)
       .handleErrorWith { th =>
         logger
@@ -143,42 +151,41 @@ object Ocr {
       }
   }
 
-  /** Run tesseract on the given image file and return the extracted
-    * text.
-    */
-  private[extract] def runTesseractFile[F[_]: Sync: ContextShift](
+  /** Run tesseract on the given image file and return the extracted text. */
+  private[extract] def runTesseractFile[F[_]: Async](
       img: Path,
-      blocker: Blocker,
       logger: Logger[F],
       lang: String,
       config: OcrConfig
   ): Stream[F, String] =
     // tesseract cannot cope with absolute filenames
     // so use the parent as working dir
-    runUnpaperFile(img, config.unpaper.command, img.getParent, blocker, logger).flatMap {
-      uimg =>
-        val cmd = config.tesseract.command
-          .replace(
-            Map("{{file}}" -> uimg.getFileName.toString, "{{lang}}" -> fixLanguage(lang))
-          )
-        SystemCommand
-          .execSuccess[F](cmd, blocker, logger, wd = Some(uimg.getParent))
-          .map(_.stdout)
+    runUnpaperFile(img, config.unpaper.command, img.parent, logger).flatMap { uimg =>
+      val cmd = config.tesseract.command
+        .withVars(
+          Map("file" -> uimg.fileName.toString, "lang" -> fixLanguage(lang))
+        )
+        .resolved
+
+      Stream
+        .resource(SysExec(cmd, logger, uimg.parent))
+        .evalMap(_.runToSuccessStdout(logger))
     }
 
-  /** Run tesseract on the given image file and return the extracted
-    * text.
-    */
-  private[extract] def runTesseractStdin[F[_]: Sync: ContextShift](
+  /** Run tesseract on the given image file and return the extracted text. */
+  private[extract] def runTesseractStdin[F[_]: Async](
       img: Stream[F, Byte],
-      blocker: Blocker,
       logger: Logger[F],
       lang: String,
       config: OcrConfig
   ): Stream[F, String] = {
     val cmd = config.tesseract.command
-      .replace(Map("{{file}}" -> "stdin", "{{lang}}" -> fixLanguage(lang)))
-    SystemCommand.execSuccess(cmd, blocker, logger, stdin = img).map(_.stdout)
+      .withVars(Map("file" -> "stdin", "lang" -> fixLanguage(lang)))
+      .resolved
+
+    Stream
+      .resource(SysExec(cmd, logger, None, Some(img)))
+      .evalMap(_.runToSuccessStdout(logger))
   }
 
   private def fixLanguage(lang: String): String =

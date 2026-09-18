@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import cats.data.NonEmptyList
@@ -14,10 +20,10 @@ sealed trait EquipmentUse { self: Product =>
 object EquipmentUse {
 
   case object Concerning extends EquipmentUse
-  case object Disabled   extends EquipmentUse
+  case object Disabled extends EquipmentUse
 
   def concerning: EquipmentUse = Concerning
-  def disabled: EquipmentUse   = Disabled
+  def disabled: EquipmentUse = Disabled
 
   val all: NonEmptyList[EquipmentUse] =
     NonEmptyList.of(concerning, disabled)

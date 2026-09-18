@@ -1,34 +1,29 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.learn
 
 import cats.effect._
 import cats.implicits._
+import fs2.io.file.Files
 
 import docspell.analysis.classifier.ClassifierModel
 import docspell.common._
-import docspell.joex.scheduler._
+import docspell.logging.Logger
 import docspell.store.Store
 import docspell.store.records.RClassifierModel
 
-import bitpeace.MimetypeHint
-
 object StoreClassifierModel {
 
-  def handleModel[F[_]: Sync: ContextShift](
-      ctx: Context[F, _],
-      collective: Ident,
+  def handleModel[F[_]: Async: Files](
+      store: Store[F],
+      logger: Logger[F],
+      collective: CollectiveId,
       modelName: ClassifierName
   )(
-      trainedModel: ClassifierModel
-  ): F[Unit] =
-    handleModel(ctx.store, ctx.blocker, ctx.logger)(collective, modelName, trainedModel)
-
-  def handleModel[F[_]: Sync: ContextShift](
-      store: Store[F],
-      blocker: Blocker,
-      logger: Logger[F]
-  )(
-      collective: Ident,
-      modelName: ClassifierName,
       trainedModel: ClassifierModel
   ): F[Unit] =
     for {
@@ -36,17 +31,22 @@ object StoreClassifierModel {
         RClassifierModel.findByName(collective, modelName.name).map(_.map(_.fileId))
       )
       _ <- logger.debug(s"Storing new trained model for: ${modelName.name}")
-      fileData = fs2.io.file.readAll(trainedModel.model, blocker, 4096)
-      newFile <-
-        store.bitpeace.saveNew(fileData, 4096, MimetypeHint.none).compile.lastOrError
+      fileData = Files[F].readAll(trainedModel.model)
+      newFileId <-
+        fileData
+          .through(
+            store.fileRepo.save(collective, FileCategory.Classifier, MimeTypeHint.none)
+          )
+          .compile
+          .lastOrError
       _ <- store.transact(
-        RClassifierModel.updateFile(collective, modelName.name, Ident.unsafe(newFile.id))
+        RClassifierModel.updateFile(collective, modelName.name, newFileId)
       )
-      _ <- logger.debug(s"New model stored at file ${newFile.id}")
+      _ <- logger.debug(s"New model stored at file ${newFileId.id}")
       _ <- oldFile match {
         case Some(fid) =>
           logger.debug(s"Deleting old model file ${fid.id}") *>
-            store.bitpeace.delete(fid.id).compile.drain
+            store.fileRepo.delete(fid)
         case None => ().pure[F]
       }
     } yield ()

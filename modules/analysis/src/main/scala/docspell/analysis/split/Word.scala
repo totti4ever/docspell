@@ -1,9 +1,15 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.split
 
 case class Word(value: String, begin: Int, end: Int) {
-  def isEmpty: Boolean  = value.isEmpty
+  def isEmpty: Boolean = value.isEmpty
   def nonEmpty: Boolean = !isEmpty
-  def length: Int       = value.length
+  def length: Int = value.length
 
   def trimLeft(chars: Set[Char]): Word = {
     val v = value.dropWhile(chars.contains)

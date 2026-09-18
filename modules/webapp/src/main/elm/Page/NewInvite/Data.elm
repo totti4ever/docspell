@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.NewInvite.Data exposing
     ( Model
     , Msg(..)
@@ -19,7 +26,8 @@ type alias Model =
 
 type State
     = Empty
-    | Failed String
+    | Failed Http.Error
+    | GenericFail String
     | Success InviteResult
 
 
@@ -27,6 +35,9 @@ isFailed : State -> Bool
 isFailed state =
     case state of
         Failed _ ->
+            True
+
+        GenericFail _ ->
             True
 
         _ ->

@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.DatePicker exposing
     ( Msg
     , defaultSettings
@@ -30,7 +37,7 @@ init =
 
 emptyModel : DatePicker
 emptyModel =
-    DatePicker.initFromDate (Date.fromCalendarDate 2019 Aug 21)
+    DatePicker.initFromDate (Date.fromCalendarDate 2021 Oct 31)
 
 
 defaultSettings : Settings

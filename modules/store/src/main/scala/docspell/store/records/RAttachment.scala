@@ -1,21 +1,26 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
 import cats.implicits._
 import fs2.Stream
 
-import docspell.common._
+import docspell.common.{FileKey, _}
 import docspell.store.qb.DSL._
 import docspell.store.qb._
 
-import bitpeace.FileMeta
 import doobie._
 import doobie.implicits._
 
 case class RAttachment(
     id: Ident,
     itemId: Ident,
-    fileId: Ident,
+    fileId: FileKey,
     position: Int,
     created: Timestamp,
     name: Option[String]
@@ -25,13 +30,13 @@ object RAttachment {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "attachment"
 
-    val id       = Column[Ident]("attachid", this)
-    val itemId   = Column[Ident]("itemid", this)
-    val fileId   = Column[Ident]("filemetaid", this)
+    val id = Column[Ident]("attachid", this)
+    val itemId = Column[Ident]("itemid", this)
+    val fileId = Column[FileKey]("filemetaid", this)
     val position = Column[Int]("position", this)
-    val created  = Column[Timestamp]("created", this)
-    val name     = Column[String]("name", this)
-    val all      = NonEmptyList.of[Column[_]](id, itemId, fileId, position, created, name)
+    val created = Column[Timestamp]("created", this)
+    val name = Column[String]("name", this)
+    val all = NonEmptyList.of[Column[_]](id, itemId, fileId, position, created, name)
   }
 
   val T = Table(None)
@@ -42,7 +47,7 @@ object RAttachment {
     DML.insert(
       T,
       T.all,
-      fr"${v.id},${v.itemId},${v.fileId.id},${v.position},${v.created},${v.name}"
+      fr"${v.id},${v.itemId},${v.fileId},${v.position},${v.created},${v.name}"
     )
 
   def decPositions(iId: Ident, lowerBound: Int, upperBound: Int): ConnectionIO[Int] =
@@ -63,16 +68,16 @@ object RAttachment {
       DML.set(T.position.increment(1))
     )
 
-  def nextPosition(id: Ident): ConnectionIO[Int] =
+  def nextPosition(itemId: Ident): ConnectionIO[Int] =
     for {
-      max <- Select(max(T.position).s, from(T), T.itemId === id).build
+      max <- Select(max(T.position).s, from(T), T.itemId === itemId).build
         .query[Option[Int]]
         .unique
     } yield max.map(_ + 1).getOrElse(0)
 
   def updateFileIdAndName(
       attachId: Ident,
-      fId: Ident,
+      fId: FileKey,
       fname: Option[String]
   ): ConnectionIO[Int] =
     DML.update(
@@ -83,12 +88,22 @@ object RAttachment {
 
   def updateFileId(
       attachId: Ident,
-      fId: Ident
+      fId: FileKey
   ): ConnectionIO[Int] =
     DML.update(
       T,
       T.id === attachId,
       DML.set(T.fileId.setTo(fId))
+    )
+
+  def updateItemId(attachId: Ident, itemId: Ident, pos: Int): ConnectionIO[Int] =
+    DML.update(
+      T,
+      T.id === attachId,
+      DML.set(
+        T.itemId.setTo(itemId),
+        T.position.setTo(pos)
+      )
     )
 
   def updatePosition(attachId: Ident, pos: Int): ConnectionIO[Int] =
@@ -97,9 +112,7 @@ object RAttachment {
   def findById(attachId: Ident): ConnectionIO[Option[RAttachment]] =
     run(select(T.all), from(T), T.id === attachId).query[RAttachment].option
 
-  def findMeta(attachId: Ident): ConnectionIO[Option[FileMeta]] = {
-    import bitpeace.sql._
-
+  def findMeta(attachId: Ident): ConnectionIO[Option[RFileMeta]] = {
     val m = RFileMeta.as("m")
     val a = RAttachment.as("a")
     Select(
@@ -107,24 +120,24 @@ object RAttachment {
       from(a)
         .innerJoin(m, a.fileId === m.id),
       a.id === attachId
-    ).build.query[FileMeta].option
+    ).build.query[RFileMeta].option
   }
 
   def updateName(
       attachId: Ident,
-      collective: Ident,
+      collective: CollectiveId,
       aname: Option[String]
   ): ConnectionIO[Int] = {
     val update = DML.update(T, T.id === attachId, DML.set(T.name.setTo(aname)))
     for {
       exists <- existsByIdAndCollective(attachId, collective)
-      n      <- if (exists) update else 0.pure[ConnectionIO]
+      n <- if (exists) update else 0.pure[ConnectionIO]
     } yield n
   }
 
   def findByIdAndCollective(
       attachId: Ident,
-      collective: Ident
+      collective: CollectiveId
   ): ConnectionIO[Option[RAttachment]] = {
     val a = RAttachment.as("a")
     val i = RItem.as("i")
@@ -140,7 +153,7 @@ object RAttachment {
 
   def existsByIdAndCollective(
       attachId: Ident,
-      collective: Ident
+      collective: CollectiveId
   ): ConnectionIO[Boolean] = {
     val a = RAttachment.as("a")
     val i = RItem.as("i")
@@ -154,7 +167,7 @@ object RAttachment {
 
   def findByItemAndCollective(
       id: Ident,
-      coll: Ident
+      coll: CollectiveId
   ): ConnectionIO[Vector[RAttachment]] = {
     val a = RAttachment.as("a")
     val i = RItem.as("i")
@@ -168,8 +181,8 @@ object RAttachment {
 
   def findByItemCollectiveSource(
       id: Ident,
-      coll: Ident,
-      fileIds: NonEmptyList[Ident]
+      coll: CollectiveId,
+      fileIds: NonEmptyList[FileKey]
   ): ConnectionIO[Vector[RAttachment]] = {
     val i = RItem.as("i")
     val a = RAttachment.as("a")
@@ -189,10 +202,8 @@ object RAttachment {
 
   def findByItemAndCollectiveWithMeta(
       id: Ident,
-      coll: Ident
-  ): ConnectionIO[Vector[(RAttachment, FileMeta)]] = {
-    import bitpeace.sql._
-
+      coll: CollectiveId
+  ): ConnectionIO[Vector[(RAttachment, RFileMeta)]] = {
     val a = RAttachment.as("a")
     val m = RFileMeta.as("m")
     val i = RItem.as("i")
@@ -202,12 +213,10 @@ object RAttachment {
         .innerJoin(m, a.fileId === m.id)
         .innerJoin(i, a.itemId === i.id),
       a.itemId === id && i.cid === coll
-    ).build.query[(RAttachment, FileMeta)].to[Vector]
+    ).build.query[(RAttachment, RFileMeta)].to[Vector]
   }
 
-  def findByItemWithMeta(id: Ident): ConnectionIO[Vector[(RAttachment, FileMeta)]] = {
-    import bitpeace.sql._
-
+  def findByItemWithMeta(id: Ident): ConnectionIO[Vector[(RAttachment, RFileMeta)]] = {
     val a = RAttachment.as("a")
     val m = RFileMeta.as("m")
     Select(
@@ -215,11 +224,10 @@ object RAttachment {
       from(a)
         .innerJoin(m, a.fileId === m.id),
       a.itemId === id
-    ).orderBy(a.position.asc).build.query[(RAttachment, FileMeta)].to[Vector]
+    ).orderBy(a.position.asc).build.query[(RAttachment, RFileMeta)].to[Vector]
   }
 
-  /** Deletes the attachment and its related source and meta records.
-    */
+  /** Deletes the attachment and its related source and meta records. */
   def delete(attachId: Ident): ConnectionIO[Int] =
     for {
       n0 <- RAttachmentMeta.delete(attachId)
@@ -228,11 +236,21 @@ object RAttachment {
       n3 <- DML.delete(T, T.id === attachId)
     } yield n0 + n1 + n2 + n3
 
-  def findItemId(attachId: Ident): ConnectionIO[Option[Ident]] =
-    Select(T.itemId.s, from(T), T.id === attachId).build.query[Ident].option
+  def findItemAndLanguage(
+      attachId: Ident
+  ): ConnectionIO[Option[(Ident, Option[Language])]] = {
+    val a = RAttachment.as("a")
+    val m = RAttachmentMeta.as("m")
+
+    Select(
+      select(a.itemId, m.language),
+      from(a).leftJoin(m, m.id === a.id),
+      a.id === attachId
+    ).build.query[(Ident, Option[Language])].option
+  }
 
   def findAll(
-      coll: Option[Ident],
+      coll: Option[CollectiveId],
       chunkSize: Int
   ): Stream[ConnectionIO, RAttachment] = {
     val a = RAttachment.as("a")
@@ -265,7 +283,7 @@ object RAttachment {
   }
 
   def findWithoutPreview(
-      coll: Option[Ident],
+      coll: Option[CollectiveId],
       chunkSize: Int
   ): Stream[ConnectionIO, RAttachment] = {
     val a = RAttachment.as("a")
@@ -281,14 +299,14 @@ object RAttachment {
   }
 
   def findNonConvertedPdf(
-      coll: Option[Ident],
+      coll: Option[CollectiveId],
       chunkSize: Int
   ): Stream[ConnectionIO, RAttachment] = {
     val pdfType = "application/pdf%"
-    val a       = RAttachment.as("a")
-    val s       = RAttachmentSource.as("s")
-    val i       = RItem.as("i")
-    val m       = RFileMeta.as("m")
+    val a = RAttachment.as("a")
+    val s = RAttachmentSource.as("s")
+    val i = RItem.as("i")
+    val m = RFileMeta.as("m")
 
     Select(
       select(a.all),
@@ -304,7 +322,7 @@ object RAttachment {
 
   def filterAttachments(
       attachments: NonEmptyList[Ident],
-      coll: Ident
+      coll: CollectiveId
   ): ConnectionIO[Vector[Ident]] = {
     val a = RAttachment.as("a")
     val i = RItem.as("i")

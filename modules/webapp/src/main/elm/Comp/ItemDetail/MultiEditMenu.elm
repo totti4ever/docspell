@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.MultiEditMenu exposing
     ( Model
     , Msg
@@ -16,40 +23,38 @@ import Api.Model.FolderList exposing (FolderList)
 import Api.Model.IdName exposing (IdName)
 import Api.Model.PersonList exposing (PersonList)
 import Api.Model.ReferenceList exposing (ReferenceList)
-import Api.Model.Tag exposing (Tag)
-import Api.Model.TagList exposing (TagList)
 import Comp.CustomFieldMultiInput
 import Comp.DatePicker
 import Comp.DetailEdit
 import Comp.Dropdown exposing (isDropdownChangeMsg)
 import Comp.ItemDetail.FieldTabState as FTabState exposing (EditTab(..), tabName)
 import Comp.ItemDetail.FormChange exposing (FormChange(..))
+import Comp.SimpleTextInput
 import Comp.Tabs as TB
+import Comp.TagDropdown
 import Data.CustomFieldChange exposing (CustomFieldChange(..))
 import Data.Direction exposing (Direction)
 import Data.DropdownStyle
+import Data.EquipmentOrder
 import Data.Fields
 import Data.Flags exposing (Flags)
+import Data.FolderOrder
 import Data.Icons as Icons
+import Data.PersonOrder
 import Data.PersonUse
 import Data.UiSettings exposing (UiSettings)
 import DatePicker exposing (DatePicker)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onClick)
 import Http
 import Markdown
 import Messages.Comp.ItemDetail.MultiEditMenu exposing (Texts)
 import Page exposing (Page(..))
 import Set exposing (Set)
 import Styles as S
-import Task
-import Throttle exposing (Throttle)
-import Time
-import Util.Folder exposing (mkFolderOption)
+import Util.Folder
 import Util.List
-import Util.Maybe
-import Util.Tag
 
 
 
@@ -69,9 +74,8 @@ type TagEditMode
 
 
 type alias Model =
-    { tagModel : Comp.Dropdown.Model Tag
-    , nameModel : String
-    , nameSaveThrottle : Throttle Msg
+    { tagModel : Comp.TagDropdown.Model
+    , nameInput : Comp.SimpleTextInput.Model
     , folderModel : Comp.Dropdown.Model IdName
     , allFolders : List FolderItem
     , directionModel : Comp.Dropdown.Model Direction
@@ -93,21 +97,18 @@ type alias Model =
 type Msg
     = ItemDatePickerMsg Comp.DatePicker.Msg
     | DueDatePickerMsg Comp.DatePicker.Msg
-    | SetName String
-    | SaveName
-    | UpdateThrottle
+    | SetNameMsg Comp.SimpleTextInput.Msg
     | RemoveDueDate
     | RemoveDate
     | ConfirmMsg Bool
     | ToggleTagEditMode
     | FolderDropdownMsg (Comp.Dropdown.Msg IdName)
-    | TagDropdownMsg (Comp.Dropdown.Msg Tag)
+    | TagDropdownMsg Comp.TagDropdown.Msg
     | DirDropdownMsg (Comp.Dropdown.Msg Direction)
     | OrgDropdownMsg (Comp.Dropdown.Msg IdName)
     | CorrPersonMsg (Comp.Dropdown.Msg IdName)
     | ConcPersonMsg (Comp.Dropdown.Msg IdName)
     | ConcEquipMsg (Comp.Dropdown.Msg IdName)
-    | GetTagsResp (Result Http.Error TagList)
     | GetOrgResp (Result Http.Error ReferenceList)
     | GetPersonResp (Result Http.Error PersonList)
     | GetEquipResp (Result Http.Error EquipmentList)
@@ -118,7 +119,7 @@ type Msg
 
 init : Model
 init =
-    { tagModel = Util.Tag.makeDropdownModel
+    { tagModel = Comp.TagDropdown.initWith [] []
     , directionModel =
         Comp.Dropdown.makeSingleList
             { options = Data.Direction.all
@@ -130,8 +131,7 @@ init =
     , concEquipModel = Comp.Dropdown.makeSingle
     , folderModel = Comp.Dropdown.makeSingle
     , allFolders = []
-    , nameModel = ""
-    , nameSaveThrottle = Throttle.create 1
+    , nameInput = Comp.SimpleTextInput.initDefault Nothing
     , itemDatePicker = Comp.DatePicker.emptyModel
     , itemDate = Nothing
     , dueDate = Nothing
@@ -148,16 +148,19 @@ loadModel flags =
     let
         ( _, dpc ) =
             Comp.DatePicker.init
+
+        ( _, tc ) =
+            Comp.TagDropdown.init flags
     in
     Cmd.batch
-        [ Api.getTags flags "" GetTagsResp
-        , Api.getOrgLight flags GetOrgResp
-        , Api.getPersons flags "" GetPersonResp
-        , Api.getEquipments flags "" GetEquipResp
-        , Api.getFolders flags "" False GetFolderResp
+        [ Api.getOrgLight flags GetOrgResp
+        , Api.getPersons flags "" Data.PersonOrder.NameAsc GetPersonResp
+        , Api.getEquipments flags "" Data.EquipmentOrder.NameAsc GetEquipResp
+        , Api.getFolders flags "" Data.FolderOrder.NameAsc False GetFolderResp
         , Cmd.map CustomFieldMsg (Comp.CustomFieldMultiInput.initCmd flags)
         , Cmd.map ItemDatePickerMsg dpc
         , Cmd.map DueDatePickerMsg dpc
+        , Cmd.map TagDropdownMsg tc
         ]
 
 
@@ -202,8 +205,8 @@ update flags msg model =
 
         TagDropdownMsg m ->
             let
-                ( m2, _ ) =
-                    Comp.Dropdown.update m model.tagModel
+                ( m2, c2 ) =
+                    Comp.TagDropdown.update m model.tagModel
 
                 newModel =
                     { model | tagModel = m2 }
@@ -220,8 +223,8 @@ update flags msg model =
                             ReplaceTagChange list
 
                 change =
-                    if isDropdownChangeMsg m then
-                        Comp.Dropdown.getSelected newModel.tagModel
+                    if Comp.TagDropdown.isChangeMsg m then
+                        Comp.TagDropdown.getSelected newModel.tagModel
                             |> Util.List.distinct
                             |> List.map (\t -> IdName t.id t.name)
                             |> ReferenceList
@@ -230,12 +233,12 @@ update flags msg model =
                     else
                         NoFormChange
             in
-            resultNoCmd change newModel
+            UpdateResult newModel (Cmd.map TagDropdownMsg c2) Sub.none change
 
         ToggleTagEditMode ->
             let
                 ( m2, _ ) =
-                    Comp.Dropdown.update (Comp.Dropdown.SetSelection []) model.tagModel
+                    Comp.TagDropdown.update (Comp.TagDropdown.setSelected []) model.tagModel
 
                 newModel =
                     { model | tagModel = m2 }
@@ -249,16 +252,6 @@ update flags msg model =
 
                 ReplaceTags ->
                     resultNone { newModel | tagEditMode = AddTags }
-
-        GetTagsResp (Ok tags) ->
-            let
-                tagList =
-                    Comp.Dropdown.SetOptions tags.items
-            in
-            update flags (TagDropdownMsg tagList) model
-
-        GetTagsResp (Err _) ->
-            resultNone model
 
         FolderDropdownMsg m ->
             let
@@ -487,51 +480,24 @@ update flags msg model =
         RemoveDueDate ->
             resultNoCmd (DueDateChange Nothing) { model | dueDate = Nothing }
 
-        SetName str ->
-            case Util.Maybe.fromString str of
-                Just newName ->
-                    let
-                        cmd_ =
-                            Task.succeed ()
-                                |> Task.perform (\_ -> SaveName)
-
-                        ( newThrottle, cmd ) =
-                            Throttle.try cmd_ model.nameSaveThrottle
-
-                        newModel =
-                            { model
-                                | nameSaveThrottle = newThrottle
-                                , nameModel = newName
-                            }
-
-                        sub =
-                            nameThrottleSub newModel
-                    in
-                    UpdateResult newModel cmd sub NoFormChange
-
-                Nothing ->
-                    resultNone { model | nameModel = str }
-
-        SaveName ->
-            case Util.Maybe.fromString model.nameModel of
-                Just n ->
-                    resultNoCmd (NameChange n) model
-
-                Nothing ->
-                    resultNone model
-
-        UpdateThrottle ->
+        SetNameMsg lm ->
             let
-                ( newThrottle, cmd ) =
-                    Throttle.update model.nameSaveThrottle
+                result =
+                    Comp.SimpleTextInput.update lm model.nameInput
 
-                newModel =
-                    { model | nameSaveThrottle = newThrottle }
+                formChange =
+                    case result.change of
+                        Comp.SimpleTextInput.ValueUpdated v ->
+                            NameChange <| Maybe.withDefault "" v
 
-                sub =
-                    nameThrottleSub newModel
+                        Comp.SimpleTextInput.ValueUnchanged ->
+                            NoFormChange
             in
-            UpdateResult newModel cmd sub NoFormChange
+            { model = { model | nameInput = result.model }
+            , cmd = Cmd.batch [ Cmd.map SetNameMsg result.cmd ]
+            , sub = Sub.map SetNameMsg result.sub
+            , change = formChange
+            }
 
         CustomFieldMsg lm ->
             let
@@ -543,6 +509,9 @@ update flags msg model =
 
                 cmd_ =
                     Cmd.map CustomFieldMsg res.cmd
+
+                sub_ =
+                    Sub.map CustomFieldMsg res.sub
 
                 change =
                     case res.result of
@@ -558,7 +527,7 @@ update flags msg model =
                         FieldCreateNew ->
                             NoFormChange
             in
-            UpdateResult model_ cmd_ Sub.none change
+            UpdateResult model_ cmd_ sub_ change
 
         ToggleAkkordionTab name ->
             let
@@ -570,13 +539,6 @@ update flags msg model =
                         Set.insert name model.openTabs
             in
             UpdateResult { model | openTabs = tabs } Cmd.none Sub.none NoFormChange
-
-
-nameThrottleSub : Model -> Sub Msg
-nameThrottleSub model =
-    Throttle.ifNeeded
-        (Time.every 400 (\_ -> UpdateThrottle))
-        model.nameSaveThrottle
 
 
 
@@ -688,7 +650,7 @@ renderEditForm2 texts flags cfg settings model =
         directionCfg =
             { makeOption =
                 \entry ->
-                    { text = Data.Direction.toString entry
+                    { text = texts.direction entry
                     , additional = ""
                     }
             , placeholder = texts.chooseDirection
@@ -732,7 +694,7 @@ renderEditForm2 texts flags cfg settings model =
               , body =
                     [ div [ class "field" ]
                         [ label [ class S.inputLabel ]
-                            [ Icons.tagsIcon2 ""
+                            [ Icons.tagsIcon ""
                             , text texts.basics.tags
                             , a
                                 [ class "float-right"
@@ -745,8 +707,10 @@ renderEditForm2 texts flags cfg settings model =
                                 ]
                             ]
                         , Html.map TagDropdownMsg
-                            (Comp.Dropdown.view2 (Util.Tag.tagSettings texts.basics.chooseTag dds)
+                            (Comp.TagDropdown.view
+                                texts.tagDropdown
                                 settings
+                                dds
                                 model.tagModel
                             )
                         , Markdown.toHtml [ class "opacity-50 text-sm" ] tagModeMsg
@@ -765,7 +729,7 @@ renderEditForm2 texts flags cfg settings model =
                             , ( "hidden", isFolderMember model )
                             ]
                         ]
-                        [ Markdown.toHtml [] texts.folderNotOwnerWarning
+                        [ Markdown.toHtml [] texts.basics.folderNotOwnerWarning
                         ]
                     ]
               }
@@ -836,7 +800,7 @@ renderEditForm2 texts flags cfg settings model =
                     [ optional [ Data.Fields.CorrOrg ] <|
                         div [ class "mb-4" ]
                             [ label [ class S.inputLabel ]
-                                [ Icons.organizationIcon2 ""
+                                [ Icons.organizationIcon ""
                                 , span [ class "ml-2" ]
                                     [ text texts.basics.organization
                                     ]
@@ -851,7 +815,7 @@ renderEditForm2 texts flags cfg settings model =
                     , optional [ Data.Fields.CorrPerson ] <|
                         div [ class "mb-4" ]
                             [ label [ class S.inputLabel ]
-                                [ Icons.personIcon2 ""
+                                [ Icons.personIcon ""
                                 , span [ class "ml-2" ]
                                     [ text texts.basics.person
                                     ]
@@ -873,7 +837,7 @@ renderEditForm2 texts flags cfg settings model =
                     [ optional [ Data.Fields.ConcPerson ] <|
                         div [ class "mb-4" ]
                             [ label [ class S.inputLabel ]
-                                [ Icons.personIcon2 ""
+                                [ Icons.personIcon ""
                                 , span [ class "ml-2" ]
                                     [ text texts.basics.person ]
                                 ]
@@ -882,7 +846,7 @@ renderEditForm2 texts flags cfg settings model =
                     , optional [ Data.Fields.ConcEquip ] <|
                         div [ class "mb-4" ]
                             [ label [ class S.inputLabel ]
-                                [ Icons.equipmentIcon2 ""
+                                [ Icons.equipmentIcon ""
                                 , span [ class "ml-2" ]
                                     [ text texts.basics.equipment ]
                                 ]
@@ -908,13 +872,8 @@ renderEditForm2 texts flags cfg settings model =
               , info = Nothing
               , body =
                     [ div [ class "relative" ]
-                        [ input
-                            [ type_ "text"
-                            , value model.nameModel
-                            , onInput SetName
-                            , class S.textInputSidebar
-                            ]
-                            []
+                        [ Html.map SetNameMsg
+                            (Comp.SimpleTextInput.view [ class S.textInputSidebar ] model.nameInput)
                         , span [ class S.inputLeftIconOnly ]
                             [ i
                                 [ classList

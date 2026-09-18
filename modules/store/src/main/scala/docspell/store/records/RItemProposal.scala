@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -20,11 +26,11 @@ object RItemProposal {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "item_proposal"
 
-    val itemId            = Column[Ident]("itemid", this)
+    val itemId = Column[Ident]("itemid", this)
     val classifyProposals = Column[MetaProposalList]("classifier_proposals", this)
-    val classifyTags      = Column[List[IdRef]]("classifier_tags", this)
-    val created           = Column[Timestamp]("created", this)
-    val all               = NonEmptyList.of[Column[_]](itemId, classifyProposals, classifyTags, created)
+    val classifyTags = Column[List[IdRef]]("classifier_tags", this)
+    val created = Column[Timestamp]("created", this)
+    val all = NonEmptyList.of[Column[_]](itemId, classifyProposals, classifyTags, created)
   }
 
   val T = Table(None)

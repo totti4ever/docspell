@@ -1,7 +1,15 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.TagManage exposing
     ( Model
     , Msg(..)
     , emptyModel
+    , init
     , update
     , view2
     )
@@ -16,13 +24,14 @@ import Comp.TagForm
 import Comp.TagTable
 import Comp.YesNoDimmer
 import Data.Flags exposing (Flags)
+import Data.TagOrder exposing (TagOrder)
+import Data.UiSettings exposing (UiSettings)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onSubmit)
 import Http
 import Messages.Comp.TagManage exposing (Texts)
 import Styles as S
-import Util.Http
 import Util.Maybe
 import Util.Tag
 import Util.Update
@@ -32,11 +41,19 @@ type alias Model =
     { tagTableModel : Comp.TagTable.Model
     , tagFormModel : Comp.TagForm.Model
     , viewMode : ViewMode
-    , formError : Maybe String
+    , formError : FormError
     , loading : Bool
     , deleteConfirm : Comp.YesNoDimmer.Model
     , query : String
+    , order : TagOrder
     }
+
+
+type FormError
+    = FormErrorNone
+    | FormErrorHttp Http.Error
+    | FormErrorInvalid
+    | FormErrorSubmit String
 
 
 type ViewMode
@@ -49,18 +66,24 @@ emptyModel =
     { tagTableModel = Comp.TagTable.emptyModel
     , tagFormModel = Comp.TagForm.emptyModel []
     , viewMode = Table
-    , formError = Nothing
+    , formError = FormErrorNone
     , loading = False
     , deleteConfirm = Comp.YesNoDimmer.emptyModel
     , query = ""
+    , order = Data.TagOrder.NameAsc
     }
+
+
+init : Flags -> ( Model, Cmd Msg )
+init flags =
+    ( emptyModel, Api.getTags flags emptyModel.query emptyModel.order (TagResp emptyModel.query) )
 
 
 type Msg
     = TableMsg Comp.TagTable.Msg
     | FormMsg Comp.TagForm.Msg
     | LoadTags
-    | TagResp (Result Http.Error TagList)
+    | TagResp String (Result Http.Error TagList)
     | SetViewMode ViewMode
     | InitNewTag
     | Submit
@@ -75,16 +98,20 @@ update flags msg model =
     case msg of
         TableMsg m ->
             let
-                ( tm, tc ) =
+                ( tm, tc, maybeOrder ) =
                     Comp.TagTable.update flags m model.tagTableModel
+
+                newOrder =
+                    Maybe.withDefault model.order maybeOrder
 
                 ( m2, c2 ) =
                     ( { model
                         | tagTableModel = tm
+                        , order = newOrder
                         , viewMode = Maybe.map (\_ -> Form) tm.selected |> Maybe.withDefault Table
                         , formError =
                             if Util.Maybe.nonEmpty tm.selected then
-                                Nothing
+                                FormErrorNone
 
                             else
                                 model.formError
@@ -99,8 +126,15 @@ update flags msg model =
 
                         Nothing ->
                             ( m2, Cmd.none )
+
+                ( m4, c4 ) =
+                    if model.order == newOrder then
+                        ( m3, Cmd.none )
+
+                    else
+                        update flags LoadTags m3
             in
-            ( m3, Cmd.batch [ c2, c3 ] )
+            ( m4, Cmd.batch [ c2, c3, c4 ] )
 
         FormMsg m ->
             let
@@ -110,9 +144,11 @@ update flags msg model =
             ( { model | tagFormModel = m2 }, Cmd.map FormMsg c2 )
 
         LoadTags ->
-            ( { model | loading = True }, Api.getTags flags model.query TagResp )
+            ( { model | loading = True }
+            , Api.getTags flags model.query model.order (TagResp model.query)
+            )
 
-        TagResp (Ok tags) ->
+        TagResp query (Ok tags) ->
             let
                 m2 =
                     { model | viewMode = Table, loading = False }
@@ -122,11 +158,15 @@ update flags msg model =
             in
             Util.Update.andThen1
                 [ update flags (TableMsg (Comp.TagTable.SetTags tags.items))
-                , update flags (FormMsg (Comp.TagForm.SetCategoryOptions cats))
+                , if query == "" then
+                    update flags (FormMsg (Comp.TagForm.SetCategoryOptions cats))
+
+                  else
+                    \m -> ( m, Cmd.none )
                 ]
                 m2
 
-        TagResp (Err _) ->
+        TagResp _ (Err _) ->
             ( { model | loading = False }, Cmd.none )
 
         SetViewMode m ->
@@ -144,7 +184,7 @@ update flags msg model =
         InitNewTag ->
             let
                 nm =
-                    { model | viewMode = Form, formError = Nothing }
+                    { model | viewMode = Form, formError = FormErrorNone }
 
                 tag =
                     Api.Model.Tag.empty
@@ -163,7 +203,7 @@ update flags msg model =
                 ( { model | loading = True }, Api.postTag flags tag SubmitResp )
 
             else
-                ( { model | formError = Just "Please correct the errors in the form." }, Cmd.none )
+                ( { model | formError = FormErrorInvalid }, Cmd.none )
 
         SubmitResp (Ok res) ->
             if res.success then
@@ -177,10 +217,10 @@ update flags msg model =
                 ( { m3 | loading = False }, Cmd.batch [ c2, c3 ] )
 
             else
-                ( { model | formError = Just res.message, loading = False }, Cmd.none )
+                ( { model | formError = FormErrorSubmit res.message, loading = False }, Cmd.none )
 
         SubmitResp (Err err) ->
-            ( { model | formError = Just (Util.Http.errorToString err), loading = False }, Cmd.none )
+            ( { model | formError = FormErrorHttp err, loading = False }, Cmd.none )
 
         RequestDelete ->
             update flags (YesNoMsg Comp.YesNoDimmer.activate) model
@@ -207,20 +247,20 @@ update flags msg model =
                 m =
                     { model | query = str }
             in
-            ( m, Api.getTags flags str TagResp )
+            ( m, Api.getTags flags str model.order (TagResp str) )
 
 
 
 --- View2
 
 
-view2 : Texts -> Model -> Html Msg
-view2 texts model =
+view2 : Texts -> UiSettings -> Model -> Html Msg
+view2 texts settings model =
     if model.viewMode == Table then
         viewTable2 texts model
 
     else
-        viewForm2 texts model
+        viewForm2 texts settings model
 
 
 viewTable2 : Texts -> Model -> Html Msg
@@ -244,8 +284,9 @@ viewTable2 texts model =
                     }
                 ]
             , rootClasses = "mb-4"
+            , sticky = True
             }
-        , Html.map TableMsg (Comp.TagTable.view2 texts.tagTable model.tagTableModel)
+        , Html.map TableMsg (Comp.TagTable.view2 texts.tagTable model.order model.tagTableModel)
         , div
             [ classList
                 [ ( "ui dimmer", True )
@@ -257,8 +298,8 @@ viewTable2 texts model =
         ]
 
 
-viewForm2 : Texts -> Model -> Html Msg
-viewForm2 texts model =
+viewForm2 : Texts -> UiSettings -> Model -> Html Msg
+viewForm2 texts settings model =
     let
         newTag =
             model.tagFormModel.tag.id == ""
@@ -319,17 +360,29 @@ viewForm2 texts model =
                 else
                     []
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , div
             [ classList
-                [ ( "hidden", Util.Maybe.isEmpty model.formError )
+                [ ( "hidden", model.formError == FormErrorNone )
                 ]
             , class "my-2"
             , class S.errorMessage
             ]
-            [ Maybe.withDefault "" model.formError |> text
+            [ case model.formError of
+                FormErrorNone ->
+                    text ""
+
+                FormErrorHttp err ->
+                    text (texts.httpError err)
+
+                FormErrorInvalid ->
+                    text texts.correctFormErrors
+
+                FormErrorSubmit m ->
+                    text m
             ]
-        , Html.map FormMsg (Comp.TagForm.view2 texts.tagForm model.tagFormModel)
+        , Html.map FormMsg (Comp.TagForm.view2 texts.tagForm settings model.tagFormModel)
         , B.loadingDimmer
             { active = model.loading
             , label = texts.basics.loading

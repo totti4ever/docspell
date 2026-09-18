@@ -1,16 +1,46 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Util.CustomField exposing
-    ( nameOrLabel
+    ( boolValue
+    , nameOrLabel
     , renderValue
-    , renderValue1
     , renderValue2
+    , statsToFields
     )
 
+import Api.Model.CustomField exposing (CustomField)
 import Api.Model.ItemFieldValue exposing (ItemFieldValue)
+import Api.Model.SearchStats exposing (SearchStats)
 import Data.CustomFieldType
 import Data.Icons as Icons
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
+
+
+statsToFields : SearchStats -> List CustomField
+statsToFields stats =
+    let
+        mkField fs =
+            CustomField fs.id fs.name fs.label fs.ftype fs.count 0
+    in
+    List.map mkField stats.fieldStats
+
+
+{-| This is how the server wants the value to a bool custom field
+-}
+boolValue : Bool -> String
+boolValue b =
+    if b then
+        "true"
+
+    else
+        "false"
 
 
 nameOrLabel : { r | name : String, label : Maybe String } -> String
@@ -20,43 +50,7 @@ nameOrLabel fv =
 
 renderValue : String -> ItemFieldValue -> Html msg
 renderValue classes cv =
-    renderValue1 [ ( classes, True ) ] Nothing cv
-
-
-renderValue1 : List ( String, Bool ) -> Maybe msg -> ItemFieldValue -> Html msg
-renderValue1 classes tagger cv =
-    let
-        renderBool =
-            if cv.value == "true" then
-                i [ class "check icon" ] []
-
-            else
-                i [ class "minus icon" ] []
-
-        el : List (Html msg) -> Html msg
-        el =
-            case tagger of
-                Just t ->
-                    a
-                        [ classList classes
-                        , onClick t
-                        , href "#"
-                        ]
-
-                Nothing ->
-                    div [ classList classes ]
-    in
-    el
-        [ Icons.customFieldTypeIconString "" cv.ftype
-        , nameOrLabel cv |> text
-        , div [ class "detail" ]
-            [ if Data.CustomFieldType.fromString cv.ftype == Just Data.CustomFieldType.Boolean then
-                renderBool
-
-              else
-                text cv.value
-            ]
-        ]
+    renderValue2 [ ( classes, True ) ] Nothing cv
 
 
 renderValue2 : List ( String, Bool ) -> Maybe msg -> ItemFieldValue -> Html msg

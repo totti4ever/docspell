@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 -- inspired from here: https://ellie-app.com/3T5mNms7SwKa1
 
 
@@ -125,15 +132,21 @@ filterMime model files =
 --- View2
 
 
-view2 : Texts -> Model -> Html Msg
-view2 texts model =
+type alias ViewSettings =
+    { light : Bool
+    }
+
+
+view2 : Texts -> ViewSettings -> Model -> Html Msg
+view2 texts cfg model =
     div
         [ classList
-            [ ( "bg-opacity-100 bg-blue-100 dark:bg-lightblue-800", model.state.hover )
-            , ( "bg-blue-100 dark:bg-lightblue-900 bg-opacity-50", not model.state.hover )
+            [ ( "bg-opacity-100 bg-blue-100 dark:bg-sky-800", model.state.hover )
+            , ( "bg-indigo-100 dark:bg-sky-900 bg-opacity-50", not model.state.hover )
             , ( "disabled", not model.state.active )
             ]
-        , class "flex flex-col justify-center items-center py-2 md:py-12 border-0 border-t-2 border-blue-500 dark:border-lightblue-500 dropzone"
+        , class "flex flex-col justify-center items-center py-2 md:py-12 dropzone"
+        , classList [ ( " border-0 border-t-2 border-blue-500 dark:border-sky-500", not cfg.light ) ]
         , onDragEnter DragEnter
         , onDragOver DragEnter
         , onDragLeave DragLeave
@@ -152,7 +165,7 @@ view2 texts model =
             { label = texts.or
             , topCss = "w-2/3 mb-4 hidden md:inline-flex"
             , labelCss = "px-4 bg-gray-200 bg-opacity-50"
-            , lineColor = "bg-gray-300 dark:bg-bluegray-600"
+            , lineColor = "bg-gray-300 dark:bg-slate-600"
             }
         , B.primaryBasicButton
             { label = texts.basics.selectPlaceholder
@@ -161,7 +174,10 @@ view2 texts model =
             , attrs = [ href "#" ]
             , disabled = not model.state.active
             }
-        , div [ class "text-center opacity-75 text-sm mt-4" ]
+        , div
+            [ class "text-center opacity-75 text-sm mt-4"
+            , classList [ ( "hidden", cfg.light ) ]
+            ]
             [ text texts.selectInfo
             ]
         ]

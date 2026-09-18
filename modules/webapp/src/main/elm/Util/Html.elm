@@ -1,6 +1,12 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Util.Html exposing
     ( KeyCode(..)
-    , checkbox
     , checkbox2
     , classActive
     , intToKeyCode
@@ -22,25 +28,6 @@ import Html.Events exposing (keyCode, on, preventDefaultOn)
 import Json.Decode as D
 
 
-checkboxChecked : Html msg
-checkboxChecked =
-    i [ class "ui check square outline icon" ] []
-
-
-checkboxUnchecked : Html msg
-checkboxUnchecked =
-    i [ class "ui square outline icon" ] []
-
-
-checkbox : Bool -> Html msg
-checkbox flag =
-    if flag then
-        checkboxChecked
-
-    else
-        checkboxUnchecked
-
-
 checkbox2 : Bool -> Html msg
 checkbox2 flag =
     if flag then
@@ -57,6 +44,8 @@ type KeyCode
     | Right
     | Enter
     | Space
+    | Backspace
+    | Tab
     | ESC
     | Letter_C
     | Letter_N
@@ -103,6 +92,12 @@ intToKeyCode code =
 
         32 ->
             Just Space
+
+        8 ->
+            Just Backspace
+
+        9 ->
+            Just Tab
 
         27 ->
             Just ESC

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.effect._
@@ -16,28 +22,28 @@ import org.http4s.dsl.Http4sDsl
 
 object CheckFileRoutes {
 
-  def secured[F[_]: Effect](backend: BackendApp[F], user: AuthToken): HttpRoutes[F] = {
+  def secured[F[_]: Async](backend: BackendApp[F], user: AuthToken): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 
     HttpRoutes.of { case GET -> Root / checksum =>
       for {
         items <-
-          backend.itemSearch.findByFileCollective(checksum, user.account.collective)
+          backend.itemSearch.findByFileCollective(checksum, user.account.collectiveId)
         resp <- Ok(convert(items))
       } yield resp
 
     }
   }
 
-  def open[F[_]: Effect](backend: BackendApp[F]): HttpRoutes[F] = {
+  def open[F[_]: Async](backend: BackendApp[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] with ResponseGenerator[F] {}
     import dsl._
 
     HttpRoutes.of { case GET -> Root / Ident(id) / checksum =>
       for {
         items <- backend.itemSearch.findByFileSource(checksum, id)
-        resp  <- Ok(convert(items))
+        resp <- items.map(convert).map(Ok(_)).getOrElse(NotFound())
       } yield resp
     }
   }

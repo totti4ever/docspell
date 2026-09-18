@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.auth
 
 import java.time.Instant
@@ -39,8 +45,8 @@ object RememberToken {
       case Array(ms, as, salt, sig) =>
         for {
           millis <- TokenUtil.asInt(ms).toRight("Cannot read authenticator data")
-          rId    <- TokenUtil.b64dec(as).toRight("Cannot read authenticator data")
-          accId  <- Ident.fromString(rId)
+          rId <- TokenUtil.b64dec(as).toRight("Cannot read authenticator data")
+          accId <- Ident.fromString(rId)
         } yield RememberToken(millis, accId, salt, sig)
 
       case _ =>
@@ -51,8 +57,8 @@ object RememberToken {
     for {
       salt <- Common.genSaltString[F]
       millis = Instant.now.toEpochMilli
-      cd     = RememberToken(millis, rememberId, salt, "")
-      sig    = TokenUtil.sign(cd, key)
+      cd = RememberToken(millis, rememberId, salt, "")
+      sig = TokenUtil.sign(cd, key)
     } yield cd.copy(sig = sig)
 
 }

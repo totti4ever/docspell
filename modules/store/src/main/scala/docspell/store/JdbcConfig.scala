@@ -1,38 +1,35 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store
 
 import docspell.common.LenientUri
 
-case class JdbcConfig(url: LenientUri, user: String, password: String) {
+case class JdbcConfig(
+    url: LenientUri,
+    user: String,
+    password: String,
+    maximumPoolSize: Int
+) {
 
-  val dbmsName: Option[String] =
-    JdbcConfig.extractDbmsName(url)
-
-  def driverClass =
-    dbmsName match {
-      case Some("mariadb") =>
-        "org.mariadb.jdbc.Driver"
-      case Some("postgresql") =>
-        "org.postgresql.Driver"
-      case Some("h2") =>
-        "org.h2.Driver"
-      case Some("sqlite") =>
-        "org.sqlite.JDBC"
-      case Some(n) =>
-        sys.error(s"Unknown DBMS: $n")
-      case None =>
-        sys.error("No JDBC url specified")
-    }
+  val dbms: Db =
+    JdbcConfig.extractDbmsName(url).fold(sys.error, identity)
 
   override def toString: String =
-    s"JdbcConfig($url, $user, ***)"
+    s"JdbcConfig(${url.asString}, $user, ***)"
 }
 
 object JdbcConfig {
-  def extractDbmsName(jdbcUrl: LenientUri): Option[String] =
+  private def extractDbmsName(jdbcUrl: LenientUri): Either[String, Db] =
     jdbcUrl.scheme.head match {
       case "jdbc" =>
         jdbcUrl.scheme.tail.headOption
+          .map(Db.fromString)
+          .getOrElse(Left(s"Invalid jdbc url: ${jdbcUrl.asString}"))
       case _ =>
-        None
+        Left(s"No scheme provided for url: ${jdbcUrl.asString}")
     }
 }

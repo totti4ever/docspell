@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.contact
 
 import cats.data.NonEmptyList
@@ -26,7 +32,7 @@ object Domain {
     Tld
       .findTld(str)
       .map(tld => (str.dropRight(tld.length), tld))
-      .map({ case (names, tld) =>
+      .map { case (names, tld) =>
         names.split('.').toList match {
           case Nil => Left(s"Not a domain: $str")
           case segs
@@ -37,7 +43,7 @@ object Domain {
             Right(Domain(NonEmptyList.fromListUnsafe(segs), tld))
           case _ => Left(s"Not a domain: $str")
         }
-      })
+      }
       .getOrElse(Left(s"Not a domain $str"))
 
   def isDomain(str: String): Boolean =

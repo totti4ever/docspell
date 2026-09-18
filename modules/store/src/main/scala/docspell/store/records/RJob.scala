@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -38,26 +44,29 @@ case class RJob(
 
   def isInProgress: Boolean =
     JobState.inProgress.contains(state)
+
+  def withArgs[A: Encoder](args: A): RJob =
+    copy(args = Encoder[A].apply(args).noSpaces)
 }
 
 object RJob {
 
-  def newJob[A](
+  def newJob(
       id: Ident,
       task: Ident,
       group: Ident,
-      args: A,
+      args: String,
       subject: String,
       submitted: Timestamp,
       submitter: Ident,
       priority: Priority,
       tracker: Option[Ident]
-  )(implicit E: Encoder[A]): RJob =
+  ): RJob =
     RJob(
       id,
       task,
       group,
-      E(args).noSpaces,
+      args,
       subject,
       submitted,
       submitter,
@@ -71,25 +80,48 @@ object RJob {
       None
     )
 
+  def fromJson[A](
+      id: Ident,
+      task: Ident,
+      group: Ident,
+      args: A,
+      subject: String,
+      submitted: Timestamp,
+      submitter: Ident,
+      priority: Priority,
+      tracker: Option[Ident]
+  )(implicit E: Encoder[A]): RJob =
+    newJob(
+      id,
+      task,
+      group,
+      E(args).noSpaces,
+      subject,
+      submitted,
+      submitter,
+      priority,
+      tracker
+    )
+
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "job"
 
-    val id            = Column[Ident]("jid", this)
-    val task          = Column[Ident]("task", this)
-    val group         = Column[Ident]("group_", this)
-    val args          = Column[String]("args", this)
-    val subject       = Column[String]("subject", this)
-    val submitted     = Column[Timestamp]("submitted", this)
-    val submitter     = Column[Ident]("submitter", this)
-    val priority      = Column[Priority]("priority", this)
-    val state         = Column[JobState]("state", this)
-    val retries       = Column[Int]("retries", this)
-    val progress      = Column[Int]("progress", this)
-    val tracker       = Column[Ident]("tracker", this)
-    val worker        = Column[Ident]("worker", this)
-    val started       = Column[Timestamp]("started", this)
+    val id = Column[Ident]("jid", this)
+    val task = Column[Ident]("task", this)
+    val group = Column[Ident]("group_", this)
+    val args = Column[String]("args", this)
+    val subject = Column[String]("subject", this)
+    val submitted = Column[Timestamp]("submitted", this)
+    val submitter = Column[Ident]("submitter", this)
+    val priority = Column[Priority]("priority", this)
+    val state = Column[JobState]("state", this)
+    val retries = Column[Int]("retries", this)
+    val progress = Column[Int]("progress", this)
+    val tracker = Column[Ident]("tracker", this)
+    val worker = Column[Ident]("worker", this)
+    val started = Column[Timestamp]("started", this)
     val startedmillis = Column[Long]("startedmillis", this)
-    val finished      = Column[Timestamp]("finished", this)
+    val finished = Column[Timestamp]("finished", this)
     val all = NonEmptyList.of[Column[_]](
       id,
       task,
@@ -122,6 +154,13 @@ object RJob {
     )
   }
 
+  def findByTaskName(task: Ident): ConnectionIO[Vector[RJob]] =
+    Select(
+      select(T.all),
+      from(T),
+      T.task === task
+    ).build.query[RJob].to[Vector]
+
   def findFromIds(ids: Seq[Ident]): ConnectionIO[Vector[RJob]] =
     NonEmptyList.fromList(ids.toList) match {
       case None =>
@@ -150,6 +189,12 @@ object RJob {
       DML.set(T.state.setTo(JobState.waiting))
     )
   }
+
+  def setJsonArgs[A: Encoder](jobId: Ident, args: A): ConnectionIO[Int] =
+    DML.update(T, T.id === jobId, DML.set(T.args.setTo(Encoder[A].apply(args).noSpaces)))
+
+  def setArgs(jobId: Ident, args: String): ConnectionIO[Int] =
+    DML.update(T, T.id === jobId, DML.set(T.args.setTo(args)))
 
   def incrementRetries(jobid: Ident): ConnectionIO[Int] =
     DML
@@ -255,11 +300,6 @@ object RJob {
   def setProgress(jobId: Ident, perc: Int): ConnectionIO[Int] =
     DML.update(T, T.id === jobId, DML.set(T.progress.setTo(perc)))
 
-  def selectWaiting: ConnectionIO[Option[RJob]] = {
-    val sql = run(select(T.all), from(T), T.state === JobState.waiting)
-    sql.query[RJob].to[Vector].map(_.headOption)
-  }
-
   def selectGroupInState(states: NonEmptyList[JobState]): ConnectionIO[Vector[Ident]] = {
     val sql =
       Select(select(T.group), from(T), T.state.in(states)).orderBy(T.group)
@@ -271,6 +311,14 @@ object RJob {
       n0 <- RJobLog.deleteAll(jobId)
       n1 <- DML.delete(T, T.id === jobId)
     } yield n0 + n1
+
+  def deleteByTask(task: Ident): ConnectionIO[Int] = {
+    val query = Select(select(T.id), from(T), T.task === task)
+    for {
+      n1 <- DML.delete(RJobLog.T, RJobLog.T.jobId.in(query))
+      n2 <- DML.delete(T, T.task === task)
+    } yield n1 + n2
+  }
 
   def findIdsDoneAndOlderThan(ts: Timestamp): Stream[ConnectionIO, Ident] =
     run(
@@ -294,4 +342,10 @@ object RJob {
       where(T.tracker === trackerId, T.state.in(JobState.notDone))
     ).query[RJob].option
 
+  def getUnfinishedCount(group: Ident): ConnectionIO[Int] =
+    run(
+      select(count(T.id)),
+      from(T),
+      T.group === group && T.state.in(JobState.notDone)
+    ).query[Int].unique
 }

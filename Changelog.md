@@ -1,5 +1,1005 @@
 # Changelog
 
+## v0.44.0
+
+*Unreleased*
+
+### 🚀 Features
+
+- Upload endpoints now return `fileKeys` and `jobIds` so clients can track
+  submitted files and processing jobs immediately.
+- Add secured endpoint to download files by file key for retrieving uploaded
+  bytes before processing finishes.
+- Add optional `priority` field to upload metadata (`ItemUploadMeta`) for
+  setting job processing priority per upload
+- Add `statsProfile` to search stats (`full`, `general`, `fields`). The
+  dashboard uses lighter `general` and `fields` requests instead of
+  repeating the full statistics query.
+
+### 🐛 Bug Fixes
+
+- Improve performance of custom field statistics on large databases by
+  scoping `custom_field_value` lookups to matching items only.
+
+### 💚 Maintenance
+
+- Document search stats profiles in the OpenAPI spec. The `general`
+  profile still computes tag clouds; it omits dimension list aggregates
+  and heavy field statistics.
+
+## v0.43.0
+
+*Mar 15, 2025*
+
+### 🐛 Bug Fixes
+
+- Fix scrolling in side bar @eikek (#3002)
+- nix: unpin weasyprint from python310Packages @VTimofeenko (#2981)
+- replaced deprecated  "--optimize-size" with "--optimize-images" @jjkrone (#2972)
+- Correction German Word Dokumene to Dokumente. @andbez (#2941)
+- Fix duplicate task on reboot @tiborrr (#2902)
+- Use http4s' new Part.filename method @pschichtel (#2853)
+- Remove `--optimize-size` option from default weasyprint @eikek (#2784)
+
+### 💚 Maintenance
+
+- Remove docker workflows @eikek (#2956)
+- These things live over at docspell/docker now @pschichtel (#2911)
+- Add metals and bloop to gitignore @tiborrr (#2898)
+- Update .gitignore for vscode users @tiborrr (#2778)
+
+
+## v0.42.0
+
+*Aug 18, 2024*
+
+### 🚀 Features
+
+- Nix module: secure config file @ivanbrennan (#2699)
+- Add logout-url option to Nix module @VTimofeenko (#2646)
+- Add package option to Nix modules @VTimofeenko (#2630)
+- Add Japanese Vertical Support Branch for Tesseract and Ocrmypdf OCR @tenpai-git (#2505)
+- Extend nix setup, including dev environments @eikek (#2539)
+- Extend config for external commands @eikek (#2536)
+
+### 🐛 Bug Fixes
+
+- Honor default value `true` for `collectOutput` @eikek (#2663)
+- FIx extracting addons with only a single file @eikek (#2660)
+- Move arg-mappings underneath `command` section @eikek (#2659)
+- Change docker base images to 3.19.1 @eikek (#2519)
+- fix(webapp): downstream keep-alive events to backend preventing timeout @nekrondev (#2500)
+- Fix some Kubernetes Kustomize deployment issues @TheAnachronism (#2501)
+- tesseract english data is now a separate package @programmerq (#2479)
+
+### 💚 Maintenance
+
+- Update flake @eikek (#2736)
+- Adding CJK and Custom Mapping Documentation @tenpai-git (#2669)
+- docs(development.md): Fix minor typos @ChanceHarrison (#2613)
+- Add page to website about contributing to docs @ChanceHarrison (#2612)
+- Fix renamed elm package @eikek (#2547)
+- Redocly tailwind setup @eikek (#2540)
+- Pushing a minor fix to the bash commands. @tenpai-git (#2523)
+- Add documentation for backup and restore process for PostgreSQL. @tenpai-git (#2508)
+
+
+## v0.41.0
+
+*Jan 29th, 2024*
+
+- Add khmer language (#2011)
+- Replace blaze with ember (http stack) (#2221, #2348)
+- Updated several dependencies (#2348, #2354, 2355)
+- Fix `AddonExecutionResult` monoid (#2363)
+- Setting item date from addons (#2345)
+- Fix sql queries where a space was missing (#2367, #2368)
+- Change AWS region for minio file backend (#2386)
+- Allow additional metadata to be passed on upload for addons and hooks (#2334)
+- Add support for Slovak language
+- Fix possibility to configure too large `session-valid` values (#2309)
+- Consider emails when `flattenArchives` is true (#2063)
+- Allow new file upload without hitting reset (#2323)
+
+Big thanks to:
+- @eikek
+- @madduck
+- @mprasil
+- @rehanone
+- @v6ak
+- @xshadowlegendx
+
+## v0.40.0
+
+*Mar 11th, 2023*
+
+- Add Ukrainian language (#1835, @GooRoo)
+- webui: normalize `,` to `.` for numeric fields
+- improve error reporting when file backend fails (#1976)
+- docker: remove exlpicit zlib install (#1863)
+- nix: replace wkhtmltopdf with weasyprint (#1873, #1895, @VTimofeenko)
+- fix listing shares with no name (#1840)
+- fix html conversion of text files (#1915)
+- fix: remove test-scoped dependencies from artifacts (#1856)
+- fix deletin users (#1941)
+- fix notification for collective scoped tasks (#1987)
+
+### Rest API changes
+
+- None
+
+### Configuration Changes
+
+- None
+
+## v0.39.0
+
+*Nov 7th, 2022*
+
+- Allow to set extracted content (#1775) You can now fix OCRed text
+  this way.
+- Improve handling mixes of OIDC and local accounts (#1827). It is now
+  possible to use the same account locally and via OIDC.
+- Add Estonian language (#1646)
+- Updated docker images to new alpine and openjdk, fixing #1736
+  (#1713) by @jberggg and @eikek
+  - drops support for arm7 (#1719)
+  - introduces `weasyprint` as an alternative to `wkhtmltopdf` for
+    converting html files to pdf
+- Fix docspell's query to remove `attach.count`. It has been removed a
+  while ago, but the query language didn't reflect it (#1758)
+- Fix search for linked items (#1808)
+- Fix item selection after merging (#1809)
+- Internal changes to how a collective is referenced as a preparation
+  for #585 (#1686)
+- Update H2 to 2.1.x, incompatible to the previous used version
+  (#1690)
+
+### PLEASE NOTE
+
+The database structure changed substantially in this release. Please
+make sure to create a backup of your database **before** attempting
+the upgrade!
+
+### Docker Users
+
+There are two major changes for docker users: First ARM7 support has
+been dropped, because it was too much work to maintain alongside the
+other architectures. Second the images have been updated to the latest
+alpine linux, which requires to sacrifice using `wkhtmltopdf` as a
+tool to convert HTML to PDF (often used for processing emails).
+
+The joex image doesn't have the `wkhtmltopdf` binary anymore, because
+it is not available for alpine linux. Instead `weasyprint` has been
+added. Docspell by default still uses `wkhtmltopdf`, because I found
+it has better results. But you can now switch to `weasyprint` and if
+you use the provided docker images you _have to_.
+
+There is a new config that you need to set - when using environment
+variables:
+
+```
+DOCSPELL_JOEX_CONVERT_HTML__CONVERTER=weasyprint
+```
+
+Just add it to the env variables in the `docker-compose.yml`. If you
+use a config file, add this to it:
+
+```
+docspell.joex {
+  convert.html-converter = "weasyprint"
+}
+```
+
+### File Backends
+
+The internal change on how collectives are now referenced requires to
+adopt the files accordingly. If you have your files in the database,
+all is being migrated automatically on first start.
+
+For other file backends, the files must be migrated manually. The
+difference is that from now on a collective is referenced by a unique
+number and not by its name anymore. You can look at the table
+`collective` to see which number was assigned to a collective and then
+
+- for a filebackend, simply move the folder with a collective name to
+  its corresponding number
+- for s3 backend the same must happen, using some s3 client (maybe
+  [this
+  one](https://min.io/docs/minio/linux/reference/minio-mc/mc-mv.html))
+
+### H2 
+
+If you use H2 as a database, there are some manual steps required. H2
+was bumped from 1.4.x to 2.1.x and the new version cannot read the
+database files of the old version.
+
+Additionally, one of the changesets for H2 used a now illegal syntax
+and had to be changed. This will lead to checksum mismatch errors when
+starting up.
+
+Creating and restoring a dump, the script `tools/h2-util.sh` can be
+used. The H2 version can be specified with an environment variable
+`H2_VERSION` to easily create a dump in one version and restore in
+another.
+
+To fix the changeset, you could simply run this sed command on the
+dump before restoring:
+
+```
+sed -i 's,175554607,-276220379,g' docspell-dump-h2.sql
+```
+
+But this could potentially change not only the checksum, but other
+things in the dump. It is not very likely, though. A more safe
+alternative is to use a text editor and find the correct place to
+change or just set `database-schema.repair-schema = true` in the
+config file or use the env variables
+
+```
+DOCSPELL_SERVER_BACKEND_DATABASE__SCHEMA_REPAIR__SCHEMA=true
+```
+
+and startup only the restserver one time to have the checksum fixed.
+Another safe variant is to run this update statement on your h2
+database:
+
+```sql
+UPDATE flyway_schema_history set checksum = -276220379 WHERE version = '1.9.3';
+```
+
+
+### Rest API changes
+
+- Adds apis for retrieving and setting extracted text at
+  `/sec/attachment/{id}/extracted-text`
+
+
+### Configuration Changes
+
+Restserver:
+- Adds `auth.on-account-source-conflict` to decide what to do if an
+  account exists locally and at some OIDC provider
+
+Joex:
+- Adds a new system command for `weasyprint` an alternative to
+  `wkhtmltopdf`
+- Adds the setting `convert.html-converter` to set which to use
+  (default stays on `wkhtmltopdf`)
+
+
+## v0.38.0
+
+*Jul 09, 2022*
+
+- Allow to skip login page if a single OIDC provider is configured (#1640)
+- Add config to force OCR on a PDF even if text would be available (#1628)
+- Improvements for OIDC integration (#1619, #1545)
+- Improve unzipping/zipping files (#1603)
+- Fix starting a background task to install addon (#1601)
+- Add more database indexes to improve search (#1584)
+- Add paging to the share view (#1582)
+- Remove unused code (#1581)
+
+### Rest API Changes
+
+- remove `inReplyTo` from item metadata, it has never been used
+
+### Configuration Changes
+
+Restserver:
+- Add (optional) `logout-url` to a open-id provider config block
+- Add `oidc-auto-redirect`
+
+Joex:
+- Allow values <= 0 for `pdf.min-text-len` to force OCR on a pdf
+
+
+## v0.37.0
+
+*Jun 04, 2022*
+
+- Fix e-mail address input field (#1565)
+- Overhaul of search when fulltext search is applied. Fixes #1363.
+- Return when a search exceeds server configured limit for page size (#1358)
+- Several fixes related to addons (#1566, 1573)
+
+### Rest API Changes
+
+- removed `searchIndex` endpoint, because it is redundant
+
+### Configuration Changes
+
+- None.
+
+
+## v0.36.0
+
+*May 22, 2022*
+
+- Extend docspell via addons (experimental feature) (#1550)
+- Adds Lithuanian and Polish to document languages (#1540, #1345)
+- Added a quick guide for adding more languages (#942)
+- Make dashboard boxes headlines bold (#1531)
+- Improve logging config; allow to specify loggers and their level (#1535)
+- Allow for auth tokens to optionally be issued with an validity (#1533, 1534)
+- Allow to repair db migrations, necessary for rare cases like #1517
+
+### Rest API Changes
+
+- new endpoints for managing addons
+- new endpoint for joex to return its addon executor config
+
+### Configuration Changes
+
+- logging config sections allows to specfiy a map of logger names ->
+  level pairs (joex and restserver)
+- addon config section in restserver: allows to enable/disable
+  corresponding endpoints
+- addon config section in joex: allows to configure how to run addons
+
+
+## v0.35.0
+
+*Apr 14, 2022*
+
+- Download multiple documents as zip (#1093). The webui allows to
+  download multiple files as a zip archive. The zip file is created at
+  the server and cached for a while.
+- New project [ds4e](https://github.com/docspell/ds4e) providing some
+  utilises to access Docspell from Emacs.
+- Increase size for password fields in the database (#1508)
+- Hide the delete button in new notifciation channel forms (#1506)
+- Fix logging (#1468), non-errors were logged as errors. 
+- Apply the migration fix from last version only from 0.32.0 onwards
+  (#1469)
+- Fix typos in UI (#1510, @monnypython)
+- Add support for Postgres FTS in nix module (#1512, @LeSuisse)
+
+### Rest API Changes
+
+- adds routes to create and download multiple files
+
+### Configuration Changes
+
+- restserver: add limits for creating zip files from search queries
+- joex: settings for new cleanup task that removes zip files that
+  exceed some configured age
+
+
+## v0.34.0
+
+*Mar 31, 2022*
+
+- French translation (#1440): The UI is now available in French!
+  Thanks to @jgirardet.
+- Link Items (#528): Link items together directly (without using
+  custom fields) and see all related items quickly on the search page.
+- Import mails recursively (#1260): The scanmailbox task can now go
+  through folders recursively. Thanks to @Moerfi666 and @seijikun.
+- Fulltext search via PostgreSQL (#424): Another backend for full-text
+  search was added that is backed by PostgreSQL's text search feature.
+  You can now choose between SOLR and PostgreSQL for fulltext search.
+- More file backends (#1379): Next to storing the files in the
+  database, you can now choose to store them in a S3 compatible
+  storage or use the filesystem directly.
+- Flat zip upload (#1366): An option has been added to the upload
+  metadata that will unpack zip files and process each entry
+  separately (instead of treating a zip file as a single item).
+- Fix to upload large files (#1339): Uploaded files are not loaded
+  entirely into memory allowing to upload large files.
+- Fix previously published db migration (#1454, #1436): Unfortunately,
+  there was an db migration in the last release that caused problems
+  on some installations. A fix for this migration has been added.
+- Fix build to run on windows (#1449, #1461): Building docspell on
+  windows has been improved by @arittner.
+
+For some of the new features, you need the new version of
+[dsc](https://github.com/docspell/dsc).
+
+### Rest API Changes
+
+- adds routes to clone file repositories and the integrity check
+- adds routes to support linking items
+- `ScanMailboxSettings` has a new flag `scanRecursively`
+- `ItemDetail` and `ItemLight` contain a new field to transport
+  related/linked items
+- `ItemUploadMeta` has a new flag to specify whether zip files should
+  be treated as a container only, and be "flattened" into the list of
+  uploaded files
+
+### Configuration Changes
+
+- rest server only: added options to tune the http server
+- joex only: adds a file integrity check to the regular house keeping tasks
+- configuration for postgresql based full-text search
+- extend `files` config adding the different storage backends for
+  files
+
+
+## v0.33.0
+
+*Mar 6, 2022*
+
+- Refactor file identifiers, as preparation for different file storage
+  backends (#1380)
+  - **PLEASE NOTE** this release contains a DB migration that changes
+    all file identifiers in the database. It is really very much
+    recommended to do a backup of the database *before* updating!
+- Allow background tasks to return results that are published via events (#1362)
+  - the task for processing files returns now data (item id, name,
+    extracted text, tags etc) that is included in the `JobDone` event
+    data
+- Users can specify a time zone in user settings (#1062)
+  - the time zone is used when formatting dates in the web ui
+  - the time zone is used for calendar events of periodic tasks; you
+    need to save each periodic task again in order to pass a different
+    timezone
+  - should you have calendar events in the config file, you can add a
+    time zone at the end
+  - if not specified, it will default to UTC as before
+- Improve item selection (#1422)
+  - selecting items was possible before, but only ephemeral in the list view
+  - it is now stored globally and kept until you explicitely clear the selection
+  - items can be selected in detail view and the search menu shows an
+    entry to quickly see all items currently selected
+  - makes it easier to select a bunch of documents for sharing/bookmarking etc
+- Change logging format and backend
+  - The logging format has changed again from logfmt to the "classic" one
+  - the configuration allows to use logfmt, json or two "classic" formats
+  - logback has been removed! If you used a custom `logback.xml`
+    before, I'm sorry this is not possible anymore. There are two
+    settings in the config file for now to control logging:
+    `logging.minimum-level` and `logging.format`.
+- Pdf preview not updated (#1210)
+  - some browsers (e.g. safari and some mobile browsers) don't update
+    the ui when the `src` attribute of the `embed` element changes
+  - for the "fallback view", an `iframe` is now used - thus for mobile
+    it should work now. Safari on desktop would require to change the
+    respective setting
+- Several ui improvements
+  - More cards per row for large screens (#1401)
+  - more space below direction dropdown (#1400)
+  - fix input field save-while-typing (#1340, #1299)
+  - improves detail view on small screens (#1420)
+  - sort tags by group and then name (#1396)
+  - fix bug presenting an empty tag category in search menu (#1402)
+  - wrap long text in dashboard tables (#1357)
+  - typo fixes (#1387, #1433)
+- Remove tools package from release (#1421)
+  - the tools package doesn't contain general useful stuff anymore and
+    is thus removed from the release packaging. The code is still
+    there, and can be packaged manually
+
+### Rest API Changes
+
+None.
+
+### Configuration Changes
+
+- add `logging.format` and `logging.minimum-level`
+- change default values for calendar events to explicitely show that
+  they are in UTC (the value itself is not changed)
+
+
+## v0.32.0
+
+*Feb 06, 2022*
+
+- Dashboards: There is a new starting page showing a dashboard.
+  Dashboards can be customized (#1294)
+- UI-settings can be specified per collective and then be overriden by
+  user settings (#838)
+- Managing notifications channels: Instead of giving channel data with
+  each notification hook, they can now be managed separately. This is
+  more convenient, because they can be reused for different
+  notification hooks and periodic queries. Notifications can be
+  associated to multiple channels. (#1293)
+  - Please note that some (small) manual effort is recommended when
+    upgrading: The channel data from all your current notifications is
+    copied into a separate data set. This can create duplicates if you
+    had notifications with equal channel data. In order to remove
+    these duplicates, first change all notifications to a known
+    channel and afterwards you can delete the obsolete ones.
+- Replace bundled pdf viewer with pdfjs default viewer. (#1304)
+- Fixes the query used in a periodic query, that had returned trashed
+  items (#1323)
+- Fixes UI bugs where some data was not initialized in the view
+  (#1324)
+- Fix sorting tags in search menu (#1318)
+- Reworked website using tailwindcss
+
+## v0.31.0
+
+*Jan 16, 2022*
+
+- Bookmark queries and use it in searches. (#1175) Also the periodic
+  query form is updated to allow using a bookmarks.
+- Customize message for periodic queries (#1258). You can now add your
+  own sentence to the beginning of the message notifying you for a
+  list of items.
+- Allow to configure a priority for Gotify notifications (#1277)
+- Improve handling tags (#960). When choosing a tag by the dropdown
+  the catgory is shown next to a tag and the options can be
+  constrainted by clicking a category bubble.
+- Fix timezone in docker image (#1234)
+- Fix adding high-dpi images that would cause an out-of-memory error
+  when generating previews (#1183).
+- Fix tearing down and initializing pubsub table to allow changing app
+  ids (#1251)
+- Fix switching between tile and list view when "full width" preview
+  is enabled (#1261)
+- Disable "group by month" if there are no groups (#1255)
+- Fix deleting periodic queries (button was not working) (#1257)
+
+### Rest API Changes
+
+- new routes for managing bookmarks
+- added routes for client settings to be separated between user and
+  collective, the previous endpoint now returns a merged json
+- add a priority value to gotify settings
+- add bookmark value to periodic query settings
+
+### Configuration Changes
+
+None.
+
+
+## v0.30.1
+
+*Dec 22, 2021*
+
+Bug fix release for #1229: notification mails could not be sent. 
+
+
+## v0.30.0
+
+*Dec 21, 2021*
+
+- Add a list view for items, allowing to toggle between tile and list
+  view (#526)
+- Generic notification system: It is a start. A few events are
+  available with the idea to add more when needed. Get notified about
+  certain events via gotify, matrix or e-mail. A generic periodic
+  query has been added (in addition to the notify-due-items task).
+  (#848, #1174)
+- Update stanford-corenlp and add Spanish to the supported language
+  set for NLP and Hungarian to the standard set of languages.
+- Fix to update job execution count when a job is canceled (#1182)
+- Change the log format to [logfmt](https://www.brandur.org/logfmt)
+  and remove all ansi color sequences
+
+### Rest API Changes
+
+- added new routes to manage notification channels and hooks
+- added new routes for the generic periodic query task
+
+### Configuration Changes
+
+None.
+
+
+## v0.29.0
+
+*Nov 18, 2021*
+
+- Show number of waiting jobs in the top bar (#1069). This introduces
+  some changes under the hood, for example: while previously the
+  restserver was notifying job executors about new jobs, it will now
+  also *receive* messages from the job executors. This requires a new
+  setting (see below).
+- Hide sidebar by default on mobile (#1169)
+- Improve scanmailbox form (#1147)
+- Improve input of an e-mail address (#987)
+- Fix e-mail import for certain files (#1140)
+- Fix uploading files with non-ascii filenames (#991)
+
+### Rest API Changes
+
+None
+
+### Configuration Changes
+
+**Important**
+
+- the restserver has a new setting `internal-url` which must be set to
+  the base url of the server such that other nodes (i.e. joex nodes)
+  can reach it. It is by default set to `http://localhost:7880`. If
+  you are using docker: the `docker-compose.yml` in this repository
+  has been updated. You can copy&paste the new env variable
+  `DOCSPELL_SERVER_INTERNAL__URL=http://docspell-restserver:7880` into
+  your `docker-compose.yml` or add it to your config file.
+
+
+## v0.28.0
+
+*Oct 27, 2021*
+
+- Share items (#446). Allows to create shares, public cryptic links,
+  to a subset of your documents that can be shared with other people
+  (who don't need an account). It is possible to search inside the
+  shared subset. Shares have a lifetime and can be password protected.
+- Support encrypted PDFs (#1074). When importing PDF files, the
+  protection layer (usually for signed PDFs) is being removed in order
+  to process it. The config file and collective settings can now
+  define a list of passwords that are being used when trying to
+  decrypt encrypted PDFs.
+- Use environment variables to configure Docspell instead of a config
+  file (#1121). This is mainly intended when running via docker or
+  other similar tools. Note that settings that accept list as its
+  values are not yet supported.
+- Try to detect the best way to render PDFs (#1099). Mobile browsers
+  need a fallback for rendering PDFs, but desktop browsers can do it
+  much better natively. The user settings allow to decide how to
+  render a PDF or to let docspell detect it.
+- Filter possible values in search menu based on current results
+  (#856). This removes options that would only yield empty results
+  from the dropdowns.
+- Fix search in documenation (#1120)
+
+### Rest API Changes
+
+- `/share/*` routes to access a share
+- `/open/share/verify` routes to verify a share id
+- `/sec/share/*` routes to manage shares
+- extend `SearchStats` to include correspondents/concerning numbers
+
+### Configuration Changes
+
+- restserver: changed the server secret from the (dummy) value
+  `hex:caffee` to an empty string. This results in a random secret
+  generated at application start. It is recommended to set it to some
+  random value, otherwise sessions don't survive server restarts.
+- joex: adds a section `decrypt-pdf` for specifying a list of
+  passwords to try when encountering encrypted PDFs
+  
+
+## v0.27.0
+
+*Sep 23, 2021*
+
+- Allow external authentication providers via [OpenID
+  Connect](https://openid.net/connect). Now you can integrate Docspell
+  into your SSO solution. Using keycloak, for example (or other such
+  tools) users can be maintained elsewhere, like in an LDAP directory.
+  (#489)
+- Adds two-factor authentication using TOTPs. If you don't want to
+  setup an external authentication provider (which is another tool to
+  maintain), you can use the builtin TOTP support to have two-factor
+  authentication. (#762)
+- Improvements when querying documents (#1040)
+- Changed the underlying code for storing and loading files. This is a
+  preparation to allow different storage backends for files in the
+  future (maybe the filesystem or s3). (#1080)
+- The license has changed from GPLv3+ to AGPLv3+ (#1078)
+- Fixes a bug in the "check for updates" task that was added in the
+  last release (#1068)
+- Reduces the length of the startup command, which makes tools like
+  `ps` much more readable and allows now to start docspell on Windows
+  (untested, though ;-)) (#1062)
+- Fixes merging items, where sent mails were not copied to the target
+  item. (#1055)
+- Fixes and improves deleting users. Now all their data is also
+  removed and it is shown what that would be. (#1060)
+
+### Rest API Changes
+
+- The `login` routes now won't return a session token when 2FA is
+  enabled for an account. The returned token must be used to provide
+  the TOTP in order to finalize login.
+- Added `open/auth/two-factor` endpoint to provide the TOTP for login
+- Added `open/auth/openid/{providerId}[/resume]` endpoints to initiate
+  authentication via an external provider
+- Added `sec/user/{username}/deleteData` to retrieve a summary of data
+  that would be deleted with that user
+- Added `sec/user/otp/*` endpoints to manage the TOTP for an account
+- Added `admin/user/otp/reserOTP` to reset the 2FA setup for any user
+
+### Configuration Changes
+
+- Restserver: Added a section to configure external authentication
+  provider
+
+
+## v0.26.0
+
+*Aug 28, 2021*
+
+- Add ability to merge items (#414). You can now select multiple items
+  and merge them all into one. The first item in the list is the
+  target item, all others are deleted after a successful merge. The
+  webapp allows to reorder this list, of course.
+- Add option to only import attachments of e-mails (#983). 
+- Improve *Manage Data* page by sorting the tables (#965, #538)
+- Allow wildcard searches in queries using `attach.id` (#971). Before
+  you would have to specify the complete id. This is inconvenient when
+  using from the command line client.
+- Add Hebrew to the document languages (#1027, thans @wallace11).
+  Please note, that the SOLR support is very basic for this language.
+- Add a periodic task to check for Docspell updates (#990). Let's you
+  check periodically for new versions of docspell. It uses an existing
+  user account and its mail settings to send an e-mail.
+- Show the link to an item and its attachments as a QR code in item
+  details (#836). This might be useful when you want to attach this
+  link to physical devices.
+- The search menu highlights the sections that contain active filters
+  (#966)
+- Safe deletion of items (#347). When deleting items, they are now
+  *marked as deleted* and can therefore be restored. A periodic job
+  will really delete them from the database eventually.
+- Improves German translation (#985, thanks @monnypython)
+- The [dsc](https://github.com/docspell/dsc) tool has also been
+  improved, thanks to @seijikun.
+- Upgrade the website to work with newer zola versions (#847)
+- Remove the scripts in `tools/` since these are now obsolete. The new
+  [command line interface](https://github.com/docspell/dsc) covers
+  these features now. Note that the docker images are also NOT built
+  anymore. The directory still exits and is still a place for scripts
+  and little tooling around docspell.
+- Fixes a regression where the browser would not display the pdf (#975)
+- Fixes the health checks in the docker setup (#976)
+- Fixes an issue with text extraction for Japanese documents where
+  numbers were extracted as special unicode points (#973). This only
+  affects the docker setup, when not using the docker images you need
+  to setup tesseract to use different training data for Japanese.
+
+### Rest API Changes
+
+Complete
+[diff](https://github.com/eikek/docspell/compare/v0.25.1...master#diff-5dfb63e478c5511c16420f5e4d139666603d1c625546af06c4de50d0ae64a94f)
+(need to click the *Files changed* tab)
+
+- The routes to fetch a list of tags, organizations, persons, fields
+  etc can now optionally take a `sort` query parameter to specify how
+  to order the list.
+- Added `/sec/collective/emptytrash/startonce` to run the task to
+  empty the trash immediately
+- The search endpoints can now take an optional parameter `searchMode`
+  that defines whether to search in trashed items or not
+- Deleting an item via the api now only changes its state to *Trashed* 
+- Added `/sec/item/{id}/restore` to restore a trashed item (unless it
+  has been deleted from the database).
+- Added `/sec/items/restoreAll` to restore multiple of trashed items
+- Added `/sec/items/merge` that accepts a POST request with a list of
+  items to merge. The first item is the "target" item. All other items
+  are deleted after the merge was successful.
+- The `ScanMailboxSettings`, `Source` and `ItemUploadMeta` structures
+  now contains a boolean field `attachmentsOnly`
+- `ItemInsights` structure now contains a counter for trashed items
+- `CollectiveSettings` structure now has a section to specify settings
+  for periodically deleting trashed items.
+
+### Configuration Changes
+
+- Joex: A new section for configuring the update task has been added.
+  See section `update-check` in the default [config
+  file](https://docspell.org/docs/configure/defaults/#joex).
+
+
+## v0.25.1
+
+*Jul 29, 2021*
+
+- Fix solr fulltext search by adding the new japanese content field
+
+The SOLR fulltext search is broken in 0.25.0, so this is a fixup
+release.
+
+## v0.25.0
+
+*Jul 29, 2021*
+
+- Introducing a new CLI tool (#345) that replaces all the shell
+  scripts from the `tools/` directory! https://github.com/docspell/dsc
+- UI changes:
+  - year separators are now more prominent (#950)
+  - fixes a bug in the item counter in detail view when an item is
+    deleted (#920)
+  - German translation improvements (#901)
+  - The number of selected files is shown in upload page (#896)
+- The created date of an item can now be used in queries (#925, #958)
+- Setting tags api has been improved (#955)
+- Task for converting pdfs is now behind the admin secret (#949)
+- Task for generating preview images is now behind the admin secret (#915)
+- respond with 404 when the source-id is not correct (#931)
+- Update of core libraries (#890)
+- Add Japanese to the list of document languages. Thanks @wallace11
+  for helping out (#948, #962)
+- Fix setting the folder from metadata when processing a file and
+  allow to specifiy it by name or id (#940)
+- Fixes docspell config file in docker-compose setup (#909)
+- Fixes selecting the next job in the job executor (#898)
+- Fixes a bug that prevents uploading more than one file at once
+  (#938)
+
+### Rest API Changes
+
+- Removed `sec/item/convertallpdfs` endpoint in favor for new
+  `admin/attachments/convertallpdfs` endpoint which is now an admin
+  task
+- Removed `sec/collective/previews` endpoint, in favor for new
+  `admin/attachments/generatePreviews` endpoint which is now an admin
+  task to generate previews for all files. The now removed enpoint did
+  this only for one collective.
+- `/sec/item/{id}/tags`: Setting tags to an item (replacing existing
+  tags) has been changed to allow tags to be specified as names or ids
+- `/sec/item/{id}/tagsremove`: Added a route to remove tags for a
+  single item
+  
+### Configuration Changes
+
+None.
+
+
+## v0.24.0
+
+*Jun 18, 2021*
+
+This time a translation of the Web-UI in German is included and the
+docker build was overhauled. The releases are now build and tested
+using Java 11.
+
+- Rework Docker setup. Images are now provided for different
+  architectures and have a new home now (see below). The images are
+  now built via a github-action from the official packages of each
+  release. (#635, #643, #840, #687)
+- Translation of the UI into German (thanks to @monnypython for proof
+  reading and applying lots of corrections!) (#292, #683, #870)
+- Improve migration of SOLR (#604)
+  - The information whether solr has been setup, is now stored inside
+    SOLR. This means when upgrading Docspell, all data will be
+    re-indexed.
+- Add `--exclude` and `--include` options to the `consumedir.sh`
+  script (#885)
+- Improved documenation of the http api (#874)
+- Removed unused libraries in the final packages to reduce file size a
+  bit (#841)
+- Bug: Searching by tag category was broken when using upper case
+  letters (#849)
+- Bug: when adding a boolean custom field, it must be applied
+  immediatly (#842)
+- Bug: when entering a space in a dropdown the menu closes (#863)
+- Bug: Some scripts didn't work with earlier versions of `jq` (#851)
+- Bug: The source form was broken in that it didn't load the language
+  correctly (#877)
+- Bug: Tag category options were wrongly populated when narrowing tags
+  via a search (#880)
+
+### Breaking Changes
+
+#### Java 11
+
+Not really a breaking change. Docspell is now build and tested using
+Java 11. Docspell has a small amount of Java source code. This is
+compiled using Java 11 but to target Java 8 JVMs. So it still can run
+under Java 8. However, it is recommended to use at least Java 11 to
+run Docspell.
+
+
+#### Docker Images
+
+The docker images are now pushed to the
+[docspell](https://hub.docker.com/u/docspell) organization at
+docker-hub! So the images are now:
+
+- `docspell/restserver`
+- `docspell/joex`
+- `docspell/tools`
+
+Tags: images are tagged with two floating tags: `nightly` and
+`latest`. The `nightly` tag always points to the latest development
+state (the master branch). The `latest` tag points to the latest
+release. Each release is also tagged with its version number, like
+`v0.24.0`.
+
+The images changed slightly in that there is no assumption on where
+the config file is placed. Now you need to pass the docspell config
+file explicitely when using the images.
+
+Multiarch: Images are now build for `amd64`, `arm64` and `armv7`.
+
+The consumedir is being replaced by the more generic `docspell/tools`
+image which contains all the scripts from the `tools/` section. That
+means it has no special entrypoint for the consumedir script anymore.
+The polling functionality is now provided by the consumedir script.
+And the docker-compose file needs now to specify the complete command
+arguments. This makes it much more flexible to use.
+
+This allows to use this image to run all the other tool scripts, too.
+The scripts are in PATH inside the image and prefixed by `ds-`, so for
+example `ds-consumedir` or `ds-export-files` etc.
+
+#### Docker Compose
+
+The docker-compose setup is now at `docker/docker-compose`. Please
+look at the new [compose
+file](https://github.com/eikek/docspell/blob/master/docker/docker-compose/docker-compose.yml)
+and do the corresponding changes at yours. Especially the consumedir
+container changed significantly. Then due to the fact that the config
+file must be given explicitely, you need to add this argument to each
+docspell component (restserver and joex) via a `command` section (see
+the compose file referenced above).
+
+The `.envrc` has been cleaned from some settings. Since the config
+files is mounted into the image, you can just edit this file instead.
+The only settings left in the .envrc file are those that need to be
+available in the docker-compose file and the application. If some
+settings need to be duplicated for joex and restserver, you can use
+the builtin variable resolution mechanism for this. An example is
+provided in the new config file.
+
+### Configuration Changes
+
+None.
+
+
+### Rest API Changes
+
+None.
+
+
+## v0.23.0
+
+*May 29, 2021*
+
+This release enables deleting multiple files at once of an item. It
+also changes how user settings are stored. Additionally several bugs
+in the ui and server have been fixed.
+
+- Feature: Central user settings (#565): user settings have been
+  stored in the browser but are now stored at the server. This means
+  that all settings are now shared across all devices. See below for
+  notes on migrating your current settings.
+- Feature: Delete multiple attachemnts at once, thanks to
+  @stefan-scheidewig (#626): multiple attachments on an item can be
+  deleted with a single click
+- Feature: Make consumedir-cleaner run on windows, thanks to
+  @JaCoB1123 (#809)
+- Bug: More work externalizing strings (#784, #760): many more strings
+  have been externalized for being translated; also dates are now
+  externalized, too
+- Bug: Better anonymous upload page (#758): the upload page for
+  anonymous users shouldn't show a form to provide any metadata
+- Bug: Tag category color (#835): the input field to specify colors
+  for tag categories didn't show the category name
+- Bug: Search in names (#822): a bug in the webui sent a broken query
+  to the server, making the "search in names" field unusable
+- Bug: Fulltext only search broken (#823): the fulltext only search
+  didn't only consult the solr index, but also the database, making it
+  a lot slower and presenting the results not in the order returned by
+  solr.
+- Bug: Ui switches to logged in state on auth failure (#814)
+- Bug: Broken search summary when tag has no category (#759)
+
+
+### Migrating UI Settings
+
+After the upgrade to this version, your current ui settings are not
+read anymore. That means docspell starts up with a light theme and tag
+colors are gone etc. If there are no settings at the server, but
+docspell finds some at your browser, the *UI Settings* page shows a
+big message and a button. Clicking this button sends your settings to
+the server. This message disappears as soon as there are some settings
+on the server.
+
+If you have multiple devices, you now need to choose one which
+settings you want to migrate to the server. It is currently not
+possible to store settings per device.
+
+***Note**: the button is only there if there are no settings at the
+server. So if you want to migrate, don't set the theme or click on
+other things that are persisted before doing the migration!*
+
+### REST Api Changes
+
+- new routes have been added to delete multiple attachments of an item
+- new routes have been added to manage client settings
+
+### Configuration Changes
+
+- none
+
+
 ## v0.22.0
 
 *Apr 11, 2021*
@@ -104,7 +1104,7 @@ Additionally there are some other minor features and bug fixes.
     to be able to add a request header. Check [this for
     firefox](https://addons.mozilla.org/en-US/firefox/addon/modheader-firefox/)
     or [this for
-    chromium](https://chrome.google.com/webstore/detail/modheader/idgpnmonknjnojddfkpgkljpfnnfcklj)
+    chromium](https://chromewebstore.google.com/detail/modheader-modify-http-hea/idgpnmonknjnojddfkpgkljpfnnfcklj)
   - then add the request header `Docspell-Ui` with value `1`.
     Reloading the page gets you back the old ui.
 - With new Web-UI, certain features and fixes were realized, but not
@@ -158,7 +1158,7 @@ Please open an issue if want more languages to be included.
   - all text analysis steps are now configurable that makes it
     possible to adapt it better to your data and machine. 
   - The docs have been updated with some details
-    [here](https://docspell.org/docs/configure/#file-processing) and
+    [here](https://docspell.org/docs/configure/file-processing/) and
     [here](https://docspell.org/docs/joex/file-processing/#text-analysis).
 - more languages (#488)
   - Adds: Spanish, Italian, Portuguese, Czech, Dutch, Danish, Finnish,
@@ -222,8 +1222,8 @@ Please open an issue if want more languages to be included.
   - the config regarding text analysis changed, there are new config
     options, like `nlp.mode` and the `max-due-date-years` has been
     moved inside `text-anlysis`. Please have a look at the new
-    [default config](https://docspell.org/docs/configure/#joex) if you
-    changed something there.
+    [default config](https://docspell.org/docs/configure/defaults/#joex)
+    if you changed something there.
   - The `regex-ner` section has changed: the `enabled` flag has been
     removed, you can now limit the number of entries using
     `max-entries` to apply and `0` means to disable it.
@@ -243,7 +1243,7 @@ Please open an issue if want more languages to be included.
   - The result summary is now also used to update the tag counts in
     the search menu according to the current results.
 - Feature: password reset (#376,
-  [docs](https://docspell.org/docs/tools/reset-password/))
+  [docs](https://docspell.org/docs/tools/cli/#admin-commands))
   - Adds a new route for admins to reset the password of a user
   - Admin users are those with access to the config file, the endpoint
     requires to supply a secret from the config file.
@@ -750,7 +1750,7 @@ improvements for processing files.
   upload the file into memory for nothing if something fails (e.g. the
   source doesn't exist)
 - Re-process files. A
-  [route](https://docspell.org/openapi/docspell-openapi.html#api-Item-secItemItemIdReprocessPost)
+  [route](https://docspell.org/openapi/docspell-openapi.html#operation/sec-item-start-reprocess)
   has been added that submits files for re-processing. It is possible
   to re-process some files of an item or all. There is no UI for this
   for now. You'd need to run `curl` or something manually to trigger
@@ -760,9 +1760,8 @@ improvements for processing files.
   [OCRMyPdf](https://github.com/jbarlow83/OCRmyPDF) tool that can be
   used in docspell since the last release. This task converts all your
   existing PDFs into a PDF/A type pdf including the OCR-ed text layer.
-  There is no UI to trigger this task, but a
-  [script](https://docspell.org/docs/tools/convert-all-pdf/) is
-  provided to help with it. (#206)
+  There is no UI to trigger this task, but a script is provided to
+  help with it. (#206)
 - There is now an [Android Client
   App](https://github.com/docspell/android-client) to conveniently
   upload files from your android devices
@@ -833,10 +1832,9 @@ improvements for processing files.
 - Adds the [full-text
   search](https://docspell.org/docs/webapp/finding/#full-text-search)
   feature (see #69). It requires a separate
-  [Solr](https://lucene.apache.org/solr) instance. Items can be
-  searched by documents contents and item/file names. It is possible
-  to use full-text search to further confine the results via the
-  search menu.
+  [Solr](https://solr.apache.org) instance. Items can be searched by
+  documents contents and item/file names. It is possible to use
+  full-text search to further confine the results via the search menu.
 - Fixes column types for item date and due-date for MariaDB (see #158)
   and adds an upper limit for due-dates (which is configurable).
 - Fixes a bug when cancelling jobs. Stuck jobs were only removed from

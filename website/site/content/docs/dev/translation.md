@@ -3,6 +3,7 @@ title = "Translating Web-UI"
 weight = 10
 +++
 
+# UI Translation
 
 Help with translating the web-ui is greatly appreciated. I can only
 provide translations for English and German, and these may be wrong -
@@ -16,7 +17,7 @@ messages.
 
 This guide assumes no knowledge about Elm at all.
 
-# TL;DR
+## TL;DR
 
 If you are already familiar with Elm, here is the TL;DR:
 
@@ -92,7 +93,7 @@ sbt:docspell-root> make
 This will take a while, you need to wait until this is finished.
 
 
-## Start the application
+### Start the application
 
 If sbt is not started, start sbt from within the source root. Also
 export the `DOCSPELL_ENV` variable *before* starting sbt:
@@ -125,32 +126,38 @@ just left as is. Only the new compiled webapp must be made available
 to the running server. For this, a script is provided in the
 `project/` folder.
 
-Now open another terminal and `cd` into the docspell folder as before
-and run the following:
+Now open two more terminals and `cd` into the docspell folder as before
+and run the following in one:
 
 ``` bash
-❯ ./project/dev-ui-build.sh watch
+❯ ./project/dev-ui-build.sh watch-js
 Compile elm to js …
 Success!
 
     Main ───> /tmp/docspell/modules/webapp/target/scala-2.13/classes/META-INF/resources/webjars/docspell-webapp/0.22.0-SNAPSHOT/docspell-app.js
 
-Building css …
-/tmp/docspell
-Watching css and elm sources. C-c to quit.
+Watching elm sources. C-c to quit.
 Setting up watches.  Beware: since -r was given, this may take a while!
 Watches established.
 ```
 
-Once you see this, you're all set. The docspell application is running
-and changes to elm files are detected, the webapp is compiled and the
-resulting javascript file is copied to the correct location. To see
-your changes, a refresh in the browser is necessary.
+And in the other run this:
+
+``` bash
+❯ ./project/dev-ui-build.sh watch-css
+Watching css …
+```
+
+Once you have this, you're all set. The docspell application is
+running and changes to elm and css files are detected, the webapp is
+compiled and the resulting javascript and css file is copied to the
+correct location. To see your changes, a refresh in the browser is
+necessary.
 
 If this script is not working, install inotify-tools. The
 `inotifywait` command is required.
 
-You'll notice that compiling elm files is very fast!
+You'll notice that compiling elm and css is very fast.
 
 
 ## Find the webapp sources
@@ -241,7 +248,7 @@ de =
     , queue = Messages.Page.Queue.gb
     , userSettings = Messages.Page.UserSettings.gb
     , manageData = Messages.Page.ManageData.gb
-    , home = Messages.Page.Home.gb
+    , search = Messages.Page.Search.gb
     }
 ```
 
@@ -334,7 +341,7 @@ de =
     , queue = Messages.Page.Queue.gb
     , userSettings = Messages.Page.UserSettings.gb
     , manageData = Messages.Page.ManageData.gb
-    , home = Messages.Page.Home.gb
+    , search = Messages.Page.Search.gb
     }
 ```
 
@@ -353,7 +360,7 @@ You can publish your work to this repo in various ways:
 This is the preferred way, because it means less work for me :). If
 you have a github account, you can create a pull request. Here is a
 quick walk-through. There is a thorough help [at
-github](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests).
+github](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork).
 
 1. Fork this repository in the github webapp
 2. Go to the docspell source root you checked out in the terminal. Run:

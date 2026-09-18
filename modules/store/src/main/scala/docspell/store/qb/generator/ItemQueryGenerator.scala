@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.generator
 
 import java.time.Instant
@@ -18,12 +24,12 @@ import doobie.util.Put
 
 object ItemQueryGenerator {
 
-  def apply(today: LocalDate, tables: Tables, coll: Ident)(q: ItemQuery)(implicit
+  def apply(today: LocalDate, tables: Tables, coll: CollectiveId)(q: ItemQuery)(implicit
       PT: Put[Timestamp]
   ): Condition =
     fromExpr(today, tables, coll)(q.expr)
 
-  final def fromExpr(today: LocalDate, tables: Tables, coll: Ident)(
+  final def fromExpr(today: LocalDate, tables: Tables, coll: CollectiveId)(
       expr: Expr
   )(implicit PT: Put[Timestamp]): Condition =
     expr match {
@@ -89,14 +95,10 @@ object ItemQueryGenerator {
         }
 
       case Expr.SimpleExpr(op, Property.DateProperty(attr, value)) =>
-        val dt       = dateToTimestamp(today)(value)
-        val col      = timestampColumn(tables)(attr)
+        val dt = dateToTimestamp(today)(value)
+        val col = timestampColumn(tables)(attr)
         val noLikeOp = if (op == Operator.Like) Operator.Eq else op
         Condition.CompareFVal(col, makeOp(noLikeOp), dt)
-
-      case Expr.SimpleExpr(op, Property.IntProperty(attr, value)) =>
-        val col = intColumn(tables)(attr)
-        Condition.CompareVal(col, makeOp(op), value)
 
       case Expr.InExpr(attr, values) =>
         val col = stringColumn(tables)(attr)
@@ -119,6 +121,12 @@ object ItemQueryGenerator {
 
       case Expr.ValidItemStates =>
         tables.item.state.in(ItemState.validStates)
+
+      case Expr.Trashed =>
+        tables.item.state === ItemState.Deleted
+
+      case Expr.ValidItemsOrTrashed =>
+        tables.item.state.in(ItemState.validStatesAndDeleted)
 
       case Expr.TagIdsMatch(op, tags) =>
         val ids = tags.toList.flatMap(s => Ident.fromString(s).toOption)
@@ -165,12 +173,16 @@ object ItemQueryGenerator {
         tables.item.id.in(select.withSelect(Nel.of(RItem.as("i").id.s)))
 
       case Expr.AttachId(id) =>
-        tables.item.id.in(
-          Select(
-            select(RAttachment.T.itemId),
-            from(RAttachment.T),
+        val idWildcard = QueryWildcard(id)
+        val query =
+          if (id == idWildcard) {
             RAttachment.T.id.cast[String] === id
-          ).distinct
+          } else {
+            RAttachment.T.id.cast[String].like(idWildcard)
+          }
+
+        tables.item.id.in(
+          Select(select(RAttachment.T.itemId), from(RAttachment.T), query).distinct
         )
 
       case Expr.Fulltext(_) =>
@@ -201,7 +213,7 @@ object ItemQueryGenerator {
       case Date.Local(date) =>
         date
       case Date.Millis(ms) =>
-        Instant.ofEpochMilli(ms).atZone(Timestamp.UTC).toLocalDate()
+        Instant.ofEpochMilli(ms).atZone(Timestamp.UTC).toLocalDate
       case Date.Today =>
         today
     }
@@ -212,8 +224,6 @@ object ItemQueryGenerator {
         stringColumn(tables)(s).s
       case t: Attr.DateAttr =>
         timestampColumn(tables)(t)
-      case n: Attr.IntAttr =>
-        intColumn(tables)(n).s
     }
 
   private def timestampColumn(tables: Tables)(attr: Attr.DateAttr): SelectExpr =
@@ -222,6 +232,8 @@ object ItemQueryGenerator {
         coalesce(tables.item.itemDate.s, tables.item.created.s).s
       case Attr.DueDate =>
         tables.item.dueDate.s
+      case Attr.CreatedDate =>
+        tables.item.created.s
     }
 
   private def stringColumn(tables: Tables)(attr: Attr.StringAttr): Column[String] =
@@ -240,11 +252,6 @@ object ItemQueryGenerator {
       case Attr.Concerning.EquipName     => tables.concEquip.name
       case Attr.Folder.FolderId          => tables.folder.id.cast[String]
       case Attr.Folder.FolderName        => tables.folder.name
-    }
-
-  private def intColumn(tables: Tables)(attr: Attr.IntAttr): Column[Int] =
-    attr match {
-      case Attr.AttachCount => tables.attachCount.num
     }
 
   private def makeOp(operator: Operator): QOp =
@@ -267,8 +274,8 @@ object ItemQueryGenerator {
 
   private def itemsWithCustomField(
       sel: RCustomField.Table => Condition
-  )(coll: Ident, op: QOp, value: String): Select = {
-    val cf  = RCustomField.as("cf")
+  )(coll: CollectiveId, op: QOp, value: String): Select = {
+    val cf = RCustomField.as("cf")
     val cfv = RCustomFieldValue.as("cfv")
 
     val baseSelect =

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -11,7 +17,7 @@ import doobie.implicits._
 
 case class REquipment(
     eid: Ident,
-    cid: Ident,
+    cid: CollectiveId,
     name: String,
     created: Timestamp,
     updated: Timestamp,
@@ -23,14 +29,14 @@ object REquipment {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "equipment"
 
-    val eid     = Column[Ident]("eid", this)
-    val cid     = Column[Ident]("cid", this)
-    val name    = Column[String]("name", this)
+    val eid = Column[Ident]("eid", this)
+    val cid = Column[CollectiveId]("coll_id", this)
+    val name = Column[String]("name", this)
     val created = Column[Timestamp]("created", this)
     val updated = Column[Timestamp]("updated", this)
-    val notes   = Column[String]("notes", this)
-    val use     = Column[EquipmentUse]("equip_use", this)
-    val all     = NonEmptyList.of[Column[_]](eid, cid, name, created, updated, notes, use)
+    val notes = Column[String]("notes", this)
+    val use = Column[EquipmentUse]("equip_use", this)
+    val all = NonEmptyList.of[Column[_]](eid, cid, name, created, updated, notes, use)
   }
 
   val T = Table(None)
@@ -66,22 +72,22 @@ object REquipment {
     } yield n
   }
 
-  def existsByName(coll: Ident, ename: String): ConnectionIO[Boolean] = {
-    val t   = Table(None)
+  def existsByName(coll: CollectiveId, ename: String): ConnectionIO[Boolean] = {
+    val t = Table(None)
     val sql = run(select(count(t.eid)), from(t), where(t.cid === coll, t.name === ename))
     sql.query[Int].unique.map(_ > 0)
   }
 
   def findById(id: Ident): ConnectionIO[Option[REquipment]] = {
-    val t   = Table(None)
+    val t = Table(None)
     val sql = run(select(t.all), from(t), t.eid === id)
     sql.query[REquipment].option
   }
 
   def findAll(
-      coll: Ident,
+      coll: CollectiveId,
       nameQ: Option[String],
-      order: Table => Column[_]
+      order: Table => NonEmptyList[OrderBy]
   ): ConnectionIO[Vector[REquipment]] = {
     val t = Table(None)
 
@@ -94,7 +100,7 @@ object REquipment {
   }
 
   def findLike(
-      coll: Ident,
+      coll: CollectiveId,
       equipName: String,
       use: NonEmptyList[EquipmentUse]
   ): ConnectionIO[Vector[IdRef]] = {
@@ -108,7 +114,7 @@ object REquipment {
       .to[Vector]
   }
 
-  def delete(id: Ident, coll: Ident): ConnectionIO[Int] = {
+  def delete(id: Ident, coll: CollectiveId): ConnectionIO[Int] = {
     val t = Table(None)
     DML.delete(t, t.eid === id && t.cid === coll)
   }

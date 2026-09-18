@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemCardList exposing
     ( Model
     , Msg(..)
@@ -5,17 +12,21 @@ module Comp.ItemCardList exposing
     , init
     , nextItem
     , prevItem
+    , size
     , update
     , updateDrag
-    , view2
+    , view
     )
 
+import Api.Model.AttachmentLight exposing (AttachmentLight)
 import Api.Model.ItemLight exposing (ItemLight)
 import Api.Model.ItemLightGroup exposing (ItemLightGroup)
 import Api.Model.ItemLightList exposing (ItemLightList)
 import Comp.ItemCard
 import Comp.LinkTarget exposing (LinkTarget)
 import Data.Flags exposing (Flags)
+import Data.ItemArrange exposing (ItemArrange)
+import Data.ItemIds exposing (ItemIdChange)
 import Data.ItemSelection exposing (ItemSelection)
 import Data.Items
 import Data.UiSettings exposing (UiSettings)
@@ -39,6 +50,7 @@ type Msg
     = SetResults ItemLightList
     | AddResults ItemLightList
     | ItemCardMsg ItemLight Comp.ItemCard.Msg
+    | RemoveItem String
 
 
 init : Model
@@ -60,25 +72,27 @@ prevItem model id =
         |> Util.List.findPrev (\i -> i.id == id)
 
 
+size : Model -> Int
+size model =
+    Data.Items.length model.results
+
+
 
 --- Update
 
 
-update : Flags -> Msg -> Model -> ( Model, Cmd Msg )
+update : Flags -> Msg -> Model -> UpdateResult
 update flags msg model =
-    let
-        res =
-            updateDrag DD.init flags msg model
-    in
-    ( res.model, res.cmd )
+    updateDrag DD.init flags msg model
 
 
 type alias UpdateResult =
     { model : Model
     , cmd : Cmd Msg
     , dragModel : DD.Model
-    , selection : ItemSelection
+    , selection : ItemIdChange
     , linkTarget : LinkTarget
+    , toggleOpenRow : Maybe String
     }
 
 
@@ -98,16 +112,18 @@ updateDrag dm _ msg model =
             UpdateResult newModel
                 Cmd.none
                 dm
-                Data.ItemSelection.Inactive
+                Data.ItemIds.noChange
                 Comp.LinkTarget.LinkNone
+                Nothing
 
         AddResults list ->
             if list.groups == [] then
                 UpdateResult model
                     Cmd.none
                     dm
-                    Data.ItemSelection.Inactive
+                    Data.ItemIds.noChange
                     Comp.LinkTarget.LinkNone
+                    Nothing
 
             else
                 let
@@ -117,8 +133,9 @@ updateDrag dm _ msg model =
                 UpdateResult newModel
                     Cmd.none
                     dm
-                    Data.ItemSelection.Inactive
+                    Data.ItemIds.noChange
                     Comp.LinkTarget.LinkNone
+                    Nothing
 
         ItemCardMsg item lm ->
             let
@@ -137,6 +154,15 @@ updateDrag dm _ msg model =
                 result.dragModel
                 result.selection
                 result.linkTarget
+                result.toggleRow
+
+        RemoveItem id ->
+            UpdateResult { model | results = removeItemById id model.results }
+                Cmd.none
+                dm
+                Data.ItemIds.noChange
+                Comp.LinkTarget.LinkNone
+                Nothing
 
 
 
@@ -146,31 +172,93 @@ updateDrag dm _ msg model =
 type alias ViewConfig =
     { current : Maybe String
     , selection : ItemSelection
+    , previewUrl : AttachmentLight -> String
+    , previewUrlFallback : ItemLight -> String
+    , attachUrl : AttachmentLight -> String
+    , detailPage : ItemLight -> Page
+    , arrange : ItemArrange
+    , showGroups : Bool
+    , rowOpen : String -> Bool
     }
 
 
-view2 : Texts -> ViewConfig -> UiSettings -> Model -> Html Msg
-view2 texts cfg settings model =
-    div
-        [ classList
-            [ ( "ds-item-list", True )
-            , ( "ds-multi-select-mode", isMultiSelectMode cfg )
+view : Texts -> ViewConfig -> UiSettings -> Flags -> Model -> Html Msg
+view texts cfg settings flags model =
+    case cfg.arrange of
+        Data.ItemArrange.Cards ->
+            viewCards texts cfg settings flags model
+
+        Data.ItemArrange.List ->
+            viewList texts cfg settings flags model
+
+
+viewList : Texts -> ViewConfig -> UiSettings -> Flags -> Model -> Html Msg
+viewList texts cfg settings flags model =
+    let
+        items =
+            Data.Items.unwrapGroups model.results.groups
+
+        listingCss =
+            "grid grid-cols-1 space-y-1"
+    in
+    if cfg.showGroups then
+        div [ class listingCss ]
+            (List.map (viewGroup texts model cfg settings flags) model.results.groups)
+
+    else
+        div [ class (itemContainerCss cfg) ]
+            (List.map (viewItem texts model cfg settings flags) items)
+
+
+itemContainerCss : ViewConfig -> String
+itemContainerCss cfg =
+    case cfg.arrange of
+        Data.ItemArrange.Cards ->
+            "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 "
+                ++ "xl:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 "
+                ++ "5xl:grid-cols-8 6xl:grid-cols-10 gap-2"
+
+        Data.ItemArrange.List ->
+            "flex flex-col divide-y"
+
+
+viewCards : Texts -> ViewConfig -> UiSettings -> Flags -> Model -> Html Msg
+viewCards texts cfg settings flags model =
+    let
+        items =
+            Data.Items.unwrapGroups model.results.groups
+    in
+    if cfg.showGroups then
+        div
+            [ classList
+                [ ( "ds-item-list", True )
+                , ( "ds-multi-select-mode", isMultiSelectMode cfg )
+                ]
             ]
-        ]
-        (List.map (viewGroup2 texts model cfg settings) model.results.groups)
+            (List.map (viewGroup texts model cfg settings flags) model.results.groups)
+
+    else
+        div
+            [ class "ds-item-list"
+            , class (itemContainerCss cfg)
+            , classList
+                [ ( "ds-multi-select-mode", isMultiSelectMode cfg )
+                ]
+            ]
+            (List.map (viewItem texts model cfg settings flags) items)
 
 
-viewGroup2 : Texts -> Model -> ViewConfig -> UiSettings -> ItemLightGroup -> Html Msg
-viewGroup2 texts model cfg settings group =
+viewGroup : Texts -> Model -> ViewConfig -> UiSettings -> Flags -> ItemLightGroup -> Html Msg
+viewGroup texts model cfg settings flags group =
     div [ class "ds-item-group" ]
         [ div
-            [ class "flex py-0 mt-2 flex flex-row items-center"
-            , class "bg-white dark:bg-bluegray-800 text-lg z-35"
+            [ class "flex py-1 mt-2 mb-2 flex flex-row items-center"
+            , class "bg-white dark:bg-slate-800 text-xl font-bold z-35"
             , class "relative sticky top-10"
             ]
             [ hr
-                [ class S.border
-                , class "flex-grow"
+                [ class S.border2
+                , class "w-16"
                 ]
                 []
             , div [ class "px-6" ]
@@ -180,18 +268,18 @@ viewGroup2 texts model cfg settings group =
                     ]
                 ]
             , hr
-                [ class S.border
+                [ class S.border2
                 , class "flex-grow"
                 ]
                 []
             ]
-        , div [ class "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2" ]
-            (List.map (viewItem2 texts model cfg settings) group.items)
+        , div [ class (itemContainerCss cfg) ]
+            (List.map (viewItem texts model cfg settings flags) group.items)
         ]
 
 
-viewItem2 : Texts -> Model -> ViewConfig -> UiSettings -> ItemLight -> Html Msg
-viewItem2 texts model cfg settings item =
+viewItem : Texts -> Model -> ViewConfig -> UiSettings -> Flags -> ItemLight -> Html Msg
+viewItem texts model cfg settings flags item =
     let
         currentClass =
             if cfg.current == Just item.id then
@@ -200,15 +288,31 @@ viewItem2 texts model cfg settings item =
             else
                 ""
 
+        itemClass =
+            case cfg.arrange of
+                Data.ItemArrange.List ->
+                    " py-1 "
+
+                Data.ItemArrange.Cards ->
+                    ""
+
         vvcfg =
-            Comp.ItemCard.ViewConfig cfg.selection currentClass
+            { selection = cfg.selection
+            , extraClasses = currentClass ++ itemClass
+            , previewUrl = cfg.previewUrl
+            , previewUrlFallback = cfg.previewUrlFallback
+            , attachUrl = cfg.attachUrl
+            , detailPage = cfg.detailPage
+            , isRowOpen = cfg.rowOpen item.id
+            , arrange = cfg.arrange
+            }
 
         cardModel =
             Dict.get item.id model.itemCards
                 |> Maybe.withDefault Comp.ItemCard.init
 
         cardHtml =
-            Comp.ItemCard.view2 texts.itemCard vvcfg settings cardModel item
+            Comp.ItemCard.view texts.itemCard vvcfg settings flags cardModel item
     in
     Html.map (ItemCardMsg item) cardHtml
 
@@ -225,3 +329,15 @@ isMultiSelectMode cfg =
 
         Data.ItemSelection.Inactive ->
             False
+
+
+removeItemById : String -> ItemLightList -> ItemLightList
+removeItemById id list =
+    let
+        filterItem item =
+            item.id /= id
+
+        filterGroup group =
+            { group | items = List.filter filterItem group.items }
+    in
+    { list | groups = List.map filterGroup list.groups }

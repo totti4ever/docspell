@@ -1,7 +1,23 @@
-module Messages.Comp.ItemDetail.EditForm exposing (Texts, gb)
+{-
+   Copyright 2020 Eike K. & Contributors
 
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Comp.ItemDetail.EditForm exposing
+    ( Texts
+    , de
+    , fr
+    , gb
+    )
+
+import Data.Direction exposing (Direction)
+import Data.TimeZone exposing (TimeZone)
 import Messages.Basics
 import Messages.Comp.CustomFieldMultiInput
+import Messages.Comp.TagDropdown
+import Messages.Data.Direction
 import Messages.DateFormat as DF
 import Messages.UiLanguage
 
@@ -9,9 +25,9 @@ import Messages.UiLanguage
 type alias Texts =
     { basics : Messages.Basics.Texts
     , customFieldInput : Messages.Comp.CustomFieldMultiInput.Texts
+    , tagDropdown : Messages.Comp.TagDropdown.Texts
     , createNewCustomField : String
     , chooseDirection : String
-    , folderNotOwnerWarning : String
     , dueDateTab : String
     , addNewOrg : String
     , editOrg : String
@@ -23,22 +39,19 @@ type alias Texts =
     , addNewEquipment : String
     , editEquipment : String
     , suggestions : String
+    , noSuggestions : String
     , formatDate : Int -> String
+    , direction : Direction -> String
     }
 
 
-gb : Texts
-gb =
+gb : TimeZone -> Texts
+gb tz =
     { basics = Messages.Basics.gb
     , customFieldInput = Messages.Comp.CustomFieldMultiInput.gb
+    , tagDropdown = Messages.Comp.TagDropdown.gb
     , createNewCustomField = "Create new custom field"
     , chooseDirection = "Choose a direction…"
-    , folderNotOwnerWarning =
-        """
-You are **not a member** of this folder. This item will be **hidden**
-from any search now. Use a folder where you are a member of to make this
-item visible. This message will disappear then.
-"""
     , dueDateTab = "Due Date"
     , addNewOrg = "Add new organization"
     , editOrg = "Edit organization"
@@ -50,5 +63,55 @@ item visible. This message will disappear then.
     , addNewEquipment = "Add new equipment"
     , editEquipment = "Edit equipment"
     , suggestions = "Suggestions"
-    , formatDate = DF.formatDateLong Messages.UiLanguage.English
+    , noSuggestions = "No suggestions"
+    , formatDate = DF.formatDateLong Messages.UiLanguage.English tz
+    , direction = Messages.Data.Direction.gb
+    }
+
+
+de : TimeZone -> Texts
+de tz =
+    { basics = Messages.Basics.de
+    , customFieldInput = Messages.Comp.CustomFieldMultiInput.de
+    , tagDropdown = Messages.Comp.TagDropdown.de
+    , createNewCustomField = "Erstelle neues Benutzerfeld"
+    , chooseDirection = "Wähle Richtung…"
+    , dueDateTab = "Fälligkeitsdatum"
+    , addNewOrg = "Neue Organisation hinzufügen"
+    , editOrg = "Ändere die Organisation"
+    , chooseOrg = "Wähle eine Organisation"
+    , addNewCorrespondentPerson = "Neue korrespondierende Person hinzufügen"
+    , editPerson = "Ändere die Person"
+    , personOrgInfo = "Die ausgewählte Person gehört nicht zur gewählten Organisation."
+    , addNewConcerningPerson = "Neue betreffende Person hinzufügen"
+    , addNewEquipment = "Neue Ausstattung hinzufügen"
+    , editEquipment = "Ausstattung ändern"
+    , suggestions = "Vorschläge"
+    , noSuggestions = "Keine Vorschläge"
+    , formatDate = DF.formatDateLong Messages.UiLanguage.German tz
+    , direction = Messages.Data.Direction.de
+    }
+
+
+fr : TimeZone -> Texts
+fr tz =
+    { basics = Messages.Basics.fr
+    , customFieldInput = Messages.Comp.CustomFieldMultiInput.fr
+    , tagDropdown = Messages.Comp.TagDropdown.fr
+    , createNewCustomField = "Créer un nouveau champs personnalisé"
+    , chooseDirection = "Choisir un sens…"
+    , dueDateTab = "Date d'échéance"
+    , addNewOrg = "Ajouter une nouvelle organisation"
+    , editOrg = "Editer une organisation"
+    , chooseOrg = "Choisir une organisation"
+    , addNewCorrespondentPerson = "Ajouter un correspondant"
+    , editPerson = "Editer uncorrespondant"
+    , personOrgInfo = "Le correspondant n'appartient pas à l'organisation."
+    , addNewConcerningPerson = "Ajouter une personne concernée"
+    , addNewEquipment = "Ajouter un nouvel équipement"
+    , editEquipment = "Editer un équipement"
+    , suggestions = "Suggestions"
+    , noSuggestions = "Aucune suggestion"
+    , formatDate = DF.formatDateLong Messages.UiLanguage.French tz
+    , direction = Messages.Data.Direction.fr
     }

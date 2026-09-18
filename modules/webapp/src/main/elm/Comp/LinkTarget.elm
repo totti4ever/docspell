@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.LinkTarget exposing
     ( LinkTarget(..)
     , makeConcLink
@@ -28,6 +35,8 @@ type LinkTarget
     | LinkTag IdName
     | LinkCustomField ItemFieldValue
     | LinkSource String
+    | LinkBookmark String
+    | LinkRelatedItems (List String)
     | LinkNone
 
 
@@ -102,7 +111,7 @@ makeCustomFieldLink :
     -> (LinkTarget -> msg)
     -> Html msg
 makeCustomFieldLink cv classes tagger =
-    Util.CustomField.renderValue1
+    Util.CustomField.renderValue2
         classes
         (tagger (LinkCustomField cv) |> Just)
         cv

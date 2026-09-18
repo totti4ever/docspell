@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.ItemTemplate exposing
     ( ItemTemplate
     , TemplateContext
@@ -6,6 +13,7 @@ module Data.ItemTemplate exposing
     , concat
     , concerning
     , corrOrg
+    , corrOrgOrPerson
     , corrPerson
     , correspondent
     , dateLong
@@ -220,6 +228,11 @@ corrPerson =
 correspondent : ItemTemplate
 correspondent =
     combine ", " corrOrg corrPerson
+
+
+corrOrgOrPerson : ItemTemplate
+corrOrgOrPerson =
+    firstNonEmpty [ corrOrg, corrPerson ]
 
 
 concPerson : ItemTemplate

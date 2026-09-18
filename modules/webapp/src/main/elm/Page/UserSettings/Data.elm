@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.UserSettings.Data exposing
     ( Model
     , Msg(..)
@@ -6,13 +13,17 @@ module Page.UserSettings.Data exposing
     )
 
 import Comp.ChangePasswordForm
+import Comp.DueItemsTaskManage
 import Comp.EmailSettingsManage
 import Comp.ImapSettingsManage
-import Comp.NotificationManage
+import Comp.NotificationChannelManage
+import Comp.NotificationHookManage
+import Comp.OtpSetup
+import Comp.PeriodicQueryTaskManage
 import Comp.ScanMailboxManage
 import Comp.UiSettingsManage
 import Data.Flags exposing (Flags)
-import Data.UiSettings exposing (UiSettings)
+import Data.UiSettings exposing (StoredUiSettings, UiSettings)
 
 
 type alias Model =
@@ -20,27 +31,53 @@ type alias Model =
     , changePassModel : Comp.ChangePasswordForm.Model
     , emailSettingsModel : Comp.EmailSettingsManage.Model
     , imapSettingsModel : Comp.ImapSettingsManage.Model
-    , notificationModel : Comp.NotificationManage.Model
+    , notificationModel : Comp.DueItemsTaskManage.Model
     , scanMailboxModel : Comp.ScanMailboxManage.Model
     , uiSettingsModel : Comp.UiSettingsManage.Model
+    , otpSetupModel : Comp.OtpSetup.Model
+    , notificationHookModel : Comp.NotificationHookManage.Model
+    , channelModel : Comp.NotificationChannelManage.Model
+    , periodicQueryModel : Comp.PeriodicQueryTaskManage.Model
     }
 
 
 init : Flags -> UiSettings -> ( Model, Cmd Msg )
-init flags settings =
+init flags _ =
     let
         ( um, uc ) =
-            Comp.UiSettingsManage.init flags settings
+            Comp.UiSettingsManage.init flags
+
+        ( otpm, otpc ) =
+            Comp.OtpSetup.init flags
+
+        ( nhm, nhc ) =
+            Comp.NotificationHookManage.init flags
+
+        ( pqm, pqc ) =
+            Comp.PeriodicQueryTaskManage.init flags
+
+        ( ncm, ncc ) =
+            Comp.NotificationChannelManage.init flags
     in
     ( { currentTab = Just UiSettingsTab
       , changePassModel = Comp.ChangePasswordForm.emptyModel
       , emailSettingsModel = Comp.EmailSettingsManage.emptyModel
       , imapSettingsModel = Comp.ImapSettingsManage.emptyModel
-      , notificationModel = Tuple.first (Comp.NotificationManage.init flags)
+      , notificationModel = Tuple.first (Comp.DueItemsTaskManage.init flags)
       , scanMailboxModel = Tuple.first (Comp.ScanMailboxManage.init flags)
       , uiSettingsModel = um
+      , otpSetupModel = otpm
+      , notificationHookModel = nhm
+      , periodicQueryModel = pqm
+      , channelModel = ncm
       }
-    , Cmd.map UiSettingsMsg uc
+    , Cmd.batch
+        [ Cmd.map UiSettingsMsg uc
+        , Cmd.map OtpSetupMsg otpc
+        , Cmd.map NotificationHookMsg nhc
+        , Cmd.map PeriodicQueryMsg pqc
+        , Cmd.map ChannelMsg ncc
+        ]
     )
 
 
@@ -49,16 +86,24 @@ type Tab
     | EmailSettingsTab
     | ImapSettingsTab
     | NotificationTab
+    | NotificationWebhookTab
+    | NotificationQueriesTab
+    | NotificationDueItemsTab
     | ScanMailboxTab
     | UiSettingsTab
+    | OtpTab
+    | ChannelTab
 
 
 type Msg
     = SetTab Tab
     | ChangePassMsg Comp.ChangePasswordForm.Msg
     | EmailSettingsMsg Comp.EmailSettingsManage.Msg
-    | NotificationMsg Comp.NotificationManage.Msg
+    | NotificationMsg Comp.DueItemsTaskManage.Msg
     | ImapSettingsMsg Comp.ImapSettingsManage.Msg
     | ScanMailboxMsg Comp.ScanMailboxManage.Msg
     | UiSettingsMsg Comp.UiSettingsManage.Msg
-    | UpdateSettings
+    | OtpSetupMsg Comp.OtpSetup.Msg
+    | NotificationHookMsg Comp.NotificationHookManage.Msg
+    | PeriodicQueryMsg Comp.PeriodicQueryTaskManage.Msg
+    | ChannelMsg Comp.NotificationChannelManage.Msg

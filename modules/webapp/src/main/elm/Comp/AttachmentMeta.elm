@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.AttachmentMeta exposing
     ( Model
     , Msg
@@ -8,28 +15,36 @@ module Comp.AttachmentMeta exposing
 
 import Api
 import Api.Model.AttachmentMeta exposing (AttachmentMeta)
+import Api.Model.BasicResult exposing (BasicResult)
 import Api.Model.ItemProposals exposing (ItemProposals)
 import Api.Model.Label exposing (Label)
 import Comp.Basic as B
 import Data.Flags exposing (Flags)
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (onClick, onInput)
 import Http
 import Messages.Comp.AttachmentMeta exposing (Texts)
 import Styles as S
-import Util.Http
 
 
 type alias Model =
     { id : String
-    , meta : DataResult AttachmentMeta
+    , meta : DataResult
     }
 
 
-type DataResult a
+type alias EditModel =
+    { meta : AttachmentMeta
+    , text : String
+    }
+
+
+type DataResult
     = NotAvailable
-    | Success a
-    | Failure String
+    | Success AttachmentMeta
+    | Editing EditModel
+    | HttpFailure Http.Error
 
 
 emptyModel : Model
@@ -48,16 +63,64 @@ init flags id =
 
 type Msg
     = MetaResp (Result Http.Error AttachmentMeta)
+    | SaveResp String (Result Http.Error BasicResult)
+    | ToggleEdit
+    | SaveExtractedText
+    | SetExtractedText String
 
 
-update : Msg -> Model -> Model
-update msg model =
+update : Flags -> Msg -> Model -> ( Model, Cmd Msg )
+update flags msg model =
     case msg of
         MetaResp (Ok am) ->
-            { model | meta = Success am }
+            ( { model | meta = Success am }, Cmd.none )
 
         MetaResp (Err err) ->
-            { model | meta = Failure (Util.Http.errorToString err) }
+            ( { model | meta = HttpFailure err }, Cmd.none )
+
+        SaveResp newText (Ok result) ->
+            if result.success then
+                case model.meta of
+                    Editing { meta } ->
+                        ( { model | meta = Success { meta | content = newText } }, Cmd.none )
+
+                    _ ->
+                        ( model, Cmd.none )
+
+            else
+                ( model, Cmd.none )
+
+        SaveResp _ (Err err) ->
+            ( { model | meta = HttpFailure err }, Cmd.none )
+
+        ToggleEdit ->
+            case model.meta of
+                Editing m ->
+                    ( { model | meta = Success m.meta }, Cmd.none )
+
+                Success m ->
+                    ( { model | meta = Editing { meta = m, text = m.content } }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SaveExtractedText ->
+            case model.meta of
+                Editing em ->
+                    ( model
+                    , Api.setAttachmentExtractedText flags model.id (Just em.text) (SaveResp em.text)
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SetExtractedText txt ->
+            case model.meta of
+                Editing em ->
+                    ( { model | meta = Editing { em | text = txt } }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
 
 
@@ -77,25 +140,61 @@ view2 texts attrs model =
                     , label = texts.basics.loading
                     }
 
-            Failure msg ->
+            HttpFailure err ->
                 div [ class S.errorMessage ]
-                    [ text msg
+                    [ text (texts.httpError err)
                     ]
 
             Success data ->
-                viewData2 texts data
+                viewData2 texts data Nothing
+
+            Editing em ->
+                viewData2 texts em.meta (Just em.text)
         ]
 
 
-viewData2 : Texts -> AttachmentMeta -> Html Msg
-viewData2 texts meta =
+viewData2 : Texts -> AttachmentMeta -> Maybe String -> Html Msg
+viewData2 texts meta maybeText =
     div [ class "flex flex-col" ]
-        [ div [ class "text-lg font-bold" ]
-            [ text texts.content
+        [ div [ class "flex flex-row items-center" ]
+            [ div [ class "text-lg font-bold flex flex-grow" ]
+                [ text texts.content
+                ]
+            , case maybeText of
+                Nothing ->
+                    div [ class "flex text-sm" ]
+                        [ a [ href "#", class S.link, onClick ToggleEdit ]
+                            [ i [ class "fa fa-edit pr-1" ] []
+                            , text texts.basics.edit
+                            ]
+                        ]
+
+                Just _ ->
+                    div [ class "flex text-sm" ]
+                        [ a [ href "#", class S.link, onClick ToggleEdit ]
+                            [ text texts.basics.cancel
+                            ]
+                        , span [ class "px-2" ] [ text "•" ]
+                        , a [ href "#", class S.link, onClick SaveExtractedText ]
+                            [ i [ class "fa fa-save pr-1" ] []
+                            , text texts.basics.submit
+                            ]
+                        ]
             ]
-        , div [ class "px-2 py-2 text-sm bg-yellow-50 dark:bg-warmgray-800 break-words whitespace-pre max-h-80 overflow-auto" ]
-            [ text meta.content
-            ]
+        , case maybeText of
+            Nothing ->
+                div [ class "px-2 py-2 text-sm bg-yellow-50 dark:bg-stone-800 break-words whitespace-pre max-h-80 overflow-auto" ]
+                    [ text meta.content
+                    ]
+
+            Just em ->
+                textarea
+                    [ class "px-2 py-2 text-sm bg-yellow-50 dark:bg-stone-800 break-words whitespace-pre h-80 overflow-auto"
+                    , value em
+                    , onInput SetExtractedText
+                    , rows 10
+                    ]
+                    []
         , div [ class "text-lg font-bold mt-2" ]
             [ text texts.labels
             ]
@@ -194,7 +293,7 @@ renderLabel2 label =
                     "fa fa-at"
 
                 "website" ->
-                    "fa fa-external-alt"
+                    "fa fa-external-link-alt"
 
                 _ ->
                     "fa fa-tag"

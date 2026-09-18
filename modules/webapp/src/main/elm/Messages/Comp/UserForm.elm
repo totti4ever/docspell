@@ -1,4 +1,16 @@
-module Messages.Comp.UserForm exposing (Texts, gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Comp.UserForm exposing
+    ( Texts
+    , de
+    , fr
+    , gb
+    )
 
 import Messages.Basics
 
@@ -19,4 +31,24 @@ gb =
     , state = "State"
     , email = "E-Mail"
     , password = "Password"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , login = "Benutzername"
+    , state = "Status"
+    , email = "E-Mail"
+    , password = "Passwort"
+    }
+
+
+fr : Texts
+fr =
+    { basics = Messages.Basics.fr
+    , login = "Identifiant"
+    , state = "Etat"
+    , email = "E-Mail"
+    , password = "Mot de passe"
     }

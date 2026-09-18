@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import cats.effect._
@@ -6,19 +12,22 @@ import fs2.Stream
 
 import docspell.common._
 import docspell.ftsclient._
+import docspell.logging.Logger
 
 import org.http4s.client.Client
-import org.http4s.client.middleware.Logger
-import org.log4s.getLogger
+import org.http4s.client.middleware.{Logger => Http4sLogger}
 
-final class SolrFtsClient[F[_]: Effect](
+final class SolrFtsClient[F[_]: Async](
     solrUpdate: SolrUpdate[F],
     solrSetup: SolrSetup[F],
     solrQuery: SolrQuery[F]
 ) extends FtsClient[F] {
 
-  def initialize: List[FtsMigration[F]] =
-    solrSetup.setupSchema
+  def initialize: F[List[FtsMigration[F]]] =
+    solrSetup.remainingSetup.map(_.map(_.value))
+
+  def initializeNew: List[FtsMigration[F]] =
+    solrSetup.setupSchema.map(_.value)
 
   def search(q: FtsQuery): F[FtsResult] =
     solrQuery.query(q)
@@ -32,11 +41,11 @@ final class SolrFtsClient[F[_]: Effect](
   def updateFolder(
       logger: Logger[F],
       itemId: Ident,
-      collective: Ident,
+      collective: CollectiveId,
       folder: Option[Ident]
   ): F[Unit] =
     logger.debug(
-      s"Update folder in solr index for coll/item ${collective.id}/${itemId.id}"
+      s"Update folder in solr index for coll/item ${collective.value}/${itemId.id}"
     ) *>
       solrUpdate.updateFolder(itemId, collective, folder)
 
@@ -44,9 +53,9 @@ final class SolrFtsClient[F[_]: Effect](
       f: List[TextData] => F[Unit]
   ): F[Unit] =
     (for {
-      _      <- Stream.eval(logger.debug("Updating SOLR index"))
+      _ <- Stream.eval(logger.debug("Updating SOLR index"))
       chunks <- data.chunks
-      res    <- Stream.eval(f(chunks.toList).attempt)
+      res <- Stream.eval(f(chunks.toList).attempt)
       _ <- res match {
         case Right(()) => Stream.emit(())
         case Left(ex) =>
@@ -66,15 +75,14 @@ final class SolrFtsClient[F[_]: Effect](
     logger.info("Deleting complete full-text index!") *>
       solrUpdate.delete("*:*", Option(0))
 
-  def clear(logger: Logger[F], collective: Ident): F[Unit] =
-    logger.info(s"Deleting full-text index for collective ${collective.id}") *>
-      solrUpdate.delete(s"${Field.collectiveId.name}:${collective.id}", Option(0))
+  def clear(logger: Logger[F], collective: CollectiveId): F[Unit] =
+    logger.info(s"Deleting full-text index for collective ${collective.value}") *>
+      solrUpdate.delete(s"${Field.collectiveId.name}:${collective.value}", Option(0))
 }
 
 object SolrFtsClient {
-  private[this] val logger = getLogger
 
-  def apply[F[_]: ConcurrentEffect](
+  def apply[F[_]: Async](
       cfg: SolrConfig,
       httpClient: Client[F]
   ): Resource[F, FtsClient[F]] = {
@@ -88,14 +96,16 @@ object SolrFtsClient {
     )
   }
 
-  private def loggingMiddleware[F[_]: Concurrent](
+  private def loggingMiddleware[F[_]: Async](
       cfg: SolrConfig,
       client: Client[F]
-  ): Client[F] =
-    Logger(
+  ): Client[F] = {
+    val delegate = docspell.logging.getLogger[F]
+    Http4sLogger(
       logHeaders = true,
       logBody = cfg.logVerbose,
-      logAction = Some((msg: String) => Sync[F].delay(logger.trace(msg)))
+      logAction = Some((msg: String) => delegate.trace(msg))
     )(client)
+  }
 
 }

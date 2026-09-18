@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.EmailSettingsManage exposing
     ( Model
     , Msg
@@ -23,18 +30,24 @@ import Html.Attributes exposing (..)
 import Http
 import Messages.Comp.EmailSettingsManage exposing (Texts)
 import Styles as S
-import Util.Http
 
 
 type alias Model =
     { tableModel : Comp.EmailSettingsTable.Model
     , formModel : Comp.EmailSettingsForm.Model
     , viewMode : ViewMode
-    , formError : Maybe String
+    , formError : FormError
     , loading : Bool
     , query : String
     , deleteConfirm : Comp.YesNoDimmer.Model
     }
+
+
+type FormError
+    = FormErrorNone
+    | FormErrorHttp Http.Error
+    | FormErrorSubmit String
+    | FormErrorFillRequired
 
 
 emptyModel : Model
@@ -42,7 +55,7 @@ emptyModel =
     { tableModel = Comp.EmailSettingsTable.emptyModel
     , formModel = Comp.EmailSettingsForm.emptyModel
     , viewMode = Table
-    , formError = Nothing
+    , formError = FormErrorNone
     , loading = False
     , query = ""
     , deleteConfirm = Comp.YesNoDimmer.emptyModel
@@ -84,7 +97,7 @@ update flags msg model =
                 nm =
                     { model
                         | viewMode = Form
-                        , formError = Nothing
+                        , formError = FormErrorNone
                         , formModel = Comp.EmailSettingsForm.init ems
                     }
             in
@@ -101,7 +114,7 @@ update flags msg model =
                         , viewMode = Maybe.map (\_ -> Form) tm.selected |> Maybe.withDefault Table
                         , formError =
                             if tm.selected /= Nothing then
-                                Nothing
+                                FormErrorNone
 
                             else
                                 model.formError
@@ -166,7 +179,7 @@ update flags msg model =
                 ( { model | loading = True }, Api.createMailSettings flags mid ems SubmitResp )
 
             else
-                ( { model | formError = Just "Please fill required fields." }, Cmd.none )
+                ( { model | formError = FormErrorFillRequired }, Cmd.none )
 
         LoadSettings ->
             ( { model | loading = True }, Api.getMailSettings flags model.query MailSettingsResp )
@@ -183,10 +196,10 @@ update flags msg model =
                 ( { m3 | loading = False }, Cmd.batch [ c2, c3 ] )
 
             else
-                ( { model | formError = Just res.message, loading = False }, Cmd.none )
+                ( { model | formError = FormErrorSubmit res.message, loading = False }, Cmd.none )
 
         SubmitResp (Err err) ->
-            ( { model | formError = Just (Util.Http.errorToString err), loading = False }, Cmd.none )
+            ( { model | formError = FormErrorHttp err, loading = False }, Cmd.none )
 
         MailSettingsResp (Ok ems) ->
             let
@@ -238,6 +251,7 @@ viewTable2 texts model =
                     }
                 ]
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , Html.map TableMsg
             (Comp.EmailSettingsTable.view2 texts.settingsTable
@@ -283,15 +297,27 @@ viewForm2 texts settings model =
                 else
                     []
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , div
             [ classList
-                [ ( "hidden", model.formError == Nothing )
+                [ ( "hidden", model.formError == FormErrorNone )
                 ]
             , class "my-2"
             , class S.errorMessage
             ]
-            [ Maybe.withDefault "" model.formError |> text
+            [ case model.formError of
+                FormErrorNone ->
+                    text ""
+
+                FormErrorHttp err ->
+                    text (texts.httpError err)
+
+                FormErrorFillRequired ->
+                    text texts.fillRequiredFields
+
+                FormErrorSubmit m ->
+                    text m
             ]
         , Html.map FormMsg
             (Comp.EmailSettingsForm.view2 texts.settingsForm

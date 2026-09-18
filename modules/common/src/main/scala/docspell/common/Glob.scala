@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import cats.data.NonEmptyList
@@ -10,14 +16,11 @@ trait Glob {
   /** Matches the input string against this glob. */
   def matches(caseSensitive: Boolean)(in: String): Boolean
 
-  /** If this glob consists of multiple segments, it is the same as
-    * `matches`. If it is only a single segment, it is matched against
-    * the last segment of the input string that is assumed to be a
-    * pathname separated by slash.
+  /** If this glob consists of multiple segments, it is the same as `matches`. If it is
+    * only a single segment, it is matched against the last segment of the input string
+    * that is assumed to be a pathname separated by slash.
     *
-    * Example:
-    *  test.*  <>  "/a/b/test.txt" => true
-    *  /test.* <>  "/a/b/test.txt" => false
+    * Example: test.* <> "/a/b/test.txt" => true /test.* <> "/a/b/test.txt" => false
     */
   def matchFilenameOrPath(in: String): Boolean
 
@@ -29,7 +32,8 @@ object Glob {
     def single(str: String) =
       PatternGlob(Pattern(split(str, separator).map(makeSegment)))
 
-    if (in == "*") all
+    if (in == all.asString) all
+    else if (in == none.asString) none
     else
       split(in, anyChar) match {
         case NonEmptyList(_, Nil) =>
@@ -40,12 +44,18 @@ object Glob {
   }
 
   private val separator = '/'
-  private val anyChar   = '|'
+  private val anyChar = '|'
 
   val all = new Glob {
     def matches(caseSensitive: Boolean)(in: String) = true
-    def matchFilenameOrPath(in: String)             = true
-    val asString                                    = "*"
+    def matchFilenameOrPath(in: String) = true
+    val asString = "*"
+  }
+
+  val none = new Glob {
+    def matches(caseSensitive: Boolean)(in: String) = false
+    def matchFilenameOrPath(in: String) = false
+    def asString = "!*"
   }
 
   def pattern(pattern: Pattern): Glob =
@@ -53,10 +63,14 @@ object Glob {
 
   /** A simple glob supporting `*` and `?`. */
   final private case class PatternGlob(pattern: Pattern) extends Glob {
-    def matches(caseSensitive: Boolean)(in: String): Boolean =
+    def matches(caseSensitive: Boolean)(in: String): Boolean = {
+      val input = Glob.split(in, Glob.separator)
+
+      pattern.parts.size == input.size &&
       pattern.parts
-        .zipWith(Glob.split(in, Glob.separator))(_.matches(caseSensitive)(_))
+        .zipWith(input)(_.matches(caseSensitive)(_))
         .forall(identity)
+    }
 
     def matchFilenameOrPath(in: String): Boolean =
       if (pattern.parts.tail.isEmpty) matches(true)(split(in, separator).last)
@@ -64,6 +78,8 @@ object Glob {
 
     def asString: String =
       pattern.asString
+
+    override def toString = s"PatternGlob($asString)"
   }
 
   final private case class AnyGlob(globs: NonEmptyList[Glob]) extends Glob {
@@ -73,6 +89,8 @@ object Glob {
       globs.exists(_.matchFilenameOrPath(in))
     def asString =
       globs.toList.map(_.asString).mkString(anyChar.toString)
+
+    override def toString = s"AnyGlob($globs)"
   }
 
   case class Pattern(parts: NonEmptyList[Segment]) {
@@ -139,7 +157,7 @@ object Glob {
       }
 
       def startsWith(prefix: String, caseSensitive: Boolean): Boolean = {
-        val vstr    = if (caseSensitive) str else str.toLowerCase
+        val vstr = if (caseSensitive) str else str.toLowerCase
         val vprefix = if (caseSensitive) prefix else prefix.toLowerCase
         vstr.startsWith(vprefix)
       }

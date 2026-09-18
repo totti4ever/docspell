@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemDetail.FormChange exposing
     ( FormChange(..)
     , multiUpdate
@@ -17,8 +24,8 @@ import Api.Model.ItemsAndRefs exposing (ItemsAndRefs)
 import Api.Model.ReferenceList exposing (ReferenceList)
 import Data.Direction exposing (Direction)
 import Data.Flags exposing (Flags)
+import Data.ItemIds exposing (ItemIds)
 import Http
-import Set exposing (Set)
 
 
 type FormChange
@@ -42,14 +49,14 @@ type FormChange
 
 multiUpdate :
     Flags
-    -> Set String
+    -> ItemIds
     -> FormChange
     -> (Result Http.Error BasicResult -> msg)
     -> Cmd msg
 multiUpdate flags ids change receive =
     let
         items =
-            Set.toList ids
+            Data.ItemIds.toList ids
     in
     case change of
         CustomValueChange field value ->
@@ -104,7 +111,7 @@ multiUpdate flags ids change receive =
         DirectionChange dir ->
             let
                 data =
-                    ItemsAndDirection items (Data.Direction.toString dir)
+                    ItemsAndDirection items (Data.Direction.asString dir)
             in
             Api.setDirectionMultiple flags data receive
 
@@ -152,10 +159,10 @@ multiUpdate flags ids change receive =
 
         ConfirmChange flag ->
             if flag then
-                Api.confirmMultiple flags ids receive
+                Api.confirmMultiple flags items receive
 
             else
-                Api.unconfirmMultiple flags ids receive
+                Api.unconfirmMultiple flags items receive
 
         NoFormChange ->
             Cmd.none

@@ -1,16 +1,23 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.impl
 
+import docspell.logging.TestLoggingConfig
 import docspell.store.qb.DSL._
 import docspell.store.qb._
 import docspell.store.qb.model._
 
 import munit._
 
-class SelectBuilderTest extends FunSuite {
+class SelectBuilderTest extends FunSuite with TestLoggingConfig {
 
   test("basic fragment") {
-    val c        = CourseRecord.as("c")
-    val owner    = PersonRecord.as("o")
+    val c = CourseRecord.as("c")
+    val owner = PersonRecord.as("o")
     val lecturer = PersonRecord.as("l")
 
     val proj = select(c.all)
@@ -22,11 +29,11 @@ class SelectBuilderTest extends FunSuite {
       owner.name === "Harald"
     )
 
-    val q    = Select(proj, table, cond)
+    val q = Select(proj, table, cond)
     val frag = SelectBuilder(q)
     assertEquals(
-      frag.toString,
-      """Fragment("SELECT c.id, c.name, c.owner_id, c.lecturer_id, c.lessons FROM course c INNER JOIN person o ON c.owner_id = o.id LEFT JOIN person l ON c.lecturer_id = l.id WHERE (LOWER(c.name) LIKE ?  AND o.name = ? )")"""
+      frag.internals.sql,
+      """SELECT c.id, c.name, c.owner_id, c.lecturer_id, c.lessons FROM course c  INNER JOIN person o  ON c.owner_id = o.id LEFT JOIN person l  ON c.lecturer_id = l.id WHERE (LOWER(c.name) LIKE ?  AND o.name = ? )"""
     )
   }
 

@@ -3,9 +3,9 @@ title = "Upload Request"
 description = "Describes the upload request"
 weight = 20
 insert_anchor_links = "right"
-[extra]
-mktoc = true
 +++
+
+# Upload Request
 
 Uploads of files to docspell are always processed the same way, no
 matter if coming from a source, the integration endpoint or from the
@@ -32,7 +32,7 @@ For example, here is a curl command uploading two files with meta
 data. Since `multiple` is `false`, both files are added to one item:
 
 ``` bash
-curl -XPOST -F meta='{"multiple":false, "direction": "outgoing", "tags": {"items":["Order"]}}' \
+curl -XPOST -F meta='{"multiple":false, "direction": "outgoing", "language": "eng", "tags": {"items":["Order"]}}' \
             -F file=@letter-en.pdf \
             -F file=@letter-de.pdf \
             http://192.168.1.95:7880/api/v1/open/upload/item/3H7hvJcDJuk-NrAW4zxsdfj-K6TMPyb6BGP-xKptVxUdqWa
@@ -52,6 +52,9 @@ specified via a JSON structure in a part with name `meta`:
 , tags: Maybe StringList
 , fileFilter: Maybe String
 , language: Maybe String
+, attachmentsOnly: Maybe Bool
+, flattenArchives: Maybe Bool
+, priority: Maybe String
 }
 ```
 
@@ -87,15 +90,38 @@ specified via a JSON structure in a part with name `meta`:
   files or `*.html|*.pdf` for selecting html and pdf files. This only
   applies to archive files, like zip or e-mails (where this is applied
   to the attachments).
-- The `language` is used for processing the document(s) contained in
-  the request. If not specified the collective's default language is
-  used.
-
+- The `language` specifies the document language for processing (OCR,
+  text extraction, analysis). If not specified, the collective's
+  default language is used. Use **ISO 639-3** (3-letter codes) such as
+  `eng`, `deu`, `fra`, `spa`. ISO 639-1 (2-letter) codes like `en`,
+  `de` and language names like `english`, `german` are also accepted.
+- The `attachmentsOnly` property only applies to e-mail files (usually
+  `*.eml`). If this is `true`, then the e-mail body is discarded and
+  only the attachments are imported. An e-mail without any attachments
+  is therefore skipped.
+- `flattenArchives` is flag to control how `zip` and `eml` files are
+  treated. When this is `false` (the default), then one `zip` or `eml`
+  file results in one item and its contents are the attachments. If
+  you rather want the contents to be treated as independent files,
+  then set this to `true`. This will submit each entry in the archive
+  file as a separate processing job. Note: when this is `true` the
+  archive file is assumed to be just a container and doesn't contain
+  other useful information. It is therefore *NOT* kept in docspell,
+  only its contents are. Also note that only the uploaded archive
+  files are extracted once (not recursively), so if it contains other
+  archive files, they are treated as normal.
+- The `priority` field sets the processing priority for the upload
+  jobs. It can be `high` or `low` and controls how soon the scheduler
+  picks up the jobs relative to other work. If omitted, the endpoint
+  default applies: `high` for authenticated (webapp) uploads, the
+  source's configured priority for open uploads via a source URL, and
+  the server configuration for the integration endpoint. When
+  specified, it overrides the source's default priority.
 
 # Endpoints
 
-Docspell needs to the collective that owns the files. There are the
-following ways for this.
+Docspell needs to know the collective that owns the files. There are
+the following ways for this.
 
 
 ## Authenticated User
@@ -148,7 +174,7 @@ on the same host or network).
 
 The endpoint is disabled by default, an admin must change the
 `docspell.server.integration-endpoint.enabled` flag to `true` in the
-[configuration file](@/docs/configure/_index.md#rest-server).
+[configuration file](@/docs/configure/defaults.md#rest-server).
 
 If queried by a `GET` request, it returns whether it is enabled and
 the collective exists.
@@ -160,5 +186,6 @@ checksum with:
 /api/v1/open/integration/checkfile/[collective-name]/[sha256-checksum]
 ```
 
-See the [SMTP gateway](@/docs/tools/smtpgateway.md) or the [consumedir
-script](@/docs/tools/consumedir.md) for examples to use this endpoint.
+See the [SMTP gateway](@/docs/tools/smtpgateway.md) or the [dsc
+watch/upload](@/docs/tools/cli.md#docker) command for example can use
+this endpoint.

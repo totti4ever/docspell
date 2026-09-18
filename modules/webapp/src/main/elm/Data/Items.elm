@@ -1,9 +1,20 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.Items exposing
     ( concat
     , first
+    , flatten
     , idSet
+    , isEmpty
     , length
+    , nonEmpty
     , replaceIn
+    , unwrapGroups
     )
 
 import Api.Model.ItemLight exposing (ItemLight)
@@ -12,6 +23,26 @@ import Api.Model.ItemLightList exposing (ItemLightList)
 import Dict exposing (Dict)
 import Set exposing (Set)
 import Util.List
+
+
+isEmpty : ItemLightList -> Bool
+isEmpty list =
+    List.all (.items >> List.isEmpty) list.groups
+
+
+nonEmpty : ItemLightList -> Bool
+nonEmpty list =
+    not (isEmpty list)
+
+
+flatten : ItemLightList -> List ItemLight
+flatten list =
+    List.concatMap .items list.groups
+
+
+unwrapGroups : List ItemLightGroup -> List ItemLight
+unwrapGroups groups =
+    List.concatMap .items groups
 
 
 concat : ItemLightList -> ItemLightList -> ItemLightList
@@ -45,10 +76,10 @@ concat l0 l1 =
                     suff =
                         List.drop 1 l1.groups
                 in
-                ItemLightList (prev ++ (ng :: suff))
+                ItemLightList (prev ++ (ng :: suff)) 0 0 False
 
             else
-                ItemLightList (l0.groups ++ l1.groups)
+                ItemLightList (l0.groups ++ l1.groups) 0 0 False
 
 
 first : ItemLightList -> Maybe ItemLight
@@ -102,7 +133,7 @@ replaceIn origin replacements =
                 |> ItemLightGroup g.name
     in
     List.map replaceGroup origin.groups
-        |> ItemLightList
+        |> (\els -> ItemLightList els origin.limit origin.offset origin.limitCapped)
 
 
 

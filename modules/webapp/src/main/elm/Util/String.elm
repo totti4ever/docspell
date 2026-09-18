@@ -1,6 +1,15 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Util.String exposing
-    ( crazyEncode
+    ( appendIfAbsent
+    , crazyEncode
     , ellipsis
+    , firstSentenceOrMax
     , isBlank
     , isNothingOrBlank
     , underscoreToSpace
@@ -36,6 +45,26 @@ ellipsis len str =
         String.left (len - 1) str ++ "…"
 
 
+firstSentenceOrMax : Int -> String -> Maybe String
+firstSentenceOrMax maxLen str =
+    let
+        idx =
+            String.indexes "." str
+                |> List.head
+                |> Maybe.map ((+) 2)
+                |> Maybe.map (min maxLen)
+                |> Maybe.withDefault maxLen
+
+        len =
+            String.length str
+    in
+    if len <= maxLen then
+        Nothing
+
+    else
+        Just <| String.left (idx - 1) str ++ "…"
+
+
 withDefault : String -> String -> String
 withDefault default str =
     if str == "" then
@@ -59,3 +88,12 @@ isNothingOrBlank : Maybe String -> Bool
 isNothingOrBlank ms =
     Maybe.map isBlank ms
         |> Maybe.withDefault True
+
+
+appendIfAbsent : String -> String -> String
+appendIfAbsent suffix str =
+    if String.endsWith suffix str then
+        str
+
+    else
+        str ++ suffix

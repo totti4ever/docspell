@@ -1,27 +1,35 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.convert
 
 import java.nio.file.Paths
 
 import cats.data.Kleisli
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import fs2.Stream
 
 import docspell.common._
+import docspell.common.exec._
+import docspell.common.util.File
 import docspell.convert.ConversionResult.Handler
-import docspell.convert.extern.OcrMyPdfConfig
-import docspell.convert.extern.{TesseractConfig, UnoconvConfig, WkHtmlPdfConfig}
+import docspell.convert.ConvertConfig.HtmlConverter
+import docspell.convert.extern._
 import docspell.convert.flexmark.MarkdownConfig
-import docspell.files.{ExampleFiles, TestFiles}
+import docspell.files.ExampleFiles
+import docspell.logging.TestLoggingConfig
 
 import munit._
 
-class ConversionTest extends FunSuite with FileChecks {
-  val blocker     = TestFiles.blocker
-  implicit val CS = TestFiles.CS
+class ConversionTest extends FunSuite with FileChecks with TestLoggingConfig {
 
-  val logger = Logger.log4s[IO](org.log4s.getLogger)
-  val target = Paths.get("target")
+  val logger = docspell.logging.getLogger[IO]
+  val target = File.path(Paths.get("target"))
 
   val convertConfig = ConvertConfig(
     8192,
@@ -29,15 +37,24 @@ class ConversionTest extends FunSuite with FileChecks {
     3000 * 3000,
     MarkdownConfig("body { padding: 2em 5em; }"),
     WkHtmlPdfConfig(
-      SystemCommand.Config(
+      ExternalCommand(
         "wkhtmltopdf",
         Seq("-s", "A4", "--encoding", "UTF-8", "-", "{{outfile}}"),
         Duration.seconds(20)
       ),
       target
     ),
+    WeasyprintConfig(
+      ExternalCommand(
+        "weasyprint",
+        Seq("--encoding", "UTF-8", "-", "{{outfile}}"),
+        Duration.seconds(20)
+      ),
+      target
+    ),
+    HtmlConverter.Wkhtmltopdf,
     TesseractConfig(
-      SystemCommand.Config(
+      ExternalCommand(
         "tesseract",
         Seq("{{infile}}", "out", "-l", "deu", "pdf", "txt"),
         Duration.seconds(20)
@@ -45,7 +62,7 @@ class ConversionTest extends FunSuite with FileChecks {
       target
     ),
     UnoconvConfig(
-      SystemCommand.Config(
+      ExternalCommand(
         "unoconv",
         Seq("-f", "pdf", "-o", "{{outfile}}", "{{infile}}"),
         Duration.seconds(20)
@@ -53,8 +70,8 @@ class ConversionTest extends FunSuite with FileChecks {
       target
     ),
     OcrMyPdfConfig(
-      true,
-      SystemCommand.Config(
+      enabled = true,
+      ExternalCommand(
         "ocrmypdf",
         Seq(
           "-l",
@@ -69,11 +86,12 @@ class ConversionTest extends FunSuite with FileChecks {
         Duration.seconds(20)
       ),
       target
-    )
+    ),
+    ConvertConfig.DecryptPdf(enabled = true, Nil)
   )
 
   val conversion =
-    Conversion.create[IO](convertConfig, SanitizeHtml.none, blocker, logger)
+    Conversion.create[IO](convertConfig, SanitizeHtml.none, Nil, logger)
 
   val bombs = List(
     ExampleFiles.bombs_20K_gray_jpeg,
@@ -145,12 +163,12 @@ class ConversionTest extends FunSuite with FileChecks {
     conversion
       .use { conv =>
         def check: Handler[IO, Unit] =
-          Kleisli({
+          Kleisli {
             case ConversionResult.InputMalformed(_, _) =>
               ().pure[IO]
             case cr =>
               IO.raiseError(new Exception(s"Unexpected result: $cr"))
-          })
+          }
 
         runConversion(bombs, _ => check, conv).compile.drain
       }
@@ -166,12 +184,12 @@ class ConversionTest extends FunSuite with FileChecks {
       .emits(uris)
       .covary[IO]
       .zipWithIndex
-      .evalMap({ case (uri, index) =>
-        val load     = uri.readURL[IO](8192, blocker)
+      .evalMap { case (uri, index) =>
+        val load = uri.readURL[IO](8192)
         val dataType = DataType.filename(uri.path.segments.last)
         logger.info(s"Processing file ${uri.path.asString}") *>
           conv.toPDF(dataType, Language.German, handler(index))(load)
-      })
+      }
 
   def commandsExist: Boolean =
     commandExists(convertConfig.unoconv.command.program) &&

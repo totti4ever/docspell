@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
     <head>
-        {% include "meta.html" %}
+        {% include "parts/meta.html" %}
         <title>Docspell – Simple document organizer</title>
-        <link rel="stylesheet" href="styles.css">
-        <script type="application/javascript" src="js/bundle.js"></script>
+        <link rel="stylesheet" href="/styles.css">
+        <script type="text/javascript" src="/js/bundle.js"></script>
     </head>
     <body id="app">
+
 
         <script type="application/javascript">
          var elmFlags = {
@@ -17,6 +18,7 @@
              flags: elmFlags
          });
         </script>
-        {% include "fathom.html" %}
+
+        {% include "parts/fathom.html" %}
     </body>
 </html>

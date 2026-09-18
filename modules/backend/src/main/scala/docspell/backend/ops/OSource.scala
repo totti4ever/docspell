@@ -1,9 +1,15 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
-import cats.effect.{Effect, Resource}
+import cats.effect.{Async, Resource}
 import cats.implicits._
 
-import docspell.common.{AccountId, Ident}
+import docspell.common._
 import docspell.store.UpdateResult
 import docspell.store.records.RSource
 import docspell.store.records.SourceData
@@ -11,22 +17,22 @@ import docspell.store.{AddResult, Store}
 
 trait OSource[F[_]] {
 
-  def findAll(account: AccountId): F[Vector[SourceData]]
+  def findAll(collectiveId: CollectiveId): F[Vector[SourceData]]
 
   def add(s: RSource, tags: List[String]): F[AddResult]
 
   def update(s: RSource, tags: List[String]): F[AddResult]
 
-  def delete(id: Ident, collective: Ident): F[UpdateResult]
+  def delete(id: Ident, collective: CollectiveId): F[UpdateResult]
 }
 
 object OSource {
 
-  def apply[F[_]: Effect](store: Store[F]): Resource[F, OSource[F]] =
+  def apply[F[_]: Async](store: Store[F]): Resource[F, OSource[F]] =
     Resource.pure[F, OSource[F]](new OSource[F] {
-      def findAll(account: AccountId): F[Vector[SourceData]] =
+      def findAll(collectiveId: CollectiveId): F[Vector[SourceData]] =
         store
-          .transact(SourceData.findAll(account.collective, _.abbrev))
+          .transact(SourceData.findAll(collectiveId, _.abbrev))
           .compile
           .to(Vector)
 
@@ -46,7 +52,7 @@ object OSource {
         store.add(insert, exists).map(_.fold(identity, _.withMsg(msg), identity))
       }
 
-      def delete(id: Ident, collective: Ident): F[UpdateResult] =
+      def delete(id: Ident, collective: CollectiveId): F[UpdateResult] =
         UpdateResult.fromUpdate(store.transact(SourceData.delete(id, collective)))
 
     })

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.contact
 
 private[analysis] object Tld {
@@ -8,8 +14,7 @@ private[analysis] object Tld {
   def endsWithTld(str: String): Boolean =
     findTld(str).isDefined
 
-  /** Some selected TLDs.
-    */
+  /** Some selected TLDs. */
   private[this] val known = List(
     ".com",
     ".org",

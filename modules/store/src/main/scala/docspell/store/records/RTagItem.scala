@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -17,9 +23,9 @@ object RTagItem {
     val tableName = "tagitem"
 
     val tagItemId = Column[Ident]("tagitemid", this)
-    val itemId    = Column[Ident]("itemid", this)
-    val tagId     = Column[Ident]("tid", this)
-    val all       = NonEmptyList.of[Column[_]](tagItemId, itemId, tagId)
+    val itemId = Column[Ident]("itemid", this)
+    val tagId = Column[Ident]("tid", this)
+    val all = NonEmptyList.of[Column[_]](tagItemId, itemId, tagId)
   }
   val T = Table(None)
   def as(alias: String): Table =
@@ -28,10 +34,26 @@ object RTagItem {
   def insert(v: RTagItem): ConnectionIO[Int] =
     DML.insert(T, T.all, fr"${v.tagItemId},${v.itemId},${v.tagId}")
 
+  def moveTags(fromItem: Ident, toItem: Ident): ConnectionIO[Int] =
+    for {
+      both <- intersect(
+        Select(select(T.tagId), from(T), T.itemId === fromItem).distinct,
+        Select(select(T.tagId), from(T), T.itemId === toItem).distinct
+      ).build
+        .query[Ident]
+        .to[List]
+      skipIds = NonEmptyList.fromList(both)
+      n <- DML.update(
+        T,
+        T.itemId === fromItem &&? skipIds.map(ids => T.tagId.notIn(ids)),
+        DML.set(T.itemId.setTo(toItem))
+      )
+    } yield n
+
   def deleteItemTags(item: Ident): ConnectionIO[Int] =
     DML.delete(T, T.itemId === item)
 
-  def deleteItemTags(items: NonEmptyList[Ident], cid: Ident): ConnectionIO[Int] =
+  def deleteItemTags(items: NonEmptyList[Ident], cid: CollectiveId): ConnectionIO[Int] =
     DML.delete(T, T.itemId.in(RItem.filterItemsFragment(items, cid)))
 
   def deleteTag(tid: Ident): ConnectionIO[Int] =
@@ -73,11 +95,11 @@ object RTagItem {
           )
       } yield n
 
-  def appendTags(item: Ident, tags: List[Ident]): ConnectionIO[Int] =
+  def appendTags(item: Ident, tags: List[Ident]): ConnectionIO[Set[Ident]] =
     for {
       existing <- findByItem(item)
       toadd = tags.toSet.diff(existing.map(_.tagId).toSet)
-      n <- setAllTags(item, toadd.toSeq)
-    } yield n
+      _ <- setAllTags(item, toadd.toSeq)
+    } yield toadd
 
 }

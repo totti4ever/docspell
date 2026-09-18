@@ -1,18 +1,22 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 
-/** Arguments for the `MakePreviewTask` that generates a preview image
-  * for an attachment.
+/** Arguments for the `MakePreviewTask` that generates a preview image for an attachment.
   *
-  * It can replace the current preview image or only generate one, if
-  * it is missing.
+  * It can replace the current preview image or only generate one, if it is missing.
   */
 case class MakePreviewArgs(
     attachment: Ident,
     store: MakePreviewArgs.StoreMode
-)
+) extends TaskArguments
 
 object MakePreviewArgs {
 

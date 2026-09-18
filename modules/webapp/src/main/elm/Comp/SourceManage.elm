@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.SourceManage exposing
     ( Model
     , Msg(..)
@@ -25,18 +32,24 @@ import Messages.Comp.SourceManage exposing (Texts)
 import Ports
 import QRCode
 import Styles as S
-import Util.Http
-import Util.Maybe
+import Svg.Attributes as SvgA
 
 
 type alias Model =
     { formModel : Comp.SourceForm.Model
     , viewMode : SelectMode
-    , formError : Maybe String
+    , formError : FormError
     , loading : Bool
     , deleteConfirm : Comp.YesNoDimmer.Model
     , sources : List SourceAndTags
     }
+
+
+type FormError
+    = FormErrorNone
+    | FormErrorHttp Http.Error
+    | FormErrorInvalid
+    | FormErrorSubmit String
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -47,7 +60,7 @@ init flags =
     in
     ( { formModel = fm
       , viewMode = None
-      , formError = Nothing
+      , formError = FormErrorNone
       , loading = False
       , deleteConfirm = Comp.YesNoDimmer.emptyModel
       , sources = []
@@ -56,6 +69,7 @@ init flags =
         [ Cmd.map FormMsg fc
         , Ports.initClipboard appClipboardData
         , Ports.initClipboard apiClipboardData
+        , Api.getSources flags SourceResp
         ]
     )
 
@@ -103,7 +117,7 @@ update flags msg model =
                                 model.formError
 
                             else
-                                Nothing
+                                FormErrorNone
                       }
                     , Cmd.map TableMsg tc
                     )
@@ -152,7 +166,7 @@ update flags msg model =
                     Api.Model.SourceAndTags.empty
 
                 nm =
-                    { model | viewMode = Edit source, formError = Nothing }
+                    { model | viewMode = Edit source, formError = FormErrorNone }
             in
             update flags (FormMsg (Comp.SourceForm.SetSource source)) nm
 
@@ -168,7 +182,7 @@ update flags msg model =
                 ( { model | loading = True }, Api.postSource flags source SubmitResp )
 
             else
-                ( { model | formError = Just "Please correct the errors in the form." }, Cmd.none )
+                ( { model | formError = FormErrorInvalid }, Cmd.none )
 
         SubmitResp (Ok res) ->
             if res.success then
@@ -182,10 +196,10 @@ update flags msg model =
                 ( { m3 | loading = False }, Cmd.batch [ c2, c3 ] )
 
             else
-                ( { model | formError = Just res.message, loading = False }, Cmd.none )
+                ( { model | formError = FormErrorSubmit res.message, loading = False }, Cmd.none )
 
         SubmitResp (Err err) ->
-            ( { model | formError = Just (Util.Http.errorToString err), loading = False }, Cmd.none )
+            ( { model | formError = FormErrorHttp err, loading = False }, Cmd.none )
 
         RequestDelete ->
             update flags (YesNoMsg Comp.YesNoDimmer.activate) model
@@ -214,8 +228,8 @@ update flags msg model =
 
 qrCodeView : Texts -> String -> Html msg
 qrCodeView texts message =
-    QRCode.encode message
-        |> Result.map QRCode.toSvg
+    QRCode.fromString message
+        |> Result.map (QRCode.toSvg [ SvgA.class "w-64 h-64" ])
         |> Result.withDefault
             (Html.text texts.errorGeneratingQR)
 
@@ -247,6 +261,7 @@ viewTable2 texts model =
                     }
                 ]
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , Html.map TableMsg (Comp.SourceTable.view2 texts.sourceTable model.sources)
         , B.loadingDimmer
@@ -266,10 +281,7 @@ viewLinks2 texts flags _ source =
             flags.config.baseUrl ++ "/api/v1/open/upload/item/" ++ source.source.id
 
         styleUrl =
-            "truncate px-2 py-2 border-0 border-t border-b border-r font-mono text-sm my-auto rounded-r border-gray-400 dark:border-bluegray-500"
-
-        styleQr =
-            "max-w-min dark:bg-bluegray-400 bg-gray-50 mx-auto md:mx-0"
+            "truncate px-2 py-2 border-0 border-t border-b border-r font-mono text-sm my-auto rounded-r border-gray-400 dark:border-slate-500"
     in
     div
         []
@@ -291,6 +303,7 @@ viewLinks2 texts flags _ source =
                 ]
             , end = []
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , p [ class "text-lg pt-2 opacity-75" ]
             [ text texts.sourceInfoText
@@ -338,7 +351,7 @@ viewLinks2 texts flags _ source =
         , div [ class "py-2" ]
             [ div
                 [ class S.border
-                , class styleQr
+                , class S.qrCode
                 ]
                 [ qrCodeView texts appUrl
                 ]
@@ -374,7 +387,7 @@ viewLinks2 texts flags _ source =
         , div [ class "py-2" ]
             [ div
                 [ class S.border
-                , class styleQr
+                , class S.qrCode
                 ]
                 [ qrCodeView texts apiUrl
                 ]
@@ -438,16 +451,28 @@ viewForm2 texts flags settings model =
                 else
                     []
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , Html.map FormMsg
             (Comp.SourceForm.view2 flags texts.sourceForm settings model.formModel)
         , div
             [ classList
                 [ ( S.errorMessage, True )
-                , ( "hidden", Util.Maybe.isEmpty model.formError )
+                , ( "hidden", model.formError == FormErrorNone )
                 ]
             ]
-            [ Maybe.withDefault "" model.formError |> text
+            [ case model.formError of
+                FormErrorNone ->
+                    text ""
+
+                FormErrorHttp err ->
+                    text (texts.httpError err)
+
+                FormErrorSubmit m ->
+                    text m
+
+                FormErrorInvalid ->
+                    text texts.correctFormErrors
             ]
         , Html.map YesNoMsg
             (Comp.YesNoDimmer.viewN True

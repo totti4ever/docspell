@@ -1,8 +1,16 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Page.CollectiveSettings.View2 exposing (viewContent, viewSidebar)
 
 import Api.Model.TagCount exposing (TagCount)
 import Comp.Basic as B
 import Comp.CollectiveSettingsForm
+import Comp.ShareManage
 import Comp.SourceManage
 import Comp.UserManage
 import Data.Flags exposing (Flags)
@@ -14,7 +22,6 @@ import Html.Events exposing (onClick)
 import Messages.Page.CollectiveSettings exposing (Texts)
 import Page.CollectiveSettings.Data exposing (..)
 import Styles as S
-import Util.Maybe
 import Util.Size
 
 
@@ -52,7 +59,18 @@ viewSidebar texts visible _ _ model =
                 [ Icons.sourceIcon2 ""
                 , span
                     [ class "ml-3" ]
-                    [ text texts.sources ]
+                    [ text texts.basics.sources ]
+                ]
+            , a
+                [ href "#"
+                , onClick (SetTab ShareTab)
+                , class S.sidebarLink
+                , menuEntryActive model ShareTab
+                ]
+                [ Icons.shareIcon ""
+                , span
+                    [ class "ml-3" ]
+                    [ text texts.basics.shares ]
                 ]
             , a
                 [ href "#"
@@ -98,6 +116,9 @@ viewContent texts flags settings model =
 
             Just SourceTab ->
                 viewSources texts flags settings model
+
+            Just ShareTab ->
+                viewShares texts settings flags model
 
             Nothing ->
                 []
@@ -159,12 +180,13 @@ viewInsights texts flags model =
         [ class "py-2"
         ]
         [ h4 [ class S.header3 ]
-            [ text "Items"
+            [ text texts.items
             ]
         , div [ class "flex px-4 flex-wrap" ]
             [ stats (String.fromInt (model.insights.incomingCount + model.insights.outgoingCount)) texts.basics.items
             , stats (String.fromInt model.insights.incomingCount) texts.basics.incoming
             , stats (String.fromInt model.insights.outgoingCount) texts.basics.outgoing
+            , stats (String.fromInt model.insights.deletedCount) texts.basics.deleted
             ]
         ]
     , div
@@ -216,10 +238,25 @@ viewSources texts flags settings model =
         ]
         [ Icons.sourceIcon2 ""
         , div [ class "ml-3" ]
-            [ text texts.sources
+            [ text texts.basics.sources
             ]
         ]
     , Html.map SourceMsg (Comp.SourceManage.view2 texts.sourceManage flags settings model.sourceModel)
+    ]
+
+
+viewShares : Texts -> UiSettings -> Flags -> Model -> List (Html Msg)
+viewShares texts settings flags model =
+    [ h1
+        [ class S.header1
+        , class "inline-flex items-center"
+        ]
+        [ Icons.shareIcon ""
+        , div [ class "ml-3" ]
+            [ text texts.basics.shares
+            ]
+        ]
+    , Html.map ShareMsg (Comp.ShareManage.view texts.shareManage settings flags model.shareModel)
     ]
 
 
@@ -249,6 +286,27 @@ viewSettings texts flags settings model =
             [ text texts.collectiveSettings
             ]
         ]
+    , div
+        [ classList
+            [ ( "hidden", model.formState == InitialState )
+            , ( S.successMessage, model.formState == SubmitSuccessful )
+            , ( S.errorMessage, model.formState /= SubmitSuccessful )
+            ]
+        , class "mb-2"
+        ]
+        [ case model.formState of
+            SubmitSuccessful ->
+                text texts.submitSuccessful
+
+            SubmitError err ->
+                text (texts.httpError err)
+
+            SubmitFailed m ->
+                text m
+
+            InitialState ->
+                text ""
+        ]
     , Html.map SettingsFormMsg
         (Comp.CollectiveSettingsForm.view2
             flags
@@ -256,23 +314,4 @@ viewSettings texts flags settings model =
             settings
             model.settingsModel
         )
-    , div
-        [ classList
-            [ ( "hidden", Util.Maybe.isEmpty model.submitResult )
-            , ( S.successMessage
-              , Maybe.map .success model.submitResult
-                    |> Maybe.withDefault False
-              )
-            , ( S.errorMessage
-              , Maybe.map .success model.submitResult
-                    |> Maybe.map not
-                    |> Maybe.withDefault False
-              )
-            ]
-        , class "mt-2"
-        ]
-        [ Maybe.map .message model.submitResult
-            |> Maybe.withDefault ""
-            |> text
-        ]
     ]

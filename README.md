@@ -1,9 +1,8 @@
 <img align="right" src="./artwork/logo-only.svg" height="150px" style="padding-left: 20px"/>
 
-[![Build Status](https://img.shields.io/travis/eikek/docspell/master?style=for-the-badge&logo=travisci)](https://travis-ci.org/eikek/docspell)
 [![Scala Steward badge](https://img.shields.io/badge/Scala_Steward-helping-blue.svg?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAMAAAARSr4IAAAAVFBMVEUAAACHjojlOy5NWlrKzcYRKjGFjIbp293YycuLa3pYY2LSqql4f3pCUFTgSjNodYRmcXUsPD/NTTbjRS+2jomhgnzNc223cGvZS0HaSD0XLjbaSjElhIr+AAAAAXRSTlMAQObYZgAAAHlJREFUCNdNyosOwyAIhWHAQS1Vt7a77/3fcxxdmv0xwmckutAR1nkm4ggbyEcg/wWmlGLDAA3oL50xi6fk5ffZ3E2E3QfZDCcCN2YtbEWZt+Drc6u6rlqv7Uk0LdKqqr5rk2UCRXOk0vmQKGfc94nOJyQjouF9H/wCc9gECEYfONoAAAAASUVORK5CYII=)](https://scala-steward.org)
 [![License](https://img.shields.io/github/license/eikek/docspell.svg?style=for-the-badge&color=steelblue)](https://github.com/eikek/docspell/blob/master/LICENSE.txt)
-[![Docker Pulls](https://img.shields.io/docker/pulls/eikek0/docspell?color=steelblue&style=for-the-badge&logo=docker)](https://hub.docker.com/r/eikek0/docspell)
+[![Docker Pulls](https://img.shields.io/docker/pulls/docspell/restserver?color=steelblue&style=for-the-badge&logo=docker)](https://hub.docker.com/u/docspell)
 [![Gitter chat](https://img.shields.io/gitter/room/eikek/docspell?style=for-the-badge&color=steelblue&logo=gitter)](https://gitter.im/eikek/docspell)
 
 # Docspell - Document Management System (DMS)
@@ -30,7 +29,8 @@ fulltext search and has great e-mail integration. Everything is
 accessible via a REST/HTTP api. A mobile friendly SPA web application
 is the default user interface. An [Android
 app](https://github.com/docspell/android-client) exists for
-conveniently uploading files from your phone/tablet. The [feature
+conveniently uploading files from your phone/tablet and a
+[cli](https://github.com/docspell/dsc). The [feature
 overview](https://docspell.org/#feature-selection) lists some more
 points.
 
@@ -40,13 +40,13 @@ points.
 Checkout the short demo videos (<1min), present on the [project
 page](https://docspell.org/#demos). Here are some screenshots:
 
-![screenshot-1](website/site/content/docs/webapp/docspell-curate-1-dark.png)
-![screenshot-2](website/site/content/docs/webapp/custom-fields-03-dark.png)
-![screenshot-3](website/site/content/docs/webapp/multiedit-04-dark.png)
-![screenshot-4](website/site/content/docs/webapp/mail-item-1.png)
-![screenshot-5](website/site/static/screenshots/mobile/Screenshot_2021-02-14-03-small.jpg)
-![screenshot-5](website/site/static/screenshots/mobile/Screenshot_2021-02-14-04-small.jpg)
-![screenshot-5](website/site/static/screenshots/mobile/Screenshot_2021-02-14-09-small.jpg)
+![screenshot-1](website/site/content/docs/webapp/dashboards-01_dark.png)
+![screenshot-2](website/site/content/docs/webapp/docspell-curate-1_dark.png)
+![screenshot-3](website/site/content/docs/webapp/custom-fields-03_dark.png)
+![screenshot-4](website/site/content/docs/webapp/multiedit-04_dark.png)
+![screenshot-5](website/site/content/docs/webapp/mail-item-1.png)
+![screenshot-7](website/site/static/screenshots/mobile/Screenshot_2021-02-14-04-small.jpg)
+![screenshot-8](website/site/static/screenshots/mobile/Screenshot_2021-02-14-09-small.jpg)
 
 ## Try it
 
@@ -56,9 +56,9 @@ page](https://docspell.org/#get-started). This is only three commands
 away:
 
 ``` shell
-git clone https://github.com/eikek/docspell
-cd docspell/docker
-DOCSPELL_HEADER_VALUE="my-secret-123" docker-compose up
+git clone https://github.com/docspell/docker docspell-docker
+cd docspell-docker/docker-compose
+docker-compose up -d
 ```
 
 Then go to `http://localhost:7880`, sign up and login. Use the same
@@ -76,6 +76,7 @@ Other ways are documented
 - Using the [nix](https://nixos.org/nix) package manager as [described
   here](https://docspell.org/docs/install/installing/#nix). A NixOS
   module is available, too.
+- Use the [Helm Chart](https://github.com/docspell/docker/tree/main/charts/docspell).
 
 
 ## Documentation
@@ -126,5 +127,5 @@ UI framework in use is [tailwind](https://tailwindcss.com).
 
 ## License
 
-Docspell is free software, distributed under the [GPLv3 or
-later](https://spdx.org/licenses/GPL-3.0-or-later.html).
+Docspell is free software, distributed under the [AGPLv3 or
+later](https://spdx.org/licenses/AGPL-3.0-or-later.html).

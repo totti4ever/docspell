@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import cats.implicits._
@@ -22,5 +28,12 @@ class LenientUriTest extends FunSuite {
       "0/:{})(:-/)}-{/}".some
     )
     assertEquals(LenientUri.percentDecode("a%25b%5Cc%7Cd%23e"), "a%b\\c|d#e".some)
+  }
+
+  test("parse with trailing slash") {
+    assertEquals(LenientUri.unsafe("http://a.com/").asString, "http://a.com/")
+    assertEquals(LenientUri.unsafe("http://a.com").asString, "http://a.com")
+    assertEquals(LenientUri.unsafe("http://a.com/path").asString, "http://a.com/path")
+    assertEquals(LenientUri.unsafe("http://a.com/path/").asString, "http://a.com/path/")
   }
 }

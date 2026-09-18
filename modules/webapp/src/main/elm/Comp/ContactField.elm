@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ContactField exposing
     ( Model
     , Msg(..)
@@ -171,7 +178,7 @@ view2 cfg _ model =
             [ classList
                 [ ( "hidden", List.isEmpty model.items )
                 ]
-            , class "flex flex-col space-y-2 mt-2 px-2 border-0 border-l dark:border-bluegray-600 "
+            , class "flex flex-col space-y-2 mt-2 px-2 border-0 border-l dark:border-slate-600 "
             ]
             (List.map (renderItem2 cfg) model.items)
         ]

@@ -1,5 +1,14 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.Tabs exposing
-    ( State(..)
+    ( Folded(..)
+    , Look(..)
+    , State
     , Style
     , Tab
     , akkordion
@@ -30,17 +39,28 @@ type alias Style =
     }
 
 
-type State
+type Folded
     = Open
     | Closed
-    | Hidden
+
+
+type Look
+    = Hidden
+    | Active
+    | Normal
+
+
+type alias State =
+    { look : Look
+    , folded : Folded
+    }
 
 
 defaultStyle : Style
 defaultStyle =
-    { rootClasses = "border-0 border-t  dark:border-bluegray-600"
-    , tabClasses = "border-0 border-b  dark:border-bluegray-600"
-    , titleClasses = "py-4 md:py-2 px-2 bg-gray-50 hover:bg-gray-100 dark:bg-bluegray-700 dark:bg-opacity-50 dark:hover:bg-opacity-100"
+    { rootClasses = "border-0 border-t  dark:border-slate-600"
+    , tabClasses = "border-0 border-b  dark:border-slate-600"
+    , titleClasses = "py-4 md:py-2 px-2 bg-gray-50 hover:bg-gray-100 dark:bg-slate-700 dark:bg-opacity-50 dark:hover:bg-opacity-100"
     , bodyClasses = "mt-2 py-2"
     }
 
@@ -49,8 +69,8 @@ searchMenuStyle : Style
 searchMenuStyle =
     { rootClasses = "border-0 "
     , tabClasses = "border-0 "
-    , titleClasses = "py-4 md:py-2 pl-2 bg-blue-50 hover:bg-blue-100 dark:bg-bluegray-700 dark:hover:bg-opacity-100 dark:hover:bg-bluegray-600 rounded"
-    , bodyClasses = "mt-1 py-1 pl-2"
+    , titleClasses = "py-4 md:py-2 pl-2 bg-blue-50 hover:bg-blue-100 dark:bg-slate-700 dark:hover:bg-opacity-100 dark:hover:bg-slate-600 rounded"
+    , bodyClasses = "mt-1 pl-2"
     }
 
 
@@ -81,11 +101,14 @@ akkordionTab style state toggle tab =
                 ]
                 (a
                     [ class "flex flex-row items-center flex-grow"
+                    , classList
+                        [ ( "font-bold text-indigo-600 dark:text-yellow-500", state.look == Active )
+                        ]
                     , href "#"
                     , onClick toggle
                     ]
                     [ div [ class "inline-flex mr-2 w-2" ]
-                        [ if state == Open then
+                        [ if state.folded == Open then
                             i [ class "fa fa-caret-down" ] []
 
                           else
@@ -105,7 +128,7 @@ akkordionTab style state toggle tab =
 
         tabContent =
             div
-                [ classList [ ( "hidden", state == Closed ) ]
+                [ classList [ ( "hidden", state.folded == Closed ) ]
                 , class style.bodyClasses
                 ]
                 tab.body
@@ -113,7 +136,9 @@ akkordionTab style state toggle tab =
     div
         [ class style.tabClasses
         , class "flex flex-col"
-        , classList [ ( "hidden", state == Hidden ) ]
+        , classList
+            [ ( "hidden", state.look == Hidden )
+            ]
         ]
         [ tabTitle
         , tabContent

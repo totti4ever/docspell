@@ -1,4 +1,15 @@
-module Messages.Data.EquipmentUse exposing (gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Data.EquipmentUse exposing
+    ( de
+    , fr
+    , gb
+    )
 
 import Data.EquipmentUse exposing (EquipmentUse(..))
 
@@ -11,3 +22,23 @@ gb pu =
 
         Disabled ->
             "Disabled"
+
+
+de : EquipmentUse -> String
+de pu =
+    case pu of
+        Concerning ->
+            "Betreffend"
+
+        Disabled ->
+            "Deaktiviert"
+
+
+fr : EquipmentUse -> String
+fr pu =
+    case pu of
+        Concerning ->
+            "Concerné"
+
+        Disabled ->
+            "Inactif"

@@ -1,8 +1,14 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.conv
 
 import java.time.{LocalDate, ZoneId}
 
-import cats.effect.{Effect, Sync}
+import cats.effect.{Async, Sync}
 import cats.implicits._
 import fs2.Stream
 
@@ -13,33 +19,49 @@ import docspell.backend.ops.OUpload.{UploadData, UploadMeta, UploadResult}
 import docspell.backend.ops._
 import docspell.common._
 import docspell.common.syntax.all._
-import docspell.ftsclient.FtsResult
 import docspell.restapi.model._
-import docspell.restserver.conv.Conversions._
-import docspell.store.queries.{AttachmentLight => QAttachmentLight}
+import docspell.restserver.http4s.ContentDisposition
+import docspell.store.qb.Batch
+import docspell.store.queries.{
+  AttachmentLight => QAttachmentLight,
+  FieldStats => QFieldStats,
+  ItemFieldValue => QItemFieldValue,
+  TagCount => QTagCount,
+  _
+}
 import docspell.store.records._
 import docspell.store.{AddResult, UpdateResult}
 
-import bitpeace.FileMeta
 import org.http4s.headers.`Content-Type`
 import org.http4s.multipart.Multipart
 import org.log4s.Logger
 
 trait Conversions {
 
-  def mkSearchStats(sum: OItemSearch.SearchSummary): SearchStats =
+  def mkSearchStats(sum: SearchSummary): SearchStats =
     SearchStats(
       sum.count,
       mkTagCloud(sum.tags),
       mkTagCategoryCloud(sum.cats),
       sum.fields.map(mkFieldStats),
-      sum.folders.map(mkFolderStats)
+      sum.folders.map(mkFolderStats),
+      sum.corrOrgs.map(mkIdRefStats),
+      sum.corrPers.map(mkIdRefStats),
+      sum.concPers.map(mkIdRefStats),
+      sum.concEquip.map(mkIdRefStats),
+      sum.fieldCount,
+      sum.orgCount,
+      sum.personCount,
+      sum.equipCount
     )
+
+  def mkIdRefStats(s: IdRefCount): IdRefStats =
+    IdRefStats(mkIdName(s.ref), s.count)
 
   def mkFolderStats(fs: docspell.store.queries.FolderCount): FolderStats =
     FolderStats(fs.id, fs.name, mkIdName(fs.owner), fs.count)
 
-  def mkFieldStats(fs: docspell.store.queries.FieldStats): FieldStats =
+  def mkFieldStats(fs: QFieldStats): FieldStats =
     FieldStats(
       fs.field.id,
       fs.field.name,
@@ -57,11 +79,12 @@ trait Conversions {
     ItemInsights(
       d.incoming,
       d.outgoing,
+      d.deleted,
       d.bytes,
       mkTagCloud(d.tags)
     )
 
-  def mkTagCloud(tags: List[OCollective.TagCount]) =
+  def mkTagCloud(tags: List[QTagCount]) =
     TagCloud(tags.map(tc => TagCount(mkTag(tc.tag), tc.count)))
 
   def mkTagCategoryCloud(tags: List[OCollective.CategoryCount]) =
@@ -117,7 +140,6 @@ trait Conversions {
       data.corrPerson.map(p => IdName(p.pid, p.name)),
       data.concPerson.map(p => IdName(p.pid, p.name)),
       data.concEquip.map(e => IdName(e.eid, e.name)),
-      data.inReplyTo.map(mkIdName),
       data.folder.map(mkIdName),
       data.item.dueDate,
       data.item.notes,
@@ -125,84 +147,69 @@ trait Conversions {
       data.sources.map((mkAttachmentSource _).tupled).toList,
       data.archives.map((mkAttachmentArchive _).tupled).toList,
       data.tags.map(mkTag).toList,
-      data.customFields.map(mkItemFieldValue).toList
+      data.customFields.map(mkItemFieldValue).toList,
+      data.relatedItems.map(mkItemLight).toList
     )
 
-  def mkItemFieldValue(v: OItemSearch.ItemFieldValue): ItemFieldValue =
+  def mkItemFieldValue(v: QItemFieldValue): ItemFieldValue =
     ItemFieldValue(v.fieldId, v.fieldName, v.fieldLabel, v.fieldType, v.value)
 
   def mkAttachment(
       item: OItemSearch.ItemData
-  )(ra: RAttachment, m: FileMeta): Attachment = {
+  )(ra: RAttachment, m: RFileMeta): Attachment = {
     val converted =
       item.sources.find(_._1.id == ra.id).exists(_._2.checksum != m.checksum)
-    Attachment(ra.id, ra.name, m.length, MimeType.unsafe(m.mimetype.asString), converted)
+    Attachment(
+      ra.id,
+      ra.name,
+      m.length.bytes,
+      MimeType.unsafe(m.mimetype.asString),
+      converted
+    )
   }
 
-  def mkAttachmentSource(ra: RAttachmentSource, m: FileMeta): AttachmentSource =
-    AttachmentSource(ra.id, ra.name, m.length, MimeType.unsafe(m.mimetype.asString))
+  def mkAttachmentSource(ra: RAttachmentSource, m: RFileMeta): AttachmentSource =
+    AttachmentSource(ra.id, ra.name, m.length.bytes, MimeType.unsafe(m.mimetype.asString))
 
-  def mkAttachmentArchive(ra: RAttachmentArchive, m: FileMeta): AttachmentSource =
-    AttachmentSource(ra.id, ra.name, m.length, MimeType.unsafe(m.mimetype.asString))
+  def mkAttachmentArchive(ra: RAttachmentArchive, m: RFileMeta): AttachmentSource =
+    AttachmentSource(ra.id, ra.name, m.length.bytes, MimeType.unsafe(m.mimetype.asString))
 
   // item list
 
   def mkCustomValue(v: CustomFieldValue): OItemSearch.CustomValue =
     OItemSearch.CustomValue(v.field, v.value)
 
-  def mkItemList(v: Vector[OItemSearch.ListItem]): ItemLightList = {
+  def mkItemList(
+      v: Vector[ListItem],
+      batch: Batch,
+      capped: Boolean
+  ): ItemLightList = {
     val groups = v.groupBy(item => item.date.toUtcDate.toString.substring(0, 7))
 
-    def mkGroup(g: (String, Vector[OItemSearch.ListItem])): ItemLightGroup =
+    def mkGroup(g: (String, Vector[ListItem])): ItemLightGroup =
       ItemLightGroup(g._1, g._2.map(mkItemLight).toList)
 
     val gs =
       groups.map(mkGroup).toList.sortWith((g1, g2) => g1.name.compareTo(g2.name) >= 0)
-    ItemLightList(gs)
+    ItemLightList(gs, batch.limit, batch.offset, capped)
   }
 
-  def mkItemListFts(v: Vector[OFulltext.FtsItem]): ItemLightList = {
-    val groups = v.groupBy(item => item.item.date.toUtcDate.toString.substring(0, 7))
-
-    def mkGroup(g: (String, Vector[OFulltext.FtsItem])): ItemLightGroup =
-      ItemLightGroup(g._1, g._2.map(mkItemLight).toList)
-
-    val gs =
-      groups.map(mkGroup _).toList.sortWith((g1, g2) => g1.name.compareTo(g2.name) >= 0)
-    ItemLightList(gs)
-  }
-
-  def mkItemListWithTags(v: Vector[OItemSearch.ListItemWithTags]): ItemLightList = {
+  def mkItemListWithTags(
+      v: Vector[ListItemWithTags],
+      batch: Batch,
+      capped: Boolean
+  ): ItemLightList = {
     val groups = v.groupBy(ti => ti.item.date.toUtcDate.toString.substring(0, 7))
 
-    def mkGroup(g: (String, Vector[OItemSearch.ListItemWithTags])): ItemLightGroup =
+    def mkGroup(g: (String, Vector[ListItemWithTags])): ItemLightGroup =
       ItemLightGroup(g._1, g._2.map(mkItemLightWithTags).toList)
 
     val gs =
-      groups.map(mkGroup _).toList.sortWith((g1, g2) => g1.name.compareTo(g2.name) >= 0)
-    ItemLightList(gs)
+      groups.map(mkGroup).toList.sortWith((g1, g2) => g1.name.compareTo(g2.name) >= 0)
+    ItemLightList(gs, batch.limit, batch.offset, capped)
   }
 
-  def mkItemListWithTagsFts(v: Vector[OFulltext.FtsItemWithTags]): ItemLightList = {
-    val groups = v.groupBy(ti => ti.item.item.date.toUtcDate.toString.substring(0, 7))
-
-    def mkGroup(g: (String, Vector[OFulltext.FtsItemWithTags])): ItemLightGroup =
-      ItemLightGroup(g._1, g._2.map(mkItemLightWithTags).toList)
-
-    val gs =
-      groups.map(mkGroup _).toList.sortWith((g1, g2) => g1.name.compareTo(g2.name) >= 0)
-    ItemLightList(gs)
-  }
-
-  def mkItemListWithTagsFtsPlain(v: Vector[OFulltext.FtsItemWithTags]): ItemLightList =
-    if (v.isEmpty) ItemLightList(Nil)
-    else ItemLightList(List(ItemLightGroup("Results", v.map(mkItemLightWithTags).toList)))
-
-  def mkItemListFtsPlain(v: Vector[OFulltext.FtsItem]): ItemLightList =
-    if (v.isEmpty) ItemLightList(Nil)
-    else ItemLightList(List(ItemLightGroup("Results", v.map(mkItemLight).toList)))
-
-  def mkItemLight(i: OItemSearch.ListItem): ItemLight =
+  def mkItemLight(i: ListItem): ItemLight =
     ItemLight(
       i.id,
       i.name,
@@ -216,45 +223,25 @@ trait Conversions {
       i.concPerson.map(mkIdName),
       i.concEquip.map(mkIdName),
       i.folder.map(mkIdName),
-      Nil, //attachments
-      Nil, //tags
-      Nil, //customfields
+      Nil, // attachments
+      Nil, // tags
+      Nil, // customfields
+      Nil, // related items
       i.notes,
       Nil // highlight
     )
 
-  def mkItemLight(i: OFulltext.FtsItem): ItemLight = {
-    val il        = mkItemLight(i.item)
-    val highlight = mkHighlight(i.ftsData)
-    il.copy(highlighting = highlight)
-  }
-
-  def mkItemLightWithTags(i: OItemSearch.ListItemWithTags): ItemLight =
+  def mkItemLightWithTags(i: ListItemWithTags): ItemLight =
     mkItemLight(i.item)
       .copy(
         tags = i.tags.map(mkTag),
         attachments = i.attachments.map(mkAttachmentLight),
-        customfields = i.customfields.map(mkItemFieldValue)
+        customfields = i.customfields.map(mkItemFieldValue),
+        relatedItems = i.relatedItems
       )
 
-  private def mkAttachmentLight(qa: QAttachmentLight): AttachmentLight =
+  def mkAttachmentLight(qa: QAttachmentLight): AttachmentLight =
     AttachmentLight(qa.id, qa.position, qa.name, qa.pageCount)
-
-  def mkItemLightWithTags(i: OFulltext.FtsItemWithTags): ItemLight = {
-    val il        = mkItemLightWithTags(i.item)
-    val highlight = mkHighlight(i.ftsData)
-    il.copy(highlighting = highlight)
-  }
-
-  private def mkHighlight(ftsData: OFulltext.FtsData): List[HighlightEntry] =
-    ftsData.items.filter(_.context.nonEmpty).sortBy(-_.score).map { fdi =>
-      fdi.matchData match {
-        case FtsResult.AttachmentData(_, aName) =>
-          HighlightEntry(aName, fdi.context)
-        case FtsResult.ItemData =>
-          HighlightEntry("Item", fdi.context)
-      }
-    }
 
   // job
   def mkJobQueueState(state: OJob.CollectiveQueueState): JobQueueState = {
@@ -294,7 +281,7 @@ trait Conversions {
     JobLogEvent(jl.created, jl.level, jl.message)
 
   // upload
-  def readMultipart[F[_]: Effect](
+  def readMultipart[F[_]: Async](
       mp: Multipart[F],
       sourceName: String,
       logger: Logger,
@@ -303,7 +290,7 @@ trait Conversions {
   ): F[UploadData[F]] = {
     def parseMeta(body: Stream[F, Byte]): F[ItemUploadMeta] =
       body
-        .through(fs2.text.utf8Decode)
+        .through(fs2.text.utf8.decode)
         .parseJsonAs[ItemUploadMeta]
         .map(
           _.fold(
@@ -330,7 +317,11 @@ trait Conversions {
               m.skipDuplicates.getOrElse(false),
               m.fileFilter.getOrElse(Glob.all),
               m.tags.map(_.items).getOrElse(Nil),
-              m.language
+              m.language,
+              m.attachmentsOnly,
+              m.flattenArchives,
+              m.customData,
+              m.priority
             )
           )
         )
@@ -338,7 +329,20 @@ trait Conversions {
       .getOrElse(
         (
           true,
-          UploadMeta(None, sourceName, None, validFileTypes, false, Glob.all, Nil, None)
+          UploadMeta(
+            None,
+            sourceName,
+            None,
+            validFileTypes,
+            skipDuplicates = false,
+            Glob.all,
+            Nil,
+            None,
+            None,
+            None,
+            None,
+            None
+          )
         )
           .pure[F]
       )
@@ -347,13 +351,23 @@ trait Conversions {
       .filter(p => p.name.forall(s => !s.equalsIgnoreCase("meta")))
       .map(p =>
         OUpload
-          .File(p.filename, p.headers.get(`Content-Type`).map(fromContentType), p.body)
+          .File(
+            ContentDisposition.getFileName(p),
+            p.headers.get[`Content-Type`].map(fromContentType),
+            p.body
+          )
       )
     for {
       metaData <- meta
-      _        <- Effect[F].delay(logger.debug(s"Parsed upload meta data: $metaData"))
-      tracker  <- Ident.randomId[F]
-    } yield UploadData(metaData._1, metaData._2, files, prio, Some(tracker))
+      _ <- Async[F].delay(logger.debug(s"Parsed upload meta data: $metaData"))
+      tracker <- Ident.randomId[F]
+    } yield UploadData(
+      metaData._1,
+      metaData._2,
+      files,
+      metaData._2.priority.getOrElse(prio),
+      Some(tracker)
+    )
   }
 
   // organization and person
@@ -371,12 +385,15 @@ trait Conversions {
     )
   }
 
-  def newOrg[F[_]: Sync](v: Organization, cid: Ident): F[OOrganization.OrgAndContacts] = {
+  def newOrg[F[_]: Sync](
+      v: Organization,
+      cid: CollectiveId
+  ): F[OOrganization.OrgAndContacts] = {
     def contacts(oid: Ident) =
       v.contacts.traverse(c => newContact(c, oid.some, None))
     for {
-      now  <- Timestamp.current[F]
-      oid  <- Ident.randomId[F]
+      now <- Timestamp.current[F]
+      oid <- Ident.randomId[F]
       cont <- contacts(oid)
       org = ROrganization(
         oid,
@@ -397,12 +414,12 @@ trait Conversions {
 
   def changeOrg[F[_]: Sync](
       v: Organization,
-      cid: Ident
+      cid: CollectiveId
   ): F[OOrganization.OrgAndContacts] = {
     def contacts(oid: Ident) =
       v.contacts.traverse(c => newContact(c, oid.some, None))
     for {
-      now  <- Timestamp.current[F]
+      now <- Timestamp.current[F]
       cont <- contacts(v.id)
       org = ROrganization(
         v.id,
@@ -435,12 +452,15 @@ trait Conversions {
     )
   }
 
-  def newPerson[F[_]: Sync](v: Person, cid: Ident): F[OOrganization.PersonAndContacts] = {
+  def newPerson[F[_]: Sync](
+      v: Person,
+      cid: CollectiveId
+  ): F[OOrganization.PersonAndContacts] = {
     def contacts(pid: Ident) =
       v.contacts.traverse(c => newContact(c, None, pid.some))
     for {
-      now  <- Timestamp.current[F]
-      pid  <- Ident.randomId[F]
+      now <- Timestamp.current[F]
+      pid <- Ident.randomId[F]
       cont <- contacts(pid)
       pers = RPerson(
         pid,
@@ -461,12 +481,12 @@ trait Conversions {
 
   def changePerson[F[_]: Sync](
       v: Person,
-      cid: Ident
+      cid: CollectiveId
   ): F[OOrganization.PersonAndContacts] = {
     def contacts(pid: Ident) =
       v.contacts.traverse(c => newContact(c, None, pid.some))
     for {
-      now  <- Timestamp.current[F]
+      now <- Timestamp.current[F]
       cont <- contacts(v.id)
       pers = RPerson(
         v.id,
@@ -494,7 +514,7 @@ trait Conversions {
       oid: Option[Ident],
       pid: Option[Ident]
   ): F[RContact] =
-    timeId.map { case (id, now) =>
+    Conversions.timeId.map { case (id, now) =>
       RContact(id, c.value.trim, c.kind, pid, oid, now)
     }
 
@@ -504,6 +524,7 @@ trait Conversions {
       ru.uid,
       ru.login,
       ru.state,
+      ru.source,
       None,
       ru.email,
       ru.lastLogin,
@@ -511,14 +532,15 @@ trait Conversions {
       ru.created
     )
 
-  def newUser[F[_]: Sync](u: User, cid: Ident): F[RUser] =
-    timeId.map { case (id, now) =>
+  def newUser[F[_]: Sync](u: User, cid: CollectiveId): F[RUser] =
+    Conversions.timeId.map { case (id, now) =>
       RUser(
         id,
         u.login,
         cid,
         u.password.getOrElse(Password.empty),
         u.state,
+        u.source,
         u.email,
         0,
         None,
@@ -526,13 +548,14 @@ trait Conversions {
       )
     }
 
-  def changeUser(u: User, cid: Ident): RUser =
+  def changeUser(u: User, cid: CollectiveId): RUser =
     RUser(
       u.id,
       u.login,
       cid,
       u.password.getOrElse(Password.empty),
       u.state,
+      u.source,
       u.email,
       u.loginCount,
       u.lastLogin,
@@ -544,12 +567,12 @@ trait Conversions {
   def mkTag(rt: RTag): Tag =
     Tag(rt.tagId, rt.name, rt.category, rt.created)
 
-  def newTag[F[_]: Sync](t: Tag, cid: Ident): F[RTag] =
-    timeId.map { case (id, now) =>
+  def newTag[F[_]: Sync](t: Tag, cid: CollectiveId): F[RTag] =
+    Conversions.timeId.map { case (id, now) =>
       RTag(id, cid, t.name.trim, t.category.map(_.trim), now)
     }
 
-  def changeTag(t: Tag, cid: Ident): RTag =
+  def changeTag(t: Tag, cid: CollectiveId): RTag =
     RTag(t.id, cid, t.name.trim, t.category.map(_.trim), t.created)
 
   // sources
@@ -566,13 +589,14 @@ trait Conversions {
         s.source.folderId,
         s.source.fileFilter,
         s.source.language,
-        s.source.created
+        s.source.created,
+        s.source.attachmentsOnly
       ),
       TagList(s.tags.length, s.tags.map(mkTag).toList)
     )
 
-  def newSource[F[_]: Sync](s: Source, cid: Ident): F[RSource] =
-    timeId.map({ case (id, now) =>
+  def newSource[F[_]: Sync](s: Source, cid: CollectiveId): F[RSource] =
+    Conversions.timeId.map { case (id, now) =>
       RSource(
         id,
         cid,
@@ -584,14 +608,15 @@ trait Conversions {
         now,
         s.folder,
         s.fileFilter,
-        s.language
+        s.language,
+        s.attachmentsOnly
       )
-    })
+    }
 
-  def changeSource[F[_]](s: Source, coll: Ident): RSource =
+  def changeSource(s: Source, cid: CollectiveId): RSource =
     RSource(
       s.id,
-      coll,
+      cid,
       s.abbrev.trim,
       s.description,
       s.counter,
@@ -600,19 +625,20 @@ trait Conversions {
       s.created,
       s.folder,
       s.fileFilter,
-      s.language
+      s.language,
+      s.attachmentsOnly
     )
 
   // equipment
   def mkEquipment(re: REquipment): Equipment =
     Equipment(re.eid, re.name, re.created, re.notes, re.use)
 
-  def newEquipment[F[_]: Sync](e: Equipment, cid: Ident): F[REquipment] =
-    timeId.map({ case (id, now) =>
+  def newEquipment[F[_]: Sync](e: Equipment, cid: CollectiveId): F[REquipment] =
+    Conversions.timeId.map { case (id, now) =>
       REquipment(id, cid, e.name.trim, now, now, e.notes, e.use)
-    })
+    }
 
-  def changeEquipment[F[_]: Sync](e: Equipment, cid: Ident): F[REquipment] =
+  def changeEquipment[F[_]: Sync](e: Equipment, cid: CollectiveId): F[REquipment] =
     Timestamp
       .current[F]
       .map(now => REquipment(e.id, cid, e.name.trim, e.created, now, e.notes, e.use))
@@ -627,70 +653,132 @@ trait Conversions {
   def basicResult(r: SetValueResult): BasicResult =
     r match {
       case SetValueResult.FieldNotFound =>
-        BasicResult(false, "The given field is unknown")
+        BasicResult(success = false, "The given field is unknown")
       case SetValueResult.ItemNotFound =>
-        BasicResult(false, "The given item is unknown")
+        BasicResult(success = false, "The given item is unknown")
       case SetValueResult.ValueInvalid(msg) =>
-        BasicResult(false, s"The value is invalid: $msg")
+        BasicResult(success = false, s"The value is invalid: $msg")
       case SetValueResult.Success =>
-        BasicResult(true, "Custom field value set successfully.")
+        BasicResult(success = true, "Custom field value set successfully.")
     }
 
   def basicResult(cr: JobCancelResult): BasicResult =
     cr match {
-      case JobCancelResult.JobNotFound => BasicResult(false, "Job not found")
+      case JobCancelResult.JobNotFound => BasicResult(success = false, "Job not found")
       case JobCancelResult.CancelRequested =>
-        BasicResult(true, "Cancel was requested at the job executor")
+        BasicResult(success = true, "Cancel was requested at the job executor")
       case JobCancelResult.Removed =>
-        BasicResult(true, "The job has been removed from the queue.")
+        BasicResult(success = true, "The job has been removed from the queue.")
     }
 
   def idResult(ar: AddResult, id: Ident, successMsg: String): IdResult =
     ar match {
-      case AddResult.Success           => IdResult(true, successMsg, id)
-      case AddResult.EntityExists(msg) => IdResult(false, msg, Ident.unsafe(""))
+      case AddResult.Success           => IdResult(success = true, successMsg, id)
+      case AddResult.EntityExists(msg) => IdResult(success = false, msg, Ident.unsafe(""))
       case AddResult.Failure(ex) =>
-        IdResult(false, s"Internal error: ${ex.getMessage}", Ident.unsafe(""))
+        IdResult(success = false, s"Internal error: ${ex.getMessage}", Ident.unsafe(""))
     }
 
   def basicResult(ar: AddResult, successMsg: String): BasicResult =
     ar match {
-      case AddResult.Success           => BasicResult(true, successMsg)
-      case AddResult.EntityExists(msg) => BasicResult(false, msg)
+      case AddResult.Success           => BasicResult(success = true, successMsg)
+      case AddResult.EntityExists(msg) => BasicResult(success = false, msg)
       case AddResult.Failure(ex) =>
-        BasicResult(false, s"Internal error: ${ex.getMessage}")
+        BasicResult(success = false, s"Internal error: ${ex.getMessage}")
     }
 
   def basicResult(ar: UpdateResult, successMsg: String): BasicResult =
     ar match {
-      case UpdateResult.Success  => BasicResult(true, successMsg)
-      case UpdateResult.NotFound => BasicResult(false, "Not found")
+      case UpdateResult.Success  => BasicResult(success = true, successMsg)
+      case UpdateResult.NotFound => BasicResult(success = false, "Not found")
       case UpdateResult.Failure(ex) =>
-        BasicResult(false, s"Internal error: ${ex.getMessage}")
+        BasicResult(success = false, s"Error: ${ex.getMessage}")
     }
 
   def basicResult(ur: OUpload.UploadResult): BasicResult =
     ur match {
-      case UploadResult.Success  => BasicResult(true, "Files submitted.")
-      case UploadResult.NoFiles  => BasicResult(false, "There were no files to submit.")
-      case UploadResult.NoSource => BasicResult(false, "The source id is not valid.")
-      case UploadResult.NoItem   => BasicResult(false, "The item could not be found.")
+      case UploadResult.Success(_, _) => BasicResult(success = true, "Files submitted.")
+      case UploadResult.NoFiles =>
+        BasicResult(success = false, "There were no files to submit.")
+      case UploadResult.NoSource =>
+        BasicResult(success = false, "The source id is not valid.")
+      case UploadResult.NoItem =>
+        BasicResult(success = false, "The item could not be found.")
+      case UploadResult.NoCollective =>
+        BasicResult(success = false, "The collective could not be found.")
+      case UploadResult.StoreFailure(_) =>
+        BasicResult(
+          success = false,
+          "There were errors storing a file! See the server logs for details."
+        )
+    }
+
+  def uploadSubmitResult(ur: OUpload.UploadResult): UploadSubmitResult =
+    ur match {
+      case UploadResult.Success(files, jobs) =>
+        UploadSubmitResult(
+          success = true,
+          "Files submitted.",
+          files.map(_.toString),
+          jobs
+        )
+      case UploadResult.NoFiles =>
+        UploadSubmitResult(
+          success = false,
+          "There were no files to submit.",
+          Nil,
+          Nil
+        )
+      case UploadResult.NoSource =>
+        UploadSubmitResult(
+          success = false,
+          "The source id is not valid.",
+          Nil,
+          Nil
+        )
+      case UploadResult.NoItem =>
+        UploadSubmitResult(
+          success = false,
+          "The item could not be found.",
+          Nil,
+          Nil
+        )
+      case UploadResult.NoCollective =>
+        UploadSubmitResult(
+          success = false,
+          "The collective could not be found.",
+          Nil,
+          Nil
+        )
+      case UploadResult.StoreFailure(_) =>
+        UploadSubmitResult(
+          success = false,
+          "There were errors storing a file! See the server logs for details.",
+          Nil,
+          Nil
+        )
     }
 
   def basicResult(cr: PassChangeResult): BasicResult =
     cr match {
-      case PassChangeResult.Success => BasicResult(true, "Password changed.")
+      case PassChangeResult.Success => BasicResult(success = true, "Password changed.")
       case PassChangeResult.UpdateFailed =>
-        BasicResult(false, "The database update failed.")
+        BasicResult(success = false, "The database update failed.")
       case PassChangeResult.PasswordMismatch =>
-        BasicResult(false, "The current password is incorrect.")
-      case PassChangeResult.UserNotFound => BasicResult(false, "User not found.")
+        BasicResult(success = false, "The current password is incorrect.")
+      case PassChangeResult.UserNotFound =>
+        BasicResult(success = false, "User not found.")
+      case PassChangeResult.InvalidSource(source) =>
+        BasicResult(
+          success = false,
+          s"User has invalid soure: $source. Passwords are managed elsewhere."
+        )
     }
 
   def basicResult(e: Either[Throwable, _], successMsg: String): BasicResult =
     e match {
-      case Right(_) => BasicResult(true, successMsg)
-      case Left(ex) => BasicResult(false, ex.getMessage)
+      case Right(_) => BasicResult(success = true, successMsg)
+      case Left(ex) => BasicResult(success = false, ex.getMessage)
     }
 
   // MIME Type
@@ -699,15 +787,15 @@ trait Conversions {
     MimeType(
       header.mediaType.mainType,
       header.mediaType.subType,
-      header.mediaType.extensions
-    )
+      None
+    ).withCharsetName(header.mediaType.extensions.getOrElse("charset", "unknown"))
 }
 
 object Conversions extends Conversions {
 
   private def timeId[F[_]: Sync]: F[(Ident, Timestamp)] =
     for {
-      id  <- Ident.randomId[F]
+      id <- Ident.randomId[F]
       now <- Timestamp.current
     } yield (id, now)
 }

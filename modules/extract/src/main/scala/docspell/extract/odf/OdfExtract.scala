@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract.odf
 
 import java.io.{ByteArrayInputStream, InputStream}
@@ -22,9 +28,9 @@ object OdfExtract {
 
   def get(is: InputStream) =
     Try {
-      val handler  = new BodyContentHandler()
-      val pctx     = new ParseContext()
-      val meta     = new Metadata()
+      val handler = new BodyContentHandler()
+      val pctx = new ParseContext()
+      val meta = new Metadata()
       val ooparser = new OpenDocumentParser()
       ooparser.parse(is, handler, meta, pctx)
       Text(Option(handler.toString))

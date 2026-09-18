@@ -1,21 +1,26 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
 
-import docspell.common._
+import docspell.common.{FileKey, _}
 import docspell.store.qb.DSL._
 import docspell.store.qb._
 
-import bitpeace.FileMeta
 import doobie._
 import doobie.implicits._
 
-/** The origin file of an attachment. The `id` is shared with the
-  * attachment, to create a 1-1 (or 0..1-1) relationship.
+/** The origin file of an attachment. The `id` is shared with the attachment, to create a
+  * 1-1 (or 0..1-1) relationship.
   */
 case class RAttachmentSource(
-    id: Ident, //same as RAttachment.id
-    fileId: Ident,
+    id: Ident, // same as RAttachment.id
+    fileId: FileKey,
     name: Option[String],
     created: Timestamp
 )
@@ -24,9 +29,9 @@ object RAttachmentSource {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "attachment_source"
 
-    val id      = Column[Ident]("id", this)
-    val fileId  = Column[Ident]("file_id", this)
-    val name    = Column[String]("filename", this)
+    val id = Column[Ident]("id", this)
+    val fileId = Column[FileKey]("file_id", this)
+    val name = Column[String]("filename", this)
     val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](id, fileId, name, created)
@@ -45,7 +50,7 @@ object RAttachmentSource {
   def findById(attachId: Ident): ConnectionIO[Option[RAttachmentSource]] =
     run(select(T.all), from(T), T.id === attachId).query[RAttachmentSource].option
 
-  def isSameFile(attachId: Ident, file: Ident): ConnectionIO[Boolean] =
+  def isSameFile(attachId: Ident, file: FileKey): ConnectionIO[Boolean] =
     Select(count(T.id).s, from(T), T.id === attachId && T.fileId === file).build
       .query[Int]
       .unique
@@ -66,7 +71,7 @@ object RAttachmentSource {
 
   def findByIdAndCollective(
       attachId: Ident,
-      collective: Ident
+      collective: CollectiveId
   ): ConnectionIO[Option[RAttachmentSource]] = {
     val b = RAttachment.as("b")
     val a = RAttachmentSource.as("a")
@@ -91,9 +96,7 @@ object RAttachmentSource {
 
   def findByItemWithMeta(
       id: Ident
-  ): ConnectionIO[Vector[(RAttachmentSource, FileMeta)]] = {
-    import bitpeace.sql._
-
+  ): ConnectionIO[Vector[(RAttachmentSource, RFileMeta)]] = {
     val a = RAttachmentSource.as("a")
     val b = RAttachment.as("b")
     val m = RFileMeta.as("m")
@@ -104,7 +107,7 @@ object RAttachmentSource {
         .innerJoin(m, a.fileId === m.id)
         .innerJoin(b, b.id === a.id),
       b.itemId === id
-    ).orderBy(b.position.asc).build.query[(RAttachmentSource, FileMeta)].to[Vector]
+    ).orderBy(b.position.asc).build.query[(RAttachmentSource, RFileMeta)].to[Vector]
   }
 
 }

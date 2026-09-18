@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.nlp
 
 import java.net.URL
@@ -13,18 +19,16 @@ import docspell.common._
 import edu.stanford.nlp.ie.AbstractSequenceClassifier
 import edu.stanford.nlp.ie.crf.CRFClassifier
 import edu.stanford.nlp.ling.{CoreAnnotations, CoreLabel}
-import org.log4s.getLogger
 
-/** This is only using the CRFClassifier without building an analysis
-  * pipeline. The ner-classifier cannot use results from POS-tagging
-  * etc. and is therefore not as good as the [[StanfordNerAnnotator]].
-  * But it uses less memory, while still being not bad.
+/** This is only using the CRFClassifier without building an analysis pipeline. The
+  * ner-classifier cannot use results from POS-tagging etc. and is therefore not as good
+  * as the [[StanfordNerAnnotator]]. But it uses less memory, while still being not bad.
   */
 object BasicCRFAnnotator {
-  private[this] val logger = getLogger
+  private[this] val logger = docspell.logging.unsafeLogger
 
   // assert correct resource names
-  List(Language.French, Language.German, Language.English).foreach(classifierResource)
+  NLPLanguage.all.toList.foreach(classifierResource)
 
   type Annotator = AbstractSequenceClassifier[CoreLabel]
 
@@ -65,19 +69,27 @@ object BasicCRFAnnotator {
         "/edu/stanford/nlp/models/ner/german.distsim.crf.ser.gz"
       case Language.English =>
         "/edu/stanford/nlp/models/ner/english.conll.4class.distsim.crf.ser.gz"
+      case Language.Spanish =>
+        "/edu/stanford/nlp/models/ner/spanish.ancora.distsim.s512.crf.ser.gz"
+      // case Language.Italian =>
+      //   "/edu/stanford/nlp/models/ner/italian.crf.ser.gz"
+      // case Language.Hungarian =>
+      //   "/edu/stanford/nlp/models/ner/hungarian.crf.ser.gz"
     })
   }
 
   final class Cache {
-    private[this] lazy val germanNerClassifier  = makeAnnotator(Language.German)
+    private[this] lazy val germanNerClassifier = makeAnnotator(Language.German)
     private[this] lazy val englishNerClassifier = makeAnnotator(Language.English)
-    private[this] lazy val frenchNerClassifier  = makeAnnotator(Language.French)
+    private[this] lazy val frenchNerClassifier = makeAnnotator(Language.French)
+    private[this] lazy val spanishNerClassifier = makeAnnotator(Language.Spanish)
 
     def forLang(language: NLPLanguage): Annotator =
       language match {
         case Language.French  => frenchNerClassifier
         case Language.German  => germanNerClassifier
         case Language.English => englishNerClassifier
+        case Language.Spanish => spanishNerClassifier
       }
   }
 

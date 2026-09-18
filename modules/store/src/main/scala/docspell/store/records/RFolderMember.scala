@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -29,9 +35,9 @@ object RFolderMember {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "folder_member"
 
-    val id      = Column[Ident]("id", this)
-    val folder  = Column[Ident]("folder_id", this)
-    val user    = Column[Ident]("user_id", this)
+    val id = Column[Ident]("id", this)
+    val folder = Column[Ident]("folder_id", this)
+    val user = Column[Ident]("user_id", this)
     val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](id, folder, user, created)
@@ -58,4 +64,7 @@ object RFolderMember {
 
   def deleteAll(folderId: Ident): ConnectionIO[Int] =
     DML.delete(T, T.folder === folderId)
+
+  def deleteMemberships(userId: Ident): ConnectionIO[Int] =
+    DML.delete(T, T.user === userId)
 }

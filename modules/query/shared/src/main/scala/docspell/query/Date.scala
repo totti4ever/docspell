@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.query
 
 import java.time.LocalDate
@@ -24,7 +30,7 @@ object Date {
 
   sealed trait CalcDirection
   object CalcDirection {
-    case object Plus  extends CalcDirection
+    case object Plus extends CalcDirection
     case object Minus extends CalcDirection
   }
 

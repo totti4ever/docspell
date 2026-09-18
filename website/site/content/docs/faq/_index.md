@@ -3,20 +3,25 @@ title = "FAQ"
 weight = 100
 description = "Frequently asked questions."
 insert_anchor_links = "right"
+template = "docs.html"
 [extra]
-mktoc = true
 +++
 
 # FAQ
 
 ## Where are my files stored?
 
-Everything, including all files, are stored in the database.
+Everything, including all files, are stored in the database by
+default.
 
-Now that seems to put off some people coming to Docspell, so here are
-some thoughts on why this is and why it may be not such a big deal. It
-was a conscious decision and the option to hold all files in the file
-system was considered, but not chosen in the end.
+For the files there are alternatives: you can configure a S3 storage
+and even using the filesystem directly is possible. I wouldn't
+recommend the latter, especially not if networks are between the
+nodes. The recommended default is using the database, as it was the
+only way until 0.34.0, thus the others are not well battle tested.
+
+Here are some thoughts on why the decision was made for using the
+database only previous to 0.34.0.
 
 First, it was clear that a database *is* required in order to support
 the planned features. It is required to efficiently support a
@@ -82,9 +87,9 @@ documentation, too.
 
 In order to move to a different tool, it is necessary to get the data
 out of Docspell in a machine readable/automatic way. Currently, there
-is a [export-files.sh](@/docs/tools/export-files.md) script provided
-(in the `tools/` folder) that can be used to download all your files
-and item metadata.
+is a [export command](@/docs/tools/cli.md#export-data) in the command
+line client that can be used to download all your files and item
+metadata.
 
 My recommendation is to run periodic database backups and also store
 the binaries/docker images. This lets you re-create the current state
@@ -117,8 +122,7 @@ Please see this [issue](https://github.com/eikek/docspell/issues/358).
 ## Why another DMS?
 
 Back when Docspell started, there weren't as many options as there are
-now. I wanted to try out a different approach. You can read more about
-that [here](@/docs/intro/_index.md#rationale).
+now. I wanted to try out a different approach.
 
 ## Wh…?
 

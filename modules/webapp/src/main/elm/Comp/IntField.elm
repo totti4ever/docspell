@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.IntField exposing
     ( Model
     , Msg
@@ -40,13 +47,13 @@ init min max opt =
 tooLow : Model -> Int -> Bool
 tooLow model n =
     Maybe.map ((<) n) model.min
-        |> Maybe.withDefault (not model.optional)
+        |> Maybe.withDefault False
 
 
 tooHigh : Model -> Int -> Bool
 tooHigh model n =
     Maybe.map ((>) n) model.max
-        |> Maybe.withDefault (not model.optional)
+        |> Maybe.withDefault False
 
 
 update : Msg -> Model -> ( Model, Maybe Int )
@@ -142,16 +149,3 @@ view cfg model =
             [ Maybe.withDefault "" model.error |> text
             ]
         ]
-
-
-viewWithInfo2 : String -> String -> Maybe Int -> String -> Model -> Html Msg
-viewWithInfo2 label info nval classes model =
-    let
-        cfg =
-            { label = label
-            , info = info
-            , number = nval
-            , classes = classes
-            }
-    in
-    view cfg model

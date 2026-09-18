@@ -1,10 +1,12 @@
 +++
 title = "Paperless Import"
 description = "Import your data from paperless."
-weight = 35
+weight = 60
 +++
 
-# Introduction
+# Import from Paperless
+
+## Introduction
 
 Coming from
 [paperless](https://github.com/the-paperless-project/paperless/), the
@@ -15,7 +17,17 @@ importing your data from paperless into docspell.
 
 The script imports the files and also tags and correspondents.
 
-# Usage
+{% infobubble(title="Note") %}
+
+The script was written some while ago. It currently doesn't work out
+of the box, but is a good starting point as the issues are most
+probably fixed by adjusting some api calls. Pull requests are very
+welcome! See [this
+issue](https://github.com/eikek/docspell/issues/1241).
+
+{% end %}
+
+## Usage
 
 Copy the script to the machine where paperless is running. Run it with
 the following arguments:

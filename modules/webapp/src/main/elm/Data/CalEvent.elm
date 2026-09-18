@@ -1,10 +1,19 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Data.CalEvent exposing
     ( CalEvent
     , everyMonth
+    , everyMonthTz
     , fromEvent
     , makeEvent
     )
 
+import Data.TimeZone exposing (TimeZone)
 import Util.Maybe
 
 
@@ -15,12 +24,18 @@ type alias CalEvent =
     , day : String
     , hour : String
     , minute : String
+    , timeZone : TimeZone
     }
 
 
 everyMonth : CalEvent
 everyMonth =
-    CalEvent Nothing "*" "*" "01" "00" "00"
+    everyMonthTz Data.TimeZone.utc
+
+
+everyMonthTz : TimeZone -> CalEvent
+everyMonthTz tz =
+    CalEvent Nothing "*" "*" "01" "00" "00" tz
 
 
 makeEvent : CalEvent -> String
@@ -36,6 +51,8 @@ makeEvent ev =
                 ++ ev.hour
                 ++ ":"
                 ++ ev.minute
+                ++ " "
+                ++ Data.TimeZone.toName ev.timeZone
     in
     case ev.weekday of
         Just wd ->
@@ -53,18 +70,40 @@ fromEvent str =
 
         parts =
             String.split " " str
+
+        foldChanges : List (CalEvent -> Maybe CalEvent) -> Maybe CalEvent
+        foldChanges list =
+            List.foldl (\fmc -> \c -> Maybe.andThen fmc c) (Just init) list
     in
     case parts of
-        wd :: date :: time :: [] ->
-            Maybe.andThen
-                (fromDate date)
-                (fromTime time init)
-                |> Maybe.map (withWeekday wd)
+        wd :: date :: time :: tz :: [] ->
+            foldChanges
+                [ fromWeekDays wd
+                , fromDate date
+                , fromTime time
+                , fromTimeZone tz
+                ]
+
+        a :: b :: c :: [] ->
+            if startsWithWeekday a then
+                foldChanges
+                    [ fromWeekDays a
+                    , fromDate b
+                    , fromTime c
+                    ]
+
+            else
+                foldChanges
+                    [ fromDate a
+                    , fromTime b
+                    , fromTimeZone c
+                    ]
 
         date :: time :: [] ->
-            Maybe.andThen
-                (fromDate date)
-                (fromTime time init)
+            foldChanges
+                [ fromDate date
+                , fromTime time
+                ]
 
         _ ->
             Nothing
@@ -102,6 +141,31 @@ fromTime time ev =
             Nothing
 
 
+fromTimeZone : String -> CalEvent -> Maybe CalEvent
+fromTimeZone tzStr ev =
+    Data.TimeZone.get tzStr
+        |> Maybe.map (\tz -> { ev | timeZone = tz })
+
+
+fromWeekDays : String -> CalEvent -> Maybe CalEvent
+fromWeekDays str ce =
+    if startsWithWeekday str then
+        Just (withWeekday str ce)
+
+    else
+        Nothing
+
+
 withWeekday : String -> CalEvent -> CalEvent
 withWeekday wd ev =
     { ev | weekday = Util.Maybe.fromString wd }
+
+
+weekDays : List String
+weekDays =
+    [ "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" ]
+
+
+startsWithWeekday : String -> Bool
+startsWithWeekday str =
+    List.any (\a -> String.startsWith a str) weekDays

@@ -1,7 +1,14 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.notify
 
 import docspell.common._
 
+import yamusca.derive._
 import yamusca.implicits._
 import yamusca.imports._
 
@@ -17,7 +24,7 @@ trait YamuscaConverter {
     ValueConverter.of(id => Value.fromString(id.id))
 
   implicit val account: ValueConverter[AccountId] =
-    ValueConverter.deriveConverter[AccountId]
+    deriveValueConverter[AccountId]
 
 }
 

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract.poi
 
 import docspell.common.MimeType
@@ -5,12 +11,12 @@ import docspell.common.MimeType
 object PoiType {
 
   val msoffice = MimeType.application("x-tika-msoffice")
-  val ooxml    = MimeType.application("x-tika-ooxml")
+  val ooxml = MimeType.application("x-tika-ooxml")
   val docx =
     MimeType.application("vnd.openxmlformats-officedocument.wordprocessingml.document")
   val xlsx = MimeType.application("vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-  val xls  = MimeType.application("vnd.ms-excel")
-  val doc  = MimeType.application("msword")
+  val xls = MimeType.application("vnd.ms-excel")
+  val doc = MimeType.application("msword")
 
   val all = Set(msoffice, ooxml, docx, xlsx, xls, doc)
 

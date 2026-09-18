@@ -1,24 +1,42 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import cats.data.{NonEmptyList => Nel}
 
+import docspell.store.impl.{DoobieLogging, DoobieMeta}
 import docspell.store.qb.impl._
 
 import doobie._
 import doobie.implicits._
 
-object DML {
+object DML extends DoobieMeta {
   private val comma = fr","
 
   def delete(table: TableDef, cond: Condition): ConnectionIO[Int] =
     deleteFragment(table, cond).update.run
 
-  def deleteFragment(table: TableDef, cond: Condition): Fragment =
-    fr"DELETE FROM" ++ FromExprBuilder.buildTable(table) ++ fr"WHERE" ++ ConditionBuilder
-      .build(cond)
+  def deleteFragment(table: TableDef, cond: Condition): Fragment = {
+    val delete = fr"DELETE FROM" ++ FromExprBuilder.buildTable(table)
+    if (cond == Condition.unit) delete
+    else delete ++ fr"WHERE" ++ ConditionBuilder.build(cond)
+  }
 
   def insert(table: TableDef, cols: Nel[Column[_]], values: Fragment): ConnectionIO[Int] =
     insertFragment(table, cols, List(values)).update.run
+
+  def insertSilent(
+      table: TableDef,
+      cols: Nel[Column[_]],
+      values: Fragment
+  ): ConnectionIO[Int] =
+    insertFragment(table, cols, List(values))
+      .updateWithLabel(DoobieLogging.LogLabel.Silent.name)
+      .run
 
   def insertMany(
       table: TableDef,
@@ -26,6 +44,17 @@ object DML {
       values: Seq[Fragment]
   ): ConnectionIO[Int] =
     insertFragment(table, cols, values).update.run
+
+  def insertMulti(
+      table: TableDef,
+      cols: Nel[Column[_]],
+      values: Seq[Fragment]
+  ): ConnectionIO[Int] =
+    (fr"INSERT INTO ${FromExprBuilder.buildTable(table)} (" ++
+      cols
+        .map(SelectExprBuilder.columnNoPrefix)
+        .reduceLeft(_ ++ comma ++ _) ++
+      fr") VALUES ${values.reduce(_ ++ comma ++ _)}").update.run
 
   def insertFragment(
       table: TableDef,
@@ -51,7 +80,7 @@ object DML {
       setter: Nel[Setter[_]]
   ): Fragment = {
     val condFrag = cond.map(SelectBuilder.cond).getOrElse(Fragment.empty)
-    fr"UPDATE" ++ FromExprBuilder.buildTable(table) ++ fr"SET" ++
+    fr"UPDATE" ++ FromExprBuilder.buildTable(table) ++ fr" SET" ++
       setter
         .map(s => buildSetter(s))
         .reduceLeft(_ ++ comma ++ _) ++

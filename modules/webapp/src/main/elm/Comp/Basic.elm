@@ -1,5 +1,14 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.Basic exposing
-    ( editLinkLabel
+    ( contentDimmer
+    , deleteButton
+    , editLinkLabel
     , editLinkTableCell
     , genericButton
     , horizontalDivider
@@ -82,6 +91,27 @@ secondaryButton model =
         }
 
 
+deleteButton :
+    { x
+        | label : String
+        , icon : String
+        , disabled : Bool
+        , handler : Attribute msg
+        , attrs : List (Attribute msg)
+    }
+    -> Html msg
+deleteButton model =
+    genericButton
+        { label = model.label
+        , icon = model.icon
+        , handler = model.handler
+        , disabled = model.disabled
+        , attrs = model.attrs
+        , baseStyle = S.deleteButtonMain
+        , activeStyle = S.deleteButtonHover
+        }
+
+
 secondaryBasicButton :
     { x
         | label : String
@@ -148,12 +178,12 @@ linkLabel model =
             [ class S.basicLabel
             , class "inline-block md:text-sm my-auto whitespace-nowrap"
             , class "border-blue-500 text-blue-500 "
-            , class "dark:border-lightblue-300 dark:text-lightblue-300"
+            , class "dark:border-sky-300 dark:text-sky-300"
             ]
 
         hover =
             [ class "hover:bg-blue-500 hover:text-gray-200"
-            , class "dark:hover:bg-lightblue-300 dark:hover:text-bluegray-900"
+            , class "dark:hover:bg-sky-300 dark:hover:text-slate-900"
             ]
 
         attrs =
@@ -175,18 +205,28 @@ linkLabel model =
 
 loadingDimmer : { label : String, active : Bool } -> Html msg
 loadingDimmer cfg =
+    let
+        content =
+            div [ class "text-gray-200 " ]
+                [ i [ class "fa fa-circle-notch animate-spin" ] []
+                , span [ class "ml-2" ]
+                    [ text cfg.label
+                    ]
+                ]
+    in
+    contentDimmer cfg.active content
+
+
+contentDimmer : Bool -> Html msg -> Html msg
+contentDimmer active content =
     div
         [ classList
-            [ ( "hidden", not cfg.active )
+            [ ( "hidden", not active )
             ]
         , class S.dimmer
+        , class "text-gray-200"
         ]
-        [ div [ class "text-gray-200" ]
-            [ i [ class "fa fa-circle-notch animate-spin" ] []
-            , span [ class "ml-2" ]
-                [ text cfg.label
-                ]
-            ]
+        [ content
         ]
 
 

@@ -1,14 +1,16 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import scala.concurrent.ExecutionContext
 
-import cats.effect._
-
-/** Captures thread pools to use in an application.
-  */
+/** Captures thread pools to use in an application. */
 case class Pools(
-    connectEC: ExecutionContext,
-    httpClientEC: ExecutionContext,
-    blocker: Blocker,
-    restEC: ExecutionContext
+    connectEC: ExecutionContext
+//    httpClientEC: ExecutionContext,
+//    restEC: ExecutionContext
 )

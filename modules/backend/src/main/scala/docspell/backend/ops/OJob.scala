@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.ops
 
 import cats.data.OptionT
@@ -5,33 +11,37 @@ import cats.effect._
 import cats.implicits._
 
 import docspell.backend.ops.OJob.{CollectiveQueueState, JobCancelResult}
-import docspell.common.Priority
-import docspell.common.{Ident, JobState}
+import docspell.common._
+import docspell.pubsub.api.PubSubT
+import docspell.scheduler.msg.JobDone
+import docspell.scheduler.usertask.UserTaskScope
 import docspell.store.Store
 import docspell.store.UpdateResult
-import docspell.store.queries.QJob
+import docspell.store.queries.QJobQueue
 import docspell.store.records.{RJob, RJobLog}
 
 trait OJob[F[_]] {
 
-  def queueState(collective: Ident, maxResults: Int): F[CollectiveQueueState]
+  def queueState(collective: UserTaskScope, maxResults: Int): F[CollectiveQueueState]
 
-  def cancelJob(id: Ident, collective: Ident): F[JobCancelResult]
+  def cancelJob(id: Ident, collective: UserTaskScope): F[JobCancelResult]
 
-  def setPriority(id: Ident, collective: Ident, prio: Priority): F[UpdateResult]
+  def setPriority(id: Ident, collective: UserTaskScope, prio: Priority): F[UpdateResult]
+
+  def getUnfinishedJobCount(collective: UserTaskScope): F[Int]
 }
 
 object OJob {
 
   sealed trait JobCancelResult
   object JobCancelResult {
-    case object Removed         extends JobCancelResult
+    case object Removed extends JobCancelResult
     case object CancelRequested extends JobCancelResult
-    case object JobNotFound     extends JobCancelResult
+    case object JobNotFound extends JobCancelResult
 
-    def removed: JobCancelResult         = Removed
+    def removed: JobCancelResult = Removed
     def cancelRequested: JobCancelResult = CancelRequested
-    def jobNotFound: JobCancelResult     = JobNotFound
+    def jobNotFound: JobCancelResult = JobNotFound
   }
 
   case class JobDetail(job: RJob, logs: Vector[RJobLog])
@@ -46,42 +56,67 @@ object OJob {
 
   def apply[F[_]: Sync](
       store: Store[F],
-      joex: OJoex[F]
+      joex: OJoex[F],
+      pubsub: PubSubT[F]
   ): Resource[F, OJob[F]] =
     Resource.pure[F, OJob[F]](new OJob[F] {
+      private[this] val logger = docspell.logging.getLogger[F]
 
-      def queueState(collective: Ident, maxResults: Int): F[CollectiveQueueState] =
+      private def scopeToGroup(s: UserTaskScope) =
+        s.collectiveId
+          .map(_.valueAsIdent)
+          .getOrElse(DocspellSystem.taskGroup)
+
+      def queueState(
+          collective: UserTaskScope,
+          maxResults: Int
+      ): F[CollectiveQueueState] =
         store
           .transact(
-            QJob.queueStateSnapshot(collective, maxResults.toLong)
+            QJobQueue.queueStateSnapshot(scopeToGroup(collective), maxResults.toLong)
           )
           .map(t => JobDetail(t._1, t._2))
           .compile
           .toVector
           .map(CollectiveQueueState)
 
-      def setPriority(id: Ident, collective: Ident, prio: Priority): F[UpdateResult] =
-        UpdateResult.fromUpdate(store.transact(RJob.setPriority(id, collective, prio)))
+      def setPriority(
+          id: Ident,
+          collective: UserTaskScope,
+          prio: Priority
+      ): F[UpdateResult] =
+        UpdateResult.fromUpdate(
+          store.transact(RJob.setPriority(id, scopeToGroup(collective), prio))
+        )
 
-      def cancelJob(id: Ident, collective: Ident): F[JobCancelResult] = {
+      def cancelJob(id: Ident, collective: UserTaskScope): F[JobCancelResult] = {
         def remove(job: RJob): F[JobCancelResult] =
-          store.transact(RJob.delete(job.id)) *> JobCancelResult.removed.pure[F]
+          for {
+            n <- store.transact(RJob.delete(job.id))
+            _ <-
+              if (n <= 0) ().pure[F]
+              else
+                pubsub.publish1IgnoreErrors(
+                  JobDone.topic,
+                  JobDone(job.id, job.group, job.task, job.args, JobState.Cancelled, None)
+                )
+          } yield JobCancelResult.removed
 
         def tryCancel(job: RJob): F[JobCancelResult] =
           job.worker match {
             case Some(worker) =>
               for {
-                flag <- joex.cancelJob(job.id, worker)
-                res <-
-                  if (flag) JobCancelResult.cancelRequested.pure[F]
-                  else remove(job)
-              } yield res
+                _ <- logger.debug(s"Attempt to cancel job: ${job.id.id}")
+                _ <- joex.cancelJob(job.id, worker)
+              } yield JobCancelResult.cancelRequested
             case None =>
               remove(job)
           }
 
         (for {
-          job <- OptionT(store.transact(RJob.findByIdAndGroup(id, collective)))
+          job <- OptionT(
+            store.transact(RJob.findByIdAndGroup(id, scopeToGroup(collective)))
+          )
           result <- OptionT.liftF(
             if (job.isInProgress) tryCancel(job)
             else remove(job)
@@ -89,5 +124,8 @@ object OJob {
         } yield result)
           .getOrElse(JobCancelResult.jobNotFound)
       }
+
+      def getUnfinishedJobCount(collective: UserTaskScope): F[Int] =
+        store.transact(RJob.getUnfinishedCount(scopeToGroup(collective)))
     })
 }

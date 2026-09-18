@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb.impl
 
 import docspell.store.qb._
@@ -19,7 +25,7 @@ object FromExprBuilder {
 
   def buildTable(table: TableDef): Fragment =
     Fragment.const(table.tableName) ++ table.alias
-      .map(a => Fragment.const0(a))
+      .map(a => Fragment.const(a))
       .getOrElse(Fragment.empty)
 
   def buildRelation(rel: FromExpr.Relation): Fragment =

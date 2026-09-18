@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.SourceForm exposing
     ( Model
     , Msg(..)
@@ -18,8 +25,10 @@ import Api.Model.TagList exposing (TagList)
 import Comp.Basic as B
 import Comp.Dropdown exposing (isDropdownChangeMsg)
 import Comp.FixedDropdown
+import Comp.TagDropdown
 import Data.DropdownStyle as DS
 import Data.Flags exposing (Flags)
+import Data.FolderOrder
 import Data.Language exposing (Language)
 import Data.Priority exposing (Priority)
 import Data.UiSettings exposing (UiSettings)
@@ -32,7 +41,6 @@ import Messages.Comp.SourceForm exposing (Texts)
 import Styles as S
 import Util.Folder exposing (mkFolderOption)
 import Util.Maybe
-import Util.Tag
 import Util.Update
 
 
@@ -46,10 +54,11 @@ type alias Model =
     , folderModel : Comp.Dropdown.Model IdName
     , allFolders : List FolderItem
     , folderId : Maybe String
-    , tagModel : Comp.Dropdown.Model Tag
+    , tagModel : Comp.TagDropdown.Model
     , fileFilter : Maybe String
     , languageModel : Comp.Dropdown.Model Language
     , language : Maybe String
+    , attachmentsOnly : Bool
     }
 
 
@@ -65,7 +74,7 @@ emptyModel =
     , folderModel = Comp.Dropdown.makeSingle
     , allFolders = []
     , folderId = Nothing
-    , tagModel = Util.Tag.makeDropdownModel
+    , tagModel = Comp.TagDropdown.initWith [] []
     , fileFilter = Nothing
     , languageModel =
         Comp.Dropdown.makeSingleList
@@ -73,15 +82,20 @@ emptyModel =
             , selected = Nothing
             }
     , language = Nothing
+    , attachmentsOnly = False
     }
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    ( emptyModel
+    let
+        ( tm, tc ) =
+            Comp.TagDropdown.init flags
+    in
+    ( { emptyModel | tagModel = tm }
     , Cmd.batch
-        [ Api.getFolders flags "" False GetFolderResp
-        , Api.getTags flags "" GetTagResp
+        [ Api.getFolders flags "" Data.FolderOrder.NameAsc False GetFolderResp
+        , Cmd.map TagDropdownMsg tc
         ]
     )
 
@@ -101,7 +115,7 @@ getSource model =
             st.source
 
         tags =
-            Comp.Dropdown.getSelected model.tagModel
+            Comp.TagDropdown.getSelected model.tagModel
 
         n =
             { s
@@ -112,6 +126,7 @@ getSource model =
                 , folder = model.folderId
                 , fileFilter = model.fileFilter
                 , language = model.language
+                , attachmentsOnly = model.attachmentsOnly
             }
     in
     { st | source = n, tags = TagList (List.length tags) tags }
@@ -125,10 +140,10 @@ type Msg
     | PrioDropdownMsg (Comp.FixedDropdown.Msg Priority)
     | GetFolderResp (Result Http.Error FolderList)
     | FolderDropdownMsg (Comp.Dropdown.Msg IdName)
-    | GetTagResp (Result Http.Error TagList)
-    | TagDropdownMsg (Comp.Dropdown.Msg Tag)
+    | TagDropdownMsg Comp.TagDropdown.Msg
     | SetFileFilter String
     | LanguageMsg (Comp.Dropdown.Msg Language)
+    | ToggleAttachmentsOnly
 
 
 
@@ -155,6 +170,7 @@ update flags msg model =
                         , enabled = t.source.enabled
                         , folder = t.source.folder
                         , fileFilter = t.source.fileFilter
+                        , language = t.source.language
                     }
 
                 newModel =
@@ -168,6 +184,7 @@ update flags msg model =
                         , enabled = t.source.enabled
                         , folderId = t.source.folder
                         , fileFilter = t.source.fileFilter
+                        , language = t.source.language
                     }
 
                 mkIdName id =
@@ -189,17 +206,29 @@ update flags msg model =
                         Nothing ->
                             []
 
+                langSel =
+                    case Maybe.andThen Data.Language.fromString t.source.language of
+                        Just lang ->
+                            [ lang ]
+
+                        Nothing ->
+                            []
+
                 tags =
-                    Comp.Dropdown.SetSelection t.tags.items
+                    Comp.TagDropdown.setSelected t.tags.items
             in
             Util.Update.andThen1
                 [ update flags (FolderDropdownMsg (Comp.Dropdown.SetSelection sel))
                 , update flags (TagDropdownMsg tags)
+                , update flags (LanguageMsg (Comp.Dropdown.SetSelection langSel))
                 ]
                 newModel
 
         ToggleEnabled ->
             ( { model | enabled = not model.enabled }, Cmd.none )
+
+        ToggleAttachmentsOnly ->
+            ( { model | attachmentsOnly = not model.attachmentsOnly }, Cmd.none )
 
         SetAbbrev n ->
             ( { model | abbrev = n }, Cmd.none )
@@ -259,20 +288,10 @@ update flags msg model =
             in
             ( model_, Cmd.map FolderDropdownMsg c2 )
 
-        GetTagResp (Ok list) ->
-            let
-                opts =
-                    Comp.Dropdown.SetOptions list.items
-            in
-            update flags (TagDropdownMsg opts) model
-
-        GetTagResp (Err _) ->
-            ( model, Cmd.none )
-
         TagDropdownMsg lm ->
             let
                 ( m2, c2 ) =
-                    Comp.Dropdown.update lm model.tagModel
+                    Comp.TagDropdown.update lm model.tagModel
 
                 newModel =
                     { model | tagModel = m2 }
@@ -320,9 +339,6 @@ view2 flags texts settings model =
             , labelColor = \_ -> \_ -> ""
             , style = DS.mainStyle
             }
-
-        tagCfg =
-            Util.Tag.tagSettings texts.basics.chooseTag DS.mainStyle
 
         languageCfg =
             { makeOption =
@@ -442,7 +458,7 @@ view2 flags texts settings model =
                     ]
                 , class S.message
                 ]
-                [ Markdown.toHtml [] texts.folderForbiddenText
+                [ Markdown.toHtml [] texts.basics.folderNotOwnerWarning
                 ]
             ]
         , div [ class "mb-4" ]
@@ -450,9 +466,10 @@ view2 flags texts settings model =
                 [ text texts.basics.tags
                 ]
             , Html.map TagDropdownMsg
-                (Comp.Dropdown.view2
-                    tagCfg
+                (Comp.TagDropdown.view
+                    texts.tagDropdown
                     settings
+                    DS.mainStyle
                     model.tagModel
                 )
             , div [ class "opacity-50 text-sm" ]
@@ -476,6 +493,24 @@ view2 flags texts settings model =
                 []
             , div [ class "opacity-50 text-sm" ]
                 [ Markdown.toHtml [] texts.fileFilterInfo
+                ]
+            ]
+        , div [ class "mb-4" ]
+            [ label
+                [ class "inline-flex items-center"
+                , for "attachments-only"
+                ]
+                [ input
+                    [ type_ "checkbox"
+                    , onCheck (\_ -> ToggleAttachmentsOnly)
+                    , checked model.attachmentsOnly
+                    , class S.checkboxInput
+                    , id "attachments-only"
+                    ]
+                    []
+                , span [ class "ml-2" ]
+                    [ text texts.attachmentsOnly
+                    ]
                 ]
             ]
         , div [ class "mb-4" ]

@@ -1,30 +1,39 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.signup
 
-import cats.effect.{Effect, Resource}
+import cats.data.OptionT
+import cats.effect.{Async, Resource}
 import cats.implicits._
 
 import docspell.backend.PasswordCrypt
-import docspell.backend.ops.OCollective.RegisterData
 import docspell.common._
-import docspell.common.syntax.all._
 import docspell.store.records.{RCollective, RInvitation, RUser}
 import docspell.store.{AddResult, Store}
 
 import doobie.free.connection.ConnectionIO
-import org.log4s.getLogger
 
 trait OSignup[F[_]] {
 
   def register(cfg: Config)(data: RegisterData): F[SignupResult]
 
+  /** Creates the given account if it doesn't exist. This is independent from signup
+    * configuration.
+    */
+  def setupExternal(data: ExternalAccount): F[SignupResult]
+
   def newInvite(cfg: Config)(password: Password): F[NewInviteResult]
 }
 
 object OSignup {
-  private[this] val logger = getLogger
 
-  def apply[F[_]: Effect](store: Store[F]): Resource[F, OSignup[F]] =
+  def apply[F[_]: Async](store: Store[F]): Resource[F, OSignup[F]] =
     Resource.pure[F, OSignup[F]](new OSignup[F] {
+      private[this] val logger = docspell.logging.getLogger[F]
 
       def newInvite(cfg: Config)(password: Password): F[NewInviteResult] =
         if (cfg.mode == Config.Mode.Invite)
@@ -35,12 +44,12 @@ object OSignup {
               .transact(RInvitation.insertNew)
               .map(ri => NewInviteResult.success(ri.id))
         else
-          Effect[F].pure(NewInviteResult.invitationClosed)
+          Async[F].pure(NewInviteResult.invitationClosed)
 
       def register(cfg: Config)(data: RegisterData): F[SignupResult] =
         cfg.mode match {
           case Config.Mode.Open =>
-            addUser(data).map(SignupResult.fromAddResult)
+            addNewAccount(data, AccountSource.Local).map(SignupResult.fromAddResult)
 
           case Config.Mode.Closed =>
             SignupResult.signupClosed.pure[F]
@@ -53,12 +62,14 @@ object OSignup {
                   min = now.minus(cfg.inviteTime)
                   ok <- store.transact(RInvitation.useInvite(inv, min))
                   res <-
-                    if (ok) addUser(data).map(SignupResult.fromAddResult)
+                    if (ok)
+                      addNewAccount(data, AccountSource.Local)
+                        .map(SignupResult.fromAddResult)
                     else SignupResult.invalidInvitationKey.pure[F]
                   _ <-
                     if (retryInvite(res))
                       logger
-                        .fdebug(
+                        .debug(
                           s"Adding account failed ($res). Allow retry with invite."
                         ) *> store
                         .transact(
@@ -69,6 +80,43 @@ object OSignup {
               case None =>
                 SignupResult.invalidInvitationKey.pure[F]
             }
+        }
+
+      def setupExternal(data: ExternalAccount): F[SignupResult] =
+        if (data.source == AccountSource.Local)
+          SignupResult
+            .failure(new Exception("Account source must not be LOCAL!"))
+            .pure[F]
+        else {
+          val maybeInsert: ConnectionIO[Unit] =
+            for {
+              now <- Timestamp.current[ConnectionIO]
+              cid <- OptionT(RCollective.findByName(data.collName))
+                .map(_.id)
+                .getOrElseF(
+                  RCollective.insert(RCollective.makeDefault(data.collName, now))
+                )
+
+              uid <- Ident.randomId[ConnectionIO]
+              newUser = RUser.makeDefault(
+                uid,
+                data.login,
+                cid,
+                Password(""),
+                AccountSource.OpenId,
+                now
+              )
+              _ <- OptionT(RUser.findByLogin(data.login, cid.some))
+                .map(_ => 1)
+                .getOrElseF(RUser.insert(newUser))
+            } yield ()
+
+          store.transact(maybeInsert).attempt.map {
+            case Left(ex) =>
+              SignupResult.failure(ex)
+            case Right(_) =>
+              SignupResult.success
+          }
         }
 
       private def retryInvite(res: SignupResult): Boolean =
@@ -85,45 +133,38 @@ object OSignup {
             false
         }
 
-      private def addUser(data: RegisterData): F[AddResult] = {
-        def toRecords: F[(RCollective, RUser)] =
+      private def addNewAccount(
+          data: RegisterData,
+          accountSource: AccountSource
+      ): F[AddResult] = {
+        def insert: ConnectionIO[Int] =
           for {
-            id2 <- Ident.randomId[F]
-            now <- Timestamp.current[F]
-            c = RCollective(
-              data.collName,
-              CollectiveState.Active,
-              Language.German,
-              true,
-              now
+            now <- Timestamp.current[ConnectionIO]
+            cid <- RCollective.insert(RCollective.makeDefault(data.collName, now))
+            uid <- Ident.randomId[ConnectionIO]
+            n2 <- RUser.insert(
+              RUser.makeDefault(
+                uid,
+                data.login,
+                cid,
+                if (data.password.isEmpty) data.password
+                else PasswordCrypt.crypt(data.password),
+                accountSource,
+                now
+              )
             )
-            u = RUser(
-              id2,
-              data.login,
-              data.collName,
-              PasswordCrypt.crypt(data.password),
-              UserState.Active,
-              None,
-              0,
-              None,
-              now
-            )
-          } yield (c, u)
-
-        def insert(coll: RCollective, user: RUser): ConnectionIO[Int] =
-          for {
-            n1 <- RCollective.insert(coll)
-            n2 <- RUser.insert(user)
-          } yield n1 + n2
+          } yield n2
 
         def collectiveExists: ConnectionIO[Boolean] =
-          RCollective.existsById(data.collName)
+          RCollective.existsByName(data.collName)
 
         val msg = s"The collective '${data.collName}' already exists."
         for {
-          cu   <- toRecords
-          save <- store.add(insert(cu._1, cu._2), collectiveExists)
-        } yield save.fold(identity, _.withMsg(msg), identity)
+          exists <- store.transact(collectiveExists)
+          saved <-
+            if (exists) AddResult.entityExists(msg).pure[F]
+            else store.transact(insert).attempt.map(AddResult.fromUpdate)
+        } yield saved
       }
     })
 }

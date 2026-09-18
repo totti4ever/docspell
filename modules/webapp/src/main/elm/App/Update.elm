@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module App.Update exposing
     ( initPage
     , update
@@ -7,13 +14,21 @@ import Api
 import App.Data exposing (..)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
+import Comp.AddonArchiveManage
+import Comp.DownloadAll
+import Data.AppEvent exposing (AppEvent(..))
+import Data.Environment as Env
 import Data.Flags
+import Data.ItemIds exposing (ItemIds)
+import Data.ServerEvent exposing (ServerEvent(..))
+import Data.UiSettings exposing (UiSettings)
 import Data.UiTheme
+import Messages exposing (Messages)
 import Page exposing (Page(..))
 import Page.CollectiveSettings.Data
 import Page.CollectiveSettings.Update
-import Page.Home.Data
-import Page.Home.Update
+import Page.Dashboard.Data
+import Page.Dashboard.Update
 import Page.ItemDetail.Data
 import Page.ItemDetail.Update
 import Page.Login.Data
@@ -26,6 +41,12 @@ import Page.Queue.Data
 import Page.Queue.Update
 import Page.Register.Data
 import Page.Register.Update
+import Page.Search.Data
+import Page.Search.Update
+import Page.Share.Data
+import Page.Share.Update
+import Page.ShareDetail.Data
+import Page.ShareDetail.Update
 import Page.Upload.Data
 import Page.Upload.Update
 import Page.UserSettings.Data
@@ -47,6 +68,10 @@ update msg model =
 
 updateWithSub : Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
 updateWithSub msg model =
+    let
+        texts =
+            Messages.get (App.Data.getUiLanguage model) model.uiSettings.timeZone
+    in
     case msg of
         ToggleSidebar ->
             ( { model | sidebarVisible = not model.sidebarVisible }, Cmd.none, Sub.none )
@@ -61,15 +86,15 @@ updateWithSub msg model =
                         next =
                             Data.UiTheme.cycle settings.uiTheme
 
-                        newSettings =
-                            { settings | uiTheme = next }
+                        newSettings s =
+                            { s | uiTheme = Just (Data.UiTheme.toString next) }
                     in
                     -- when authenticated, store it in settings only
-                    -- once new settings arrive via a subscription,
-                    -- the ui is updated. so it is also updated on
-                    -- page refresh
+                    -- once new settings are successfully saved (the
+                    -- response is arrived), the ui is updated. so it
+                    -- is also updated on page refresh
                     ( { model | userMenuOpen = False }
-                    , Ports.storeUiSettings model.flags newSettings
+                    , Api.saveUserClientSettingsBy model.flags newSettings ClientSettingsSaveResp
                     , Sub.none
                     )
 
@@ -84,6 +109,16 @@ updateWithSub msg model =
                     , Sub.none
                     )
 
+        ClientSettingsSaveResp (Ok res) ->
+            if res.success then
+                ( model, Api.getClientSettings model.flags GetUiSettings, Sub.none )
+
+            else
+                ( model, Cmd.none, Sub.none )
+
+        ClientSettingsSaveResp (Err _) ->
+            ( model, Cmd.none, Sub.none )
+
         ToggleLangMenu ->
             ( { model | langMenuOpen = not model.langMenuOpen }
             , Cmd.none
@@ -93,8 +128,14 @@ updateWithSub msg model =
         SetLanguage lang ->
             ( { model | anonymousUiLang = lang, langMenuOpen = False }, Cmd.none, Sub.none )
 
-        HomeMsg lm ->
-            updateHome lm model
+        SearchMsg lm ->
+            updateSearch texts lm model
+
+        ShareMsg lm ->
+            updateShare lm model
+
+        ShareDetailMsg lm ->
+            updateShareDetail lm model
 
         LoginMsg lm ->
             updateLogin lm model
@@ -103,10 +144,10 @@ updateWithSub msg model =
             updateManageData lm model
 
         CollSettingsMsg m ->
-            updateCollSettings m model
+            updateCollSettings texts m model
 
         UserSettingsMsg m ->
-            updateUserSettings m model
+            updateUserSettings texts m model
 
         QueueMsg m ->
             updateQueue m model
@@ -121,7 +162,10 @@ updateWithSub msg model =
             updateNewInvite m model
 
         ItemDetailMsg m ->
-            updateItemDetail m model
+            updateItemDetail texts m model
+
+        DashboardMsg m ->
+            updateDashboard texts m model
 
         VersionResp (Ok info) ->
             ( { model | version = info }, Cmd.none, Sub.none )
@@ -139,8 +183,30 @@ updateWithSub msg model =
             )
 
         LogoutResp _ ->
+            let
+                emptyLoginData =
+                    Page.emptyLoginData
+
+                -- if oidcAutoredirect=true, then on logout either
+                -- goto the configured logout url or set openid=3 so
+                -- that the login page doesn't again redirect to the
+                -- oidc provider which will result in being logged in
+                -- again.
+                redirect =
+                    case Data.Flags.oidcAutoRedirect model.flags of
+                        Just provider ->
+                            case provider.logoutUrl of
+                                Just url ->
+                                    Nav.load url
+
+                                Nothing ->
+                                    Page.goto (LoginPage { emptyLoginData | openid = 3 })
+
+                        Nothing ->
+                            Page.goto (LoginPage emptyLoginData)
+            in
             ( { model | loginModel = Page.Login.Data.emptyModel }
-            , Page.goto (LoginPage Nothing)
+            , redirect
             , Sub.none
             )
 
@@ -198,20 +264,24 @@ updateWithSub msg model =
         NavRequest req ->
             case req of
                 Internal url ->
-                    let
-                        isCurrent =
-                            Page.fromUrl url
-                                |> Maybe.map (\p -> p == model.page)
-                                |> Maybe.withDefault True
-                    in
-                    ( model
-                    , if isCurrent then
-                        Cmd.none
+                    if String.startsWith "/app" url.path then
+                        let
+                            isCurrent =
+                                Page.fromUrl url
+                                    |> Maybe.map (\p -> p == model.page)
+                                    |> Maybe.withDefault True
+                        in
+                        ( model
+                        , if isCurrent then
+                            Cmd.none
 
-                      else
-                        Nav.pushUrl model.key (Url.toString url)
-                    , Sub.none
-                    )
+                          else
+                            Nav.pushUrl model.key (Url.toString url)
+                        , Sub.none
+                        )
+
+                    else
+                        ( model, Nav.load <| Url.toString url, Sub.none )
 
                 External url ->
                     ( model
@@ -258,50 +328,196 @@ updateWithSub msg model =
             , Sub.none
             )
 
-        GetUiSettings settings ->
+        GetUiSettings (Ok settings) ->
+            applyClientSettings texts model settings
+
+        GetUiSettings (Err _) ->
+            ( model, Cmd.none, Sub.none )
+
+        ReceiveWsMessage data ->
+            case data of
+                Ok (JobDone details) ->
+                    let
+                        isProcessItem =
+                            details.task == "process-item"
+
+                        isDownloadZip =
+                            details.task == "download-query-zip"
+
+                        isAddonExistingItem =
+                            Data.ServerEvent.isAddonExistingItem model.itemDetailModel.detail.item.id details
+
+                        newModel =
+                            { model
+                                | showNewItemsArrived = isProcessItem && not (Page.isSearchPage model.page)
+                                , jobsWaiting = max 0 (model.jobsWaiting - 1)
+                            }
+                    in
+                    if Page.isSearchPage model.page && isProcessItem then
+                        updateSearch texts Page.Search.Data.RefreshView newModel
+
+                    else if Page.isSearchPage model.page && isDownloadZip then
+                        updateSearch texts (Page.Search.Data.DownloadAllMsg Comp.DownloadAll.checkDownload) newModel
+
+                    else if Page.isDashboardPage model.page && isProcessItem then
+                        updateDashboard texts Page.Dashboard.Data.reloadDashboardData newModel
+
+                    else if Page.isDetailPage model.page && isAddonExistingItem then
+                        updateItemDetail texts (Page.ItemDetail.Data.ReloadItem True) newModel
+
+                    else
+                        ( newModel, Cmd.none, Sub.none )
+
+                Ok (JobSubmitted _) ->
+                    ( { model | jobsWaiting = model.jobsWaiting + 1 }, Cmd.none, Sub.none )
+
+                Ok (JobsWaiting n) ->
+                    ( { model | jobsWaiting = max 0 n }, Cmd.none, Sub.none )
+
+                Ok (AddonInstalled info) ->
+                    updateManageData (Page.ManageData.Data.AddonArchiveMsg <| Comp.AddonArchiveManage.addonInstallResult info) model
+
+                Err _ ->
+                    ( model, Cmd.none, Sub.none )
+
+        ToggleShowNewItemsArrived ->
+            ( { model | showNewItemsArrived = not model.showNewItemsArrived }
+            , Cmd.none
+            , Sub.none
+            )
+
+
+modelEnv : Model -> Env.Update
+modelEnv model =
+    { key = model.key
+    , selectedItems = model.selectedItems
+    , flags = model.flags
+    , settings = model.uiSettings
+    }
+
+
+applyClientSettings : Messages -> Model -> UiSettings -> ( Model, Cmd Msg, Sub Msg )
+applyClientSettings texts model settings =
+    let
+        setTheme =
+            Ports.setUiTheme settings.uiTheme
+
+        flags =
+            model.flags
+    in
+    Util.Update.andThen2
+        [ \m ->
+            ( { m | sidebarVisible = flags.innerWidth > 768 && settings.sideMenuVisible }
+            , setTheme
+            , Sub.none
+            )
+        , \m ->
+            if Page.isSearchPage m.page then
+                updateSearch texts Page.Search.Data.UiSettingsUpdated m
+
+            else
+                ( m, Cmd.none, Sub.none )
+        , updateItemDetail texts Page.ItemDetail.Data.UiSettingsUpdated
+        ]
+        { model | uiSettings = settings }
+
+
+applySelectionChange : Messages -> Model -> ItemIds -> ( Model, Cmd Msg, Sub Msg )
+applySelectionChange texts model newSelection =
+    if model.selectedItems == newSelection then
+        ( { model | selectedItems = newSelection }, Cmd.none, Sub.none )
+
+    else
+        Util.Update.andThen2
+            [ updateSearch texts Page.Search.Data.ItemSelectionChanged
+            ]
+            { model | selectedItems = newSelection }
+
+
+updateDashboard : Messages -> Page.Dashboard.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateDashboard texts lmsg model =
+    let
+        ( dbm, dbc, dbs ) =
+            Page.Dashboard.Update.update texts.dashboard
+                model.uiSettings
+                model.key
+                model.flags
+                lmsg
+                model.dashboardModel
+    in
+    ( { model | dashboardModel = dbm }
+    , Cmd.map DashboardMsg dbc
+    , Sub.map DashboardMsg dbs
+    )
+
+
+updateShareDetail : Page.ShareDetail.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateShareDetail lmsg model =
+    case Page.pageShareDetail model.page of
+        Just ( shareId, itemId ) ->
             let
-                setTheme =
-                    Ports.setUiTheme settings.uiTheme
+                ( m, c ) =
+                    Page.ShareDetail.Update.update shareId itemId model.flags lmsg model.shareDetailModel
             in
-            Util.Update.andThen2
-                [ \m ->
-                    ( { m | sidebarVisible = settings.sideMenuVisible }
-                    , setTheme
-                    , Sub.none
-                    )
-                , updateUserSettings Page.UserSettings.Data.UpdateSettings
-                , updateHome Page.Home.Data.UiSettingsUpdated
-                , updateItemDetail Page.ItemDetail.Data.UiSettingsUpdated
-                ]
-                { model | uiSettings = settings }
+            ( { model | shareDetailModel = m }
+            , Cmd.map ShareDetailMsg c
+            , Sub.none
+            )
+
+        Nothing ->
+            ( model, Cmd.none, Sub.none )
 
 
-updateItemDetail : Page.ItemDetail.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
-updateItemDetail lmsg model =
+updateShare : Page.Share.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateShare lmsg model =
+    case Page.pageShareId model.page of
+        Just id ->
+            let
+                result =
+                    Page.Share.Update.update model.flags model.uiSettings id lmsg model.shareModel
+            in
+            ( { model | shareModel = result.model }
+            , Cmd.map ShareMsg result.cmd
+            , Sub.map ShareMsg result.sub
+            )
+
+        Nothing ->
+            ( model, Cmd.none, Sub.none )
+
+
+updateItemDetail : Messages -> Page.ItemDetail.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateItemDetail texts lmsg model =
     let
         inav =
-            Page.Home.Data.itemNav model.itemDetailModel.detail.item.id model.homeModel
+            Page.Search.Data.itemNav model.itemDetailModel.detail.item.id model.searchModel
 
         result =
             Page.ItemDetail.Update.update
-                model.key
-                model.flags
                 inav
-                model.uiSettings
+                (modelEnv model)
                 lmsg
                 model.itemDetailModel
 
-        model_ =
-            { model
-                | itemDetailModel = result.model
-            }
+        ( model_, cmd_, sub_ ) =
+            applySelectionChange
+                texts
+                { model | itemDetailModel = result.model }
+                result.selectedItems
 
         ( hm, hc, hs ) =
-            updateHome (Page.Home.Data.SetLinkTarget result.linkTarget) model_
+            updateSearch texts (Page.Search.Data.SetLinkTarget result.linkTarget) model_
+
+        ( hm1, hc1, hs1 ) =
+            case result.removedItem of
+                Just removedId ->
+                    updateSearch texts (Page.Search.Data.RemoveItem removedId) hm
+
+                Nothing ->
+                    ( hm, hc, hs )
     in
-    ( hm
-    , Cmd.batch [ Cmd.map ItemDetailMsg result.cmd, hc ]
-    , Sub.batch [ Sub.map ItemDetailMsg result.sub, hs ]
+    ( hm1
+    , Cmd.batch [ Cmd.map ItemDetailMsg result.cmd, hc, hc1, cmd_ ]
+    , Sub.batch [ Sub.map ItemDetailMsg result.sub, hs, hs1, sub_ ]
     )
 
 
@@ -348,8 +564,11 @@ updateRegister lmsg model =
 updateQueue : Page.Queue.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
 updateQueue lmsg model =
     let
+        notQueuePage =
+            model.page /= QueuePage
+
         ( lm, lc ) =
-            Page.Queue.Update.update model.flags lmsg model.queueModel
+            Page.Queue.Update.update model.flags notQueuePage lmsg model.queueModel
     in
     ( { model | queueModel = lm }
     , Cmd.map QueueMsg lc
@@ -357,31 +576,46 @@ updateQueue lmsg model =
     )
 
 
-updateUserSettings : Page.UserSettings.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
-updateUserSettings lmsg model =
+updateUserSettings : Messages -> Page.UserSettings.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateUserSettings _ lmsg model =
     let
-        ( lm, lc, ls ) =
+        result =
             Page.UserSettings.Update.update model.flags model.uiSettings lmsg model.userSettingsModel
+
+        model_ =
+            { model | userSettingsModel = result.model }
+
+        lc =
+            case result.appEvent of
+                AppReloadUiSettings ->
+                    Api.getClientSettings model.flags GetUiSettings
+
+                AppNothing ->
+                    Cmd.none
     in
-    ( { model
-        | userSettingsModel = lm
-      }
-    , Cmd.map UserSettingsMsg lc
-    , Sub.map UserSettingsMsg ls
+    ( model_
+    , Cmd.batch
+        [ Cmd.map UserSettingsMsg result.cmd
+        , lc
+        ]
+    , Sub.batch
+        [ Sub.map UserSettingsMsg result.sub
+        ]
     )
 
 
-updateCollSettings : Page.CollectiveSettings.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
-updateCollSettings lmsg model =
+updateCollSettings : Messages -> Page.CollectiveSettings.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateCollSettings texts lmsg model =
     let
-        ( lm, lc ) =
-            Page.CollectiveSettings.Update.update model.flags
+        ( lm, lc, ls ) =
+            Page.CollectiveSettings.Update.update texts.collectiveSettings
+                (modelEnv model)
                 lmsg
                 model.collSettingsModel
     in
     ( { model | collSettingsModel = lm }
     , Cmd.map CollSettingsMsg lc
-    , Sub.none
+    , Sub.map CollSettingsMsg ls
     )
 
 
@@ -404,37 +638,49 @@ updateLogin lmsg model =
     )
 
 
-updateHome : Page.Home.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
-updateHome lmsg model =
+updateSearch : Messages -> Page.Search.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
+updateSearch texts lmsg model =
     let
-        mid =
+        ( lastViewItemId, bookmarkId ) =
             case model.page of
-                HomePage ->
-                    Util.Maybe.fromString model.itemDetailModel.detail.item.id
+                SearchPage bId ->
+                    ( Util.Maybe.fromString model.itemDetailModel.detail.item.id, bId )
 
                 _ ->
-                    Nothing
+                    ( Nothing, Nothing )
 
-        ( lm, lc, ls ) =
-            Page.Home.Update.update mid model.key model.flags model.uiSettings lmsg model.homeModel
+        env =
+            modelEnv model
+
+        result =
+            Page.Search.Update.update texts.search bookmarkId lastViewItemId env lmsg model.searchModel
+
+        lc =
+            case result.appEvent of
+                AppReloadUiSettings ->
+                    Api.getClientSettings model.flags GetUiSettings
+
+                AppNothing ->
+                    Cmd.none
+
+        ( model_, cmd_, sub_ ) =
+            applySelectionChange texts { model | searchModel = result.model } result.selectedItems
     in
-    ( { model
-        | homeModel = lm
-      }
-    , Cmd.map HomeMsg lc
-    , Sub.map HomeMsg ls
+    ( model_
+    , Cmd.batch [ Cmd.map SearchMsg result.cmd, lc, cmd_ ]
+    , Sub.batch [ Sub.map SearchMsg result.sub, sub_ ]
     )
 
 
 updateManageData : Page.ManageData.Data.Msg -> Model -> ( Model, Cmd Msg, Sub Msg )
 updateManageData lmsg model =
     let
-        ( lm, lc ) =
-            Page.ManageData.Update.update model.flags lmsg model.manageDataModel
+        ( lm, lc, ls ) =
+            Page.ManageData.Update.update model.flags model.uiSettings lmsg model.manageDataModel
     in
     ( { model | manageDataModel = lm }
     , Cmd.map ManageDataMsg lc
-    , Sub.none
+    , Sub.map ManageDataMsg ls
     )
 
 
@@ -443,53 +689,90 @@ initPage model_ page =
     let
         model =
             { model_ | page = page }
+
+        texts =
+            Messages.get (App.Data.getUiLanguage model) model.uiSettings.timeZone
+
+        noop =
+            ( model, Cmd.none, Sub.none )
     in
     case page of
-        HomePage ->
+        SearchPage _ ->
             Util.Update.andThen2
-                [ updateHome Page.Home.Data.Init
-                , updateQueue Page.Queue.Data.StopRefresh
+                [ updateSearch texts Page.Search.Data.Init
                 ]
                 model
 
-        LoginPage _ ->
-            updateQueue Page.Queue.Data.StopRefresh model
+        LoginPage data ->
+            if data.openid == 0 && model.flags.account == Nothing then
+                case Data.Flags.oidcAutoRedirect model.flags of
+                    Just first ->
+                        ( model, Nav.load (Api.openIdAuthLink model.flags first.provider), Sub.none )
+
+                    _ ->
+                        noop
+
+            else
+                noop
 
         ManageDataPage ->
-            updateQueue Page.Queue.Data.StopRefresh model
+            noop
 
         CollectiveSettingPage ->
             Util.Update.andThen2
-                [ updateQueue Page.Queue.Data.StopRefresh
-                , updateCollSettings Page.CollectiveSettings.Data.Init
+                [ updateCollSettings texts Page.CollectiveSettings.Data.Init
                 ]
                 model
 
         UserSettingPage ->
-            Util.Update.andThen2
-                [ updateQueue Page.Queue.Data.StopRefresh
-                ]
-                model
+            noop
 
         QueuePage ->
             updateQueue Page.Queue.Data.Init model
 
         RegisterPage ->
-            updateQueue Page.Queue.Data.StopRefresh model
+            noop
 
         UploadPage _ ->
             Util.Update.andThen2
-                [ updateQueue Page.Queue.Data.StopRefresh
-                , updateUpload Page.Upload.Data.Clear
+                [ updateUpload Page.Upload.Data.reset
                 ]
                 model
 
         NewInvitePage ->
-            updateQueue Page.Queue.Data.StopRefresh model
+            noop
 
         ItemDetailPage id ->
             Util.Update.andThen2
-                [ updateItemDetail (Page.ItemDetail.Data.Init id)
-                , updateQueue Page.Queue.Data.StopRefresh
+                [ updateItemDetail texts (Page.ItemDetail.Data.Init id)
                 ]
                 model
+
+        SharePage id ->
+            let
+                cmd =
+                    Cmd.map ShareMsg (Page.Share.Data.initCmd id model.flags)
+
+                shareModel =
+                    model.shareModel
+            in
+            if shareModel.initialized then
+                ( model, Cmd.none, Sub.none )
+
+            else
+                ( { model | shareModel = { shareModel | initialized = True } }, cmd, Sub.none )
+
+        ShareDetailPage _ _ ->
+            case model_.page of
+                SharePage _ ->
+                    let
+                        verifyResult =
+                            model.shareModel.verifyResult
+                    in
+                    updateShareDetail (Page.ShareDetail.Data.VerifyResp (Ok verifyResult)) model
+
+                _ ->
+                    ( model, Cmd.none, Sub.none )
+
+        DashboardPage ->
+            ( model, Cmd.none, Sub.none )

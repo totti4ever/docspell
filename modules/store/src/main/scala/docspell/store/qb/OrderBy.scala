@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import docspell.store.qb.OrderBy.OrderType
@@ -14,7 +20,7 @@ object OrderBy {
 
   sealed trait OrderType
   object OrderType {
-    case object Asc  extends OrderType
+    case object Asc extends OrderType
     case object Desc extends OrderType
   }
 }

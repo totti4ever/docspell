@@ -1,7 +1,15 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.OrgManage exposing
     ( Model
     , Msg(..)
     , emptyModel
+    , init
     , update
     , view2
     )
@@ -16,6 +24,7 @@ import Comp.OrgForm
 import Comp.OrgTable
 import Comp.YesNoDimmer
 import Data.Flags exposing (Flags)
+import Data.OrganizationOrder exposing (OrganizationOrder)
 import Data.UiSettings exposing (UiSettings)
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -23,7 +32,6 @@ import Html.Events exposing (onSubmit)
 import Http
 import Messages.Comp.OrgManage exposing (Texts)
 import Styles as S
-import Util.Http
 import Util.Maybe
 
 
@@ -31,11 +39,19 @@ type alias Model =
     { tableModel : Comp.OrgTable.Model
     , formModel : Comp.OrgForm.Model
     , viewMode : ViewMode
-    , formError : Maybe String
+    , formError : FormError
     , loading : Bool
     , deleteConfirm : Comp.YesNoDimmer.Model
     , query : String
+    , order : OrganizationOrder
     }
+
+
+type FormError
+    = FormErrorNone
+    | FormErrorHttp Http.Error
+    | FormErrorSubmit String
+    | FormErrorInvalid
 
 
 type ViewMode
@@ -48,11 +64,17 @@ emptyModel =
     { tableModel = Comp.OrgTable.emptyModel
     , formModel = Comp.OrgForm.emptyModel
     , viewMode = Table
-    , formError = Nothing
+    , formError = FormErrorNone
     , loading = False
     , deleteConfirm = Comp.YesNoDimmer.emptyModel
     , query = ""
+    , order = Data.OrganizationOrder.NameAsc
     }
+
+
+init : Flags -> ( Model, Cmd Msg )
+init flags =
+    ( emptyModel, Api.getOrganizations flags emptyModel.query emptyModel.order OrgResp )
 
 
 type Msg
@@ -74,7 +96,7 @@ update flags msg model =
     case msg of
         TableMsg m ->
             let
-                ( tm, tc ) =
+                ( tm, tc, maybeOrder ) =
                     Comp.OrgTable.update flags m model.tableModel
 
                 ( m2, c2 ) =
@@ -83,10 +105,11 @@ update flags msg model =
                         , viewMode = Maybe.map (\_ -> Form) tm.selected |> Maybe.withDefault Table
                         , formError =
                             if Util.Maybe.nonEmpty tm.selected then
-                                Nothing
+                                FormErrorNone
 
                             else
                                 model.formError
+                        , order = Maybe.withDefault model.order maybeOrder
                       }
                     , Cmd.map TableMsg tc
                     )
@@ -98,8 +121,15 @@ update flags msg model =
 
                         Nothing ->
                             ( m2, Cmd.none )
+
+                ( m4, c4 ) =
+                    if maybeOrder /= Nothing && maybeOrder /= Just model.order then
+                        update flags LoadOrgs m3
+
+                    else
+                        ( m3, Cmd.none )
             in
-            ( m3, Cmd.batch [ c2, c3 ] )
+            ( m4, Cmd.batch [ c2, c3, c4 ] )
 
         FormMsg m ->
             let
@@ -109,7 +139,13 @@ update flags msg model =
             ( { model | formModel = m2 }, Cmd.map FormMsg c2 )
 
         LoadOrgs ->
-            ( { model | loading = True }, Api.getOrganizations flags model.query OrgResp )
+            ( { model | loading = True }
+            , Api.getOrganizations
+                flags
+                model.query
+                model.order
+                OrgResp
+            )
 
         OrgResp (Ok orgs) ->
             let
@@ -136,7 +172,7 @@ update flags msg model =
         InitNewOrg ->
             let
                 nm =
-                    { model | viewMode = Form, formError = Nothing }
+                    { model | viewMode = Form, formError = FormErrorNone }
 
                 org =
                     Api.Model.Organization.empty
@@ -155,7 +191,7 @@ update flags msg model =
                 ( { model | loading = True }, Api.postOrg flags org SubmitResp )
 
             else
-                ( { model | formError = Just "Please correct the errors in the form." }, Cmd.none )
+                ( { model | formError = FormErrorInvalid }, Cmd.none )
 
         SubmitResp (Ok res) ->
             if res.success then
@@ -169,10 +205,10 @@ update flags msg model =
                 ( { m3 | loading = False }, Cmd.batch [ c2, c3 ] )
 
             else
-                ( { model | formError = Just res.message, loading = False }, Cmd.none )
+                ( { model | formError = FormErrorSubmit res.message, loading = False }, Cmd.none )
 
         SubmitResp (Err err) ->
-            ( { model | formError = Just (Util.Http.errorToString err), loading = False }, Cmd.none )
+            ( { model | formError = FormErrorHttp err, loading = False }, Cmd.none )
 
         RequestDelete ->
             update flags (YesNoMsg Comp.YesNoDimmer.activate) model
@@ -199,7 +235,7 @@ update flags msg model =
                 m =
                     { model | query = str }
             in
-            ( m, Api.getOrganizations flags str OrgResp )
+            ( m, Api.getOrganizations flags str model.order OrgResp )
 
 
 
@@ -236,8 +272,9 @@ viewTable2 texts model =
                     }
                 ]
             , rootClasses = "mb-4"
+            , sticky = True
             }
-        , Html.map TableMsg (Comp.OrgTable.view2 texts.orgTable model.tableModel)
+        , Html.map TableMsg (Comp.OrgTable.view2 texts.orgTable model.order model.tableModel)
         , B.loadingDimmer
             { active = model.loading
             , label = texts.basics.loading
@@ -307,15 +344,27 @@ viewForm2 texts settings model =
                 else
                     []
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , div
             [ classList
-                [ ( "hidden", Util.Maybe.isEmpty model.formError )
+                [ ( "hidden", model.formError == FormErrorNone )
                 ]
             , class S.errorMessage
             , class "my-2"
             ]
-            [ Maybe.withDefault "" model.formError |> text
+            [ case model.formError of
+                FormErrorNone ->
+                    text ""
+
+                FormErrorSubmit m ->
+                    text m
+
+                FormErrorHttp err ->
+                    text (texts.httpError err)
+
+                FormErrorInvalid ->
+                    text texts.correctFormErrors
             ]
         , Html.map FormMsg
             (Comp.OrgForm.view2

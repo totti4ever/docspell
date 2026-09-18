@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import cats.data.NonEmptyList
@@ -9,7 +15,7 @@ object DBFunction {
   val countAll: DBFunction = CountAll
 
   def countAs[A](column: Column[A]): DBFunction =
-    Count(column, false)
+    Count(column, distinct = false)
 
   case object CountAll extends DBFunction
 
@@ -37,10 +43,12 @@ object DBFunction {
 
   case class Concat(exprs: NonEmptyList[SelectExpr]) extends DBFunction
 
+  case class Raw(name: String, exprs: NonEmptyList[SelectExpr]) extends DBFunction
+
   sealed trait Operator
   object Operator {
-    case object Plus  extends Operator
+    case object Plus extends Operator
     case object Minus extends Operator
-    case object Mult  extends Operator
+    case object Mult extends Operator
   }
 }

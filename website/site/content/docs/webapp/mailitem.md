@@ -1,18 +1,15 @@
 +++
 title = "Send items via E-Mail"
 weight = 50
-[extra]
-mktoc = true
 +++
+
+# E-Mail Settings (SMTP)
 
 You can send e-mails from within docspell attaching the files of an
 item. This is useful to collaborate or share certain documents with
 people outside docspell.
 
 All sent mails are stored attached to the item.
-
-
-# E-Mail Settings (SMTP)
 
 To send mails, there are SMTP settings required. Please see the page
 about [e-mail settings](@/docs/webapp/emailsettings.md#smtp-settings).
@@ -27,14 +24,17 @@ item, or you may choose to send the mail without any attachments.
 In the item detail view, click on the envelope icon to open the mail
 form:
 
-{{ figure(file="mail-item-1.png") }}
+{{ figure2(light="mail-item-1.png", dark="mail-item-1_dark.png") }}
 
 Then write the mail. Multiple recipients may be specified. The input
 field shows completion proposals from all contacts in your address
 book (from organizations and persons). Choose an address by pressing
 *Enter* or by clicking a proposal from the list. The proposal list can
 be iterated by the *Up* and *Down* arrows. You can type in any
-address, of course, it doesn't need to match a proposal.
+address, of course, it doesn't need to match a proposal. If you type
+in an arbitrary address, hit *Enter* or *Space* in order to add the
+current address. You can hit *Backspace* two times to remove the last
+e-mail address.
 
 If you have multiple mail settings defined, you can choose in the top
 dropdown which account to use for sending.
@@ -58,8 +58,8 @@ database and you'll see a message in the form.
 If there is an e-mail for an item, another section is rendered below
 the item notes.
 
-{{ figure(file="mail-item-2.png") }}
+{{ figure2(light="mail-item-2.png", dark="mail-item-2_dark.png") }}
 
 Clicking on a the eye icon opens the mail.
 
-{{ figure(file="mail-item-4.png") }}
+{{ figure2(light="mail-item-4.png", dark="mail-item-4_dark.png") }}

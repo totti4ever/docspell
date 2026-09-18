@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.queries
 
 import cats.data.OptionT
@@ -12,26 +18,32 @@ import doobie.implicits._
 
 object QMails {
 
-  private val item     = RItem.as("i")
-  private val smail    = RSentMail.as("sm")
+  private val item = RItem.as("i")
+  private val smail = RSentMail.as("sm")
   private val mailitem = RSentMailItem.as("mi")
-  private val user     = RUser.as("u")
+  private val user = RUser.as("u")
 
-  def delete(coll: Ident, mailId: Ident): ConnectionIO[Int] =
+  def delete(coll: CollectiveId, mailId: Ident): ConnectionIO[Int] =
     (for {
       m <- OptionT(findMail(coll, mailId))
       k <- OptionT.liftF(RSentMailItem.deleteMail(mailId))
       n <- OptionT.liftF(RSentMail.delete(m._1.id))
     } yield k + n).getOrElse(0)
 
-  def findMail(coll: Ident, mailId: Ident): ConnectionIO[Option[(RSentMail, Ident)]] =
+  def findMail(
+      coll: CollectiveId,
+      mailId: Ident
+  ): ConnectionIO[Option[(RSentMail, Ident)]] =
     partialFind
       .where(smail.id === mailId && item.cid === coll)
       .build
       .query[(RSentMail, Ident)]
       .option
 
-  def findMails(coll: Ident, itemId: Ident): ConnectionIO[Vector[(RSentMail, Ident)]] =
+  def findMails(
+      coll: CollectiveId,
+      itemId: Ident
+  ): ConnectionIO[Vector[(RSentMail, Ident)]] =
     partialFind
       .where(mailitem.itemId === itemId && item.cid === coll)
       .orderBy(smail.created.desc)
@@ -47,5 +59,4 @@ object QMails {
         .innerJoin(item, mailitem.itemId === item.id)
         .innerJoin(user, user.uid === smail.uid)
     )
-
 }

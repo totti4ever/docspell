@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.data.OptionT
@@ -22,34 +28,34 @@ import org.http4s.dsl.Http4sDsl
 
 object MailSettingsRoutes {
 
-  def apply[F[_]: Effect](backend: BackendApp[F], user: AuthToken): HttpRoutes[F] = {
+  def apply[F[_]: Async](backend: BackendApp[F], user: AuthToken): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] {}
     import dsl._
 
     HttpRoutes.of {
       case GET -> Root / "smtp" :? QueryParam.QueryOpt(q) =>
         for {
-          list <- backend.mail.getSmtpSettings(user.account, q.map(_.q))
+          list <- backend.mail.getSmtpSettings(user.account.userId, q.map(_.q))
           res = list.map(convert)
           resp <- Ok(EmailSettingsList(res.toList))
         } yield resp
 
       case GET -> Root / "imap" :? QueryParam.QueryOpt(q) =>
         for {
-          list <- backend.mail.getImapSettings(user.account, q.map(_.q))
+          list <- backend.mail.getImapSettings(user.account.userId, q.map(_.q))
           res = list.map(convert)
           resp <- Ok(ImapSettingsList(res.toList))
         } yield resp
 
       case GET -> Root / "smtp" / Ident(name) =>
         (for {
-          ems  <- backend.mail.findSmtpSettings(user.account, name)
+          ems <- backend.mail.findSmtpSettings(user.account.userId, name)
           resp <- OptionT.liftF(Ok(convert(ems)))
         } yield resp).getOrElseF(NotFound())
 
       case GET -> Root / "imap" / Ident(name) =>
         (for {
-          ems  <- backend.mail.findImapSettings(user.account, name)
+          ems <- backend.mail.findImapSettings(user.account.userId, name)
           resp <- OptionT.liftF(Ok(convert(ems)))
         } yield resp).getOrElseF(NotFound())
 
@@ -58,12 +64,12 @@ object MailSettingsRoutes {
           in <- OptionT.liftF(req.as[EmailSettings])
           ru = makeSmtpSettings(in)
           up <- OptionT.liftF(
-            ru.traverse(r => backend.mail.createSmtpSettings(user.account, r))
+            ru.traverse(r => backend.mail.createSmtpSettings(user.account.userId, r))
           )
           resp <- OptionT.liftF(
             Ok(
               up.fold(
-                err => BasicResult(false, err),
+                err => BasicResult(success = false, err),
                 ar => Conversions.basicResult(ar, "Mail settings stored.")
               )
             )
@@ -75,12 +81,12 @@ object MailSettingsRoutes {
           in <- OptionT.liftF(req.as[ImapSettings])
           ru = makeImapSettings(in)
           up <- OptionT.liftF(
-            ru.traverse(r => backend.mail.createImapSettings(user.account, r))
+            ru.traverse(r => backend.mail.createImapSettings(user.account.userId, r))
           )
           resp <- OptionT.liftF(
             Ok(
               up.fold(
-                err => BasicResult(false, err),
+                err => BasicResult(success = false, err),
                 ar => Conversions.basicResult(ar, "Mail settings stored.")
               )
             )
@@ -92,15 +98,17 @@ object MailSettingsRoutes {
           in <- OptionT.liftF(req.as[EmailSettings])
           ru = makeSmtpSettings(in)
           up <- OptionT.liftF(
-            ru.traverse(r => backend.mail.updateSmtpSettings(user.account, name, r))
+            ru.traverse(r =>
+              backend.mail.updateSmtpSettings(user.account.userId, name, r)
+            )
           )
           resp <- OptionT.liftF(
             Ok(
               up.fold(
-                err => BasicResult(false, err),
+                err => BasicResult(success = false, err),
                 n =>
-                  if (n > 0) BasicResult(true, "Mail settings stored.")
-                  else BasicResult(false, "Mail settings could not be saved")
+                  if (n > 0) BasicResult(success = true, "Mail settings stored.")
+                  else BasicResult(success = false, "Mail settings could not be saved")
               )
             )
           )
@@ -111,15 +119,17 @@ object MailSettingsRoutes {
           in <- OptionT.liftF(req.as[ImapSettings])
           ru = makeImapSettings(in)
           up <- OptionT.liftF(
-            ru.traverse(r => backend.mail.updateImapSettings(user.account, name, r))
+            ru.traverse(r =>
+              backend.mail.updateImapSettings(user.account.userId, name, r)
+            )
           )
           resp <- OptionT.liftF(
             Ok(
               up.fold(
-                err => BasicResult(false, err),
+                err => BasicResult(success = false, err),
                 n =>
-                  if (n > 0) BasicResult(true, "Mail settings stored.")
-                  else BasicResult(false, "Mail settings could not be saved")
+                  if (n > 0) BasicResult(success = true, "Mail settings stored.")
+                  else BasicResult(success = false, "Mail settings could not be saved")
               )
             )
           )
@@ -127,19 +137,19 @@ object MailSettingsRoutes {
 
       case DELETE -> Root / "smtp" / Ident(name) =>
         for {
-          n <- backend.mail.deleteSmtpSettings(user.account, name)
+          n <- backend.mail.deleteSmtpSettings(user.account.userId, name)
           resp <- Ok(
-            if (n > 0) BasicResult(true, "Mail settings removed")
-            else BasicResult(false, "Mail settings could not be removed")
+            if (n > 0) BasicResult(success = true, "Mail settings removed")
+            else BasicResult(success = false, "Mail settings could not be removed")
           )
         } yield resp
 
       case DELETE -> Root / "imap" / Ident(name) =>
         for {
-          n <- backend.mail.deleteImapSettings(user.account, name)
+          n <- backend.mail.deleteImapSettings(user.account.userId, name)
           resp <- Ok(
-            if (n > 0) BasicResult(true, "Mail settings removed")
-            else BasicResult(false, "Mail settings could not be removed")
+            if (n > 0) BasicResult(success = true, "Mail settings removed")
+            else BasicResult(success = false, "Mail settings could not be removed")
           )
         } yield resp
     }

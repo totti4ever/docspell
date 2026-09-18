@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -12,7 +18,7 @@ import doobie.implicits._
 
 case class RTag(
     tagId: Ident,
-    collective: Ident,
+    collective: CollectiveId,
     name: String,
     category: Option[String],
     created: Timestamp
@@ -22,12 +28,12 @@ object RTag {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "tag"
 
-    val tid      = Column[Ident]("tid", this)
-    val cid      = Column[Ident]("cid", this)
-    val name     = Column[String]("name", this)
+    val tid = Column[Ident]("tid", this)
+    val cid = Column[CollectiveId]("coll_id", this)
+    val name = Column[String]("name", this)
     val category = Column[String]("category", this)
-    val created  = Column[Timestamp]("created", this)
-    val all      = NonEmptyList.of[Column[_]](tid, cid, name, category, created)
+    val created = Column[Timestamp]("created", this)
+    val all = NonEmptyList.of[Column[_]](tid, cid, name, category, created)
   }
   val T = Table(None)
   def as(alias: String): Table =
@@ -56,7 +62,7 @@ object RTag {
     sql.query[RTag].option
   }
 
-  def findByIdAndCollective(id: Ident, coll: Ident): ConnectionIO[Option[RTag]] = {
+  def findByIdAndCollective(id: Ident, coll: CollectiveId): ConnectionIO[Option[RTag]] = {
     val sql = run(select(T.all), from(T), T.tid === id && T.cid === coll)
     sql.query[RTag].option
   }
@@ -68,11 +74,12 @@ object RTag {
   }
 
   def findAll(
-      coll: Ident,
-      nameQ: Option[String],
-      order: Table => Column[_]
+      coll: CollectiveId,
+      query: Option[String],
+      order: Table => NonEmptyList[OrderBy]
   ): ConnectionIO[Vector[RTag]] = {
-    val nameFilter = nameQ.map(s => T.name.like(s"%${s.toLowerCase}%"))
+    val nameFilter =
+      query.map(_.toLowerCase).map(s => T.name.like(s"%$s%") || T.category.like(s"%$s%"))
     val sql =
       Select(select(T.all), from(T), T.cid === coll &&? nameFilter).orderBy(order(T))
     sql.build.query[RTag].to[Vector]
@@ -90,7 +97,7 @@ object RTag {
 
   def findByItem(itemId: Ident): ConnectionIO[Vector[RTag]] = {
     val ti = RTagItem.as("i")
-    val t  = RTag.as("t")
+    val t = RTag.as("t")
     val sql =
       Select(
         select(t.all),
@@ -114,7 +121,7 @@ object RTag {
 
   def findAllByNameOrId(
       nameOrIds: List[String],
-      coll: Ident
+      coll: CollectiveId
   ): ConnectionIO[Vector[RTag]] = {
     val idList =
       NonEmptyList.fromList(nameOrIds.flatMap(s => Ident.fromString(s).toOption))
@@ -135,7 +142,10 @@ object RTag {
     }
   }
 
-  def findOthers(coll: Ident, excludeTags: List[Ident]): ConnectionIO[List[RTag]] = {
+  def findOthers(
+      coll: CollectiveId,
+      excludeTags: List[Ident]
+  ): ConnectionIO[List[RTag]] = {
     val excl =
       NonEmptyList
         .fromList(excludeTags)
@@ -148,13 +158,32 @@ object RTag {
     ).orderBy(T.name.asc).build.query[RTag].to[List]
   }
 
-  def listCategories(coll: Ident): ConnectionIO[List[String]] =
+  def listCategories(coll: CollectiveId): ConnectionIO[List[String]] =
     Select(
       T.category.s,
       from(T),
       T.cid === coll && T.category.isNotNull
     ).distinct.build.query[String].to[List]
 
-  def delete(tagId: Ident, coll: Ident): ConnectionIO[Int] =
+  def delete(tagId: Ident, coll: CollectiveId): ConnectionIO[Int] =
     DML.delete(T, T.tid === tagId && T.cid === coll)
+
+  def sort(tags: List[RTag]): List[RTag] =
+    tags match {
+      case Nil => tags
+      case _ =>
+        val byCat = tags
+          .groupBy(_.category)
+          .view
+          .mapValues(_.sortBy(_.name))
+          .toList
+          .sortBy(_._1)
+
+        byCat match {
+          case (None, tagsByCat) :: rest =>
+            rest.flatMap(_._2) ++ tagsByCat
+          case _ =>
+            byCat.flatMap(_._2)
+        }
+    }
 }

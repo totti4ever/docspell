@@ -1,22 +1,27 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 port module Ports exposing
     ( checkSearchQueryString
-    , getUiSettings
     , initClipboard
-    , loadUiSettings
-    , onUiSettingsSaved
+    , printElement
     , receiveCheckQueryResult
+    , receiveServerEvent
+    , refreshFileView
     , removeAccount
     , setAccount
     , setUiTheme
-    , storeUiSettings
     )
 
 import Api.Model.AuthResult exposing (AuthResult)
-import Api.Model.BasicResult exposing (BasicResult)
-import Data.Flags exposing (Flags)
 import Data.QueryParseResult exposing (QueryParseResult)
-import Data.UiSettings exposing (StoredUiSettings, UiSettings)
+import Data.ServerEvent exposing (ServerEvent)
 import Data.UiTheme exposing (UiTheme)
+import Json.Decode as D
 
 
 {-| Save the result of authentication to local storage.
@@ -25,18 +30,6 @@ port setAccount : AuthResult -> Cmd msg
 
 
 port removeAccount : () -> Cmd msg
-
-
-port saveUiSettings : ( AuthResult, StoredUiSettings ) -> Cmd msg
-
-
-port receiveUiSettings : (StoredUiSettings -> msg) -> Sub msg
-
-
-port requestUiSettings : ( AuthResult, StoredUiSettings ) -> Cmd msg
-
-
-port uiSettingsSaved : (() -> msg) -> Sub msg
 
 
 port internalSetUiTheme : String -> Cmd msg
@@ -48,45 +41,34 @@ port checkSearchQueryString : String -> Cmd msg
 port receiveCheckQueryResult : (QueryParseResult -> msg) -> Sub msg
 
 
+port initClipboard : ( String, String ) -> Cmd msg
+
+
+{-| Creates a new window/tab, writes the contents of the given element
+and calls the print dialog.
+-}
+port printElement : String -> Cmd msg
+
+
+{-| Receives messages from the websocket.
+-}
+port receiveWsMessage : (D.Value -> msg) -> Sub msg
+
+
+{-| Given an ID of an element that is either EMBED or IFRAME the js will reload its src
+-}
+port refreshFileView : String -> Cmd msg
+
+
+
+--- Higher level functions based on ports
+
+
 setUiTheme : UiTheme -> Cmd msg
 setUiTheme theme =
     internalSetUiTheme (Data.UiTheme.toString theme)
 
 
-onUiSettingsSaved : msg -> Sub msg
-onUiSettingsSaved m =
-    uiSettingsSaved (\_ -> m)
-
-
-storeUiSettings : Flags -> UiSettings -> Cmd msg
-storeUiSettings flags settings =
-    case flags.account of
-        Just ar ->
-            saveUiSettings
-                ( ar
-                , Data.UiSettings.toStoredUiSettings settings
-                )
-
-        Nothing ->
-            Cmd.none
-
-
-loadUiSettings : (UiSettings -> msg) -> Sub msg
-loadUiSettings tagger =
-    receiveUiSettings (Data.UiSettings.mergeDefaults >> tagger)
-
-
-getUiSettings : Flags -> Cmd msg
-getUiSettings flags =
-    case flags.account of
-        Just ar ->
-            requestUiSettings
-                ( ar
-                , Data.UiSettings.toStoredUiSettings Data.UiSettings.defaults
-                )
-
-        Nothing ->
-            Cmd.none
-
-
-port initClipboard : ( String, String ) -> Cmd msg
+receiveServerEvent : (Result String ServerEvent -> msg) -> Sub msg
+receiveServerEvent tagger =
+    receiveWsMessage (Data.ServerEvent.decode >> tagger)

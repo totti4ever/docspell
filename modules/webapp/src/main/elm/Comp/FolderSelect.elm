@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.FolderSelect exposing
     ( Model
     , Msg
@@ -11,11 +18,12 @@ module Comp.FolderSelect exposing
     )
 
 import Api.Model.FolderStats exposing (FolderStats)
+import Comp.ExpandCollapse
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
-import Util.ExpandCollapse
+import Messages.Comp.FolderSelect exposing (Texts)
 import Util.ItemDragDrop as DD
 import Util.List
 
@@ -134,24 +142,28 @@ selectedFolder model =
 --- View2
 
 
-expandToggle : Int -> Model -> List (Html Msg)
-expandToggle max model =
-    Util.ExpandCollapse.expandToggle
-        max
-        (List.length model.all)
+expandToggle : Texts -> Int -> Model -> List (Html Msg)
+expandToggle texts max model =
+    Comp.ExpandCollapse.expandToggle
+        texts.expandCollapse
+        { max = max
+        , all = List.length model.all
+        }
         ToggleExpand
 
 
-collapseToggle : Int -> Model -> List (Html Msg)
-collapseToggle max model =
-    Util.ExpandCollapse.collapseToggle
-        max
-        (List.length model.all)
+collapseToggle : Texts -> Int -> Model -> List (Html Msg)
+collapseToggle texts max model =
+    Comp.ExpandCollapse.collapseToggle
+        texts.expandCollapse
+        { max = max
+        , all = List.length model.all
+        }
         ToggleExpand
 
 
-viewDrop2 : DD.Model -> Int -> Model -> Html Msg
-viewDrop2 dropModel constr model =
+viewDrop2 : Texts -> DD.Model -> Int -> Model -> Html Msg
+viewDrop2 texts dropModel constr model =
     let
         highlightDrop =
             DD.getDropId dropModel == Just DD.FolderRemove
@@ -169,20 +181,20 @@ viewDrop2 dropModel constr model =
             [ text "Folders"
             ]
         , div [ class "flex flex-col space-y-2 md:space-y-1" ]
-            (renderItems2 dropModel constr model)
+            (renderItems2 texts dropModel constr model)
         ]
 
 
-renderItems2 : DD.Model -> Int -> Model -> List (Html Msg)
-renderItems2 dropModel constr model =
+renderItems2 : Texts -> DD.Model -> Int -> Model -> List (Html Msg)
+renderItems2 texts dropModel constr model =
     if constr <= 0 then
         List.map (viewItem2 dropModel model) model.all
 
     else if model.expanded then
-        List.map (viewItem2 dropModel model) model.all ++ collapseToggle constr model
+        List.map (viewItem2 dropModel model) model.all ++ collapseToggle texts constr model
 
     else
-        List.map (viewItem2 dropModel model) (List.take constr model.all) ++ expandToggle constr model
+        List.map (viewItem2 dropModel model) (List.take constr model.all) ++ expandToggle texts constr model
 
 
 viewItem2 : DD.Model -> Model -> FolderStats -> Html Msg
@@ -203,10 +215,10 @@ viewItem2 dropModel model item =
     in
     a
         ([ classList
-            [ ( "bg-blue-100 dark:bg-bluegray-600", highlightDrop )
+            [ ( "bg-blue-100 dark:bg-slate-600", highlightDrop )
             ]
          , class "flex flex-row items-center"
-         , class "rounded px-1 py-1 hover:bg-blue-100 dark:hover:bg-bluegray-600"
+         , class "rounded px-1 py-1 hover:bg-blue-100 dark:hover:bg-slate-600"
          , href "#"
          , onClick (Toggle item)
          ]
@@ -225,7 +237,7 @@ numberLabel : Int -> Html msg
 numberLabel num =
     div
         [ class "bg-gray-200 border rounded-full h-6 w-6 flex items-center justify-center text-xs"
-        , class "dark:bg-bluegray-800 dark:text-bluegray-200 dark:border-bluegray-800 dark:bg-opacity-50"
+        , class "dark:bg-slate-800 dark:text-slate-200 dark:border-slate-800 dark:bg-opacity-50"
         ]
         [ text (String.fromInt num)
         ]

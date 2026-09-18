@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.CustomFieldMultiInput exposing
     ( Model
     , Msg
@@ -9,6 +16,7 @@ module Comp.CustomFieldMultiInput exposing
     , isEmpty
     , nonEmpty
     , reset
+    , setOptions
     , setValues
     , update
     , updateSearch
@@ -21,7 +29,10 @@ import Api.Model.CustomFieldList exposing (CustomFieldList)
 import Api.Model.ItemFieldValue exposing (ItemFieldValue)
 import Comp.CustomFieldInput
 import Comp.FixedDropdown
+import Comp.SimpleTextInput
 import Data.CustomFieldChange exposing (CustomFieldChange(..))
+import Data.CustomFieldOrder
+import Data.CustomFieldType
 import Data.DropdownStyle as DS
 import Data.Flags exposing (Flags)
 import Dict exposing (Dict)
@@ -108,12 +119,17 @@ init flags =
 
 initCmd : Flags -> Cmd Msg
 initCmd flags =
-    Api.getCustomFields flags "" CustomFieldResp
+    Api.getCustomFields flags "" Data.CustomFieldOrder.LabelAsc CustomFieldResp
 
 
 setValues : List ItemFieldValue -> Msg
 setValues values =
     SetValues values
+
+
+setOptions : List CustomField -> Msg
+setOptions fields =
+    CustomFieldResp (Ok (CustomFieldList fields))
 
 
 reset : Model -> Model
@@ -142,6 +158,7 @@ mkFieldSelect fields =
 type alias UpdateResult =
     { model : Model
     , cmd : Cmd Msg
+    , sub : Sub Msg
     , result : CustomFieldChange
     }
 
@@ -160,7 +177,7 @@ update1 : Bool -> Flags -> Msg -> Model -> UpdateResult
 update1 forSearch flags msg model =
     case msg of
         CreateNewField ->
-            UpdateResult model Cmd.none FieldCreateNew
+            UpdateResult model Cmd.none Sub.none FieldCreateNew
 
         CustomFieldResp (Ok list) ->
             let
@@ -170,10 +187,10 @@ update1 forSearch flags msg model =
                         , fieldSelect = mkFieldSelect (currentOptions list.items model.visibleFields)
                     }
             in
-            UpdateResult model_ Cmd.none NoFieldChange
+            UpdateResult model_ Cmd.none Sub.none NoFieldChange
 
         CustomFieldResp (Err _) ->
-            UpdateResult model Cmd.none NoFieldChange
+            UpdateResult model Cmd.none Sub.none NoFieldChange
 
         FieldSelectMsg lm ->
             let
@@ -193,15 +210,15 @@ update1 forSearch flags msg model =
             in
             case sel of
                 Just field ->
-                    update flags (ApplyField field) model
+                    update1 forSearch flags (ApplyField field) model
 
                 Nothing ->
-                    UpdateResult model_ Cmd.none NoFieldChange
+                    UpdateResult model_ Cmd.none Sub.none NoFieldChange
 
         ApplyField f ->
             let
                 ( fm, fc ) =
-                    Comp.CustomFieldInput.init f
+                    Comp.CustomFieldInput.init1 (textInputCfg forSearch) f
 
                 visible =
                     Dict.insert f.name (VisibleField f fm) model.visibleFields
@@ -217,8 +234,16 @@ update1 forSearch flags msg model =
 
                 cmd_ =
                     Cmd.map (CustomFieldInputMsg f) fc
+
+                change =
+                    case Data.CustomFieldType.fromString f.ftype of
+                        Just Data.CustomFieldType.Boolean ->
+                            FieldValueChange f (Util.CustomField.boolValue False)
+
+                        _ ->
+                            NoFieldChange
             in
-            UpdateResult model_ cmd_ NoFieldChange
+            UpdateResult model_ cmd_ Sub.none change
 
         RemoveField f ->
             let
@@ -231,7 +256,7 @@ update1 forSearch flags msg model =
                         , fieldSelect = mkFieldSelect (currentOptions model.allFields visible)
                     }
             in
-            UpdateResult model_ Cmd.none (FieldValueRemove f)
+            UpdateResult model_ Cmd.none Sub.none (FieldValueRemove f)
 
         CustomFieldInputMsg f lm ->
             let
@@ -257,6 +282,9 @@ update1 forSearch flags msg model =
                         cmd_ =
                             Cmd.map (CustomFieldInputMsg field) res.cmd
 
+                        sub_ =
+                            Sub.map (CustomFieldInputMsg field) res.sub
+
                         result =
                             case res.result of
                                 Comp.CustomFieldInput.Value str ->
@@ -269,13 +297,13 @@ update1 forSearch flags msg model =
                                     NoFieldChange
                     in
                     if res.result == Comp.CustomFieldInput.RemoveField then
-                        update flags (RemoveField field) model_
+                        update1 forSearch flags (RemoveField field) model_
 
                     else
-                        UpdateResult model_ cmd_ result
+                        UpdateResult model_ cmd_ sub_ result
 
                 Nothing ->
-                    UpdateResult model Cmd.none NoFieldChange
+                    UpdateResult model Cmd.none Sub.none NoFieldChange
 
         SetValues values ->
             let
@@ -285,7 +313,7 @@ update1 forSearch flags msg model =
                 merge fv ( dict, cmds ) =
                     let
                         ( fim, fic ) =
-                            Comp.CustomFieldInput.initWith fv
+                            Comp.CustomFieldInput.initWith1 (textInputCfg forSearch) fv
 
                         f =
                             field fv
@@ -303,7 +331,16 @@ update1 forSearch flags msg model =
                         , visibleFields = modelDict
                     }
             in
-            UpdateResult model_ (Cmd.batch cmdList) NoFieldChange
+            UpdateResult model_ (Cmd.batch cmdList) Sub.none NoFieldChange
+
+
+textInputCfg : Bool -> Comp.SimpleTextInput.Config
+textInputCfg forSearch =
+    if forSearch then
+        Comp.SimpleTextInput.onEnterOnly
+
+    else
+        Comp.SimpleTextInput.defaultConfig
 
 
 
@@ -358,7 +395,7 @@ viewMenuBar2 viewSettings model =
                 dropdown
             )
             :: (if viewSettings.showAddButton then
-                    [ addFieldLink2 viewSettings.createCustomFieldTitle "ml-1" model
+                    [ addFieldLink viewSettings.createCustomFieldTitle "ml-1" model
                     ]
 
                 else
@@ -386,8 +423,8 @@ viewCustomField2 texts viewSettings model field =
             span [] []
 
 
-addFieldLink2 : String -> String -> Model -> Html Msg
-addFieldLink2 titleStr classes _ =
+addFieldLink : String -> String -> Model -> Html Msg
+addFieldLink titleStr classes _ =
     a
         [ class classes
         , class S.secondaryButton

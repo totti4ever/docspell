@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import cats.data.NonEmptyList
@@ -14,7 +20,7 @@ import io.circe.generic.semiauto._
   */
 case class MetaProposalList private (proposals: List[MetaProposal]) {
 
-  def isEmpty: Boolean  = proposals.isEmpty
+  def isEmpty: Boolean = proposals.isEmpty
   def nonEmpty: Boolean = proposals.nonEmpty
 
   def hasResults(mt: MetaProposalType, mts: MetaProposalType*): Boolean =
@@ -85,13 +91,12 @@ object MetaProposalList {
       .getOrElse(empty)
 
   def fromMap(m: Map[MetaProposalType, MetaProposal]): MetaProposalList =
-    new MetaProposalList(m.toList.map({ case (k, v) => v.copy(proposalType = k) }))
+    new MetaProposalList(m.toList.map { case (k, v) => v.copy(proposalType = k) })
 
-  /** Flattens the given list of meta-proposals into a single list,
-    * where each meta-proposal type exists at most once. Candidates to
-    * equal proposal-types are merged together. The candidate's order
-    * is preserved and candidates of proposals are appended as given
-    * by the order of the given `seq'.
+  /** Flattens the given list of meta-proposals into a single list, where each
+    * meta-proposal type exists at most once. Candidates to equal proposal-types are
+    * merged together. The candidate's order is preserved and candidates of proposals are
+    * appended as given by the order of the given `seq'.
     */
   def flatten(ml: Seq[MetaProposalList]): MetaProposalList =
     flatten0(
@@ -110,7 +115,7 @@ object MetaProposalList {
           MetaProposal
       ) => Map[MetaProposalType, MetaProposal]
   ): MetaProposalList = {
-    val init   = Map.empty[MetaProposalType, MetaProposal]
+    val init = Map.empty[MetaProposalType, MetaProposal]
     val merged = ml.foldLeft(init)((map, el) => el.proposals.foldLeft(map)(merge))
     fromMap(merged)
   }

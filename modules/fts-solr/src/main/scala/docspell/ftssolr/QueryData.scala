@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import docspell.ftsclient.FtsQuery
@@ -20,11 +26,11 @@ final case class QueryData(
   def withHighLight(fields: List[Field], pre: String, post: String): QueryData =
     copy(params =
       params ++ Map(
-        "hl"                   -> "on",
+        "hl" -> "on",
         "hl.requireFieldMatch" -> "true",
-        "hl.fl"                -> fields.map(_.name).mkString(","),
-        "hl.simple.pre"        -> pre,
-        "hl.simple.post"       -> post
+        "hl.fl" -> fields.map(_.name).mkString(","),
+        "hl.simple.pre" -> pre,
+        "hl.simple.post" -> post
       )
     )
 }
@@ -40,12 +46,12 @@ object QueryData {
       fields: List[Field],
       fq: FtsQuery
   ): QueryData = {
-    val q       = sanitize(fq.q)
-    val extQ    = search.map(f => s"${f.name}:($q)").mkString(" OR ")
-    val items   = fq.items.map(_.id).mkString(" ")
+    val q = sanitize(fq.q)
+    val extQ = search.map(f => s"${f.name}:($q)").mkString(" OR ")
+    val items = fq.items.map(_.id).mkString(" ")
     val folders = fq.folders.map(_.id).mkString(" ")
     val filterQ = List(
-      s"""${Field.collectiveId.name}:"${fq.collective.id}"""",
+      s"""${Field.collectiveId.name}:"${fq.collective.value}"""",
       fq.items match {
         case s if s.isEmpty =>
           ""

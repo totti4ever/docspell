@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import java.time.Instant
@@ -33,7 +39,7 @@ object JvmInfo {
     MemoryUsage.createHeap[F].flatMap { mu =>
       Sync[F].delay {
         val rmb = management.ManagementFactory.getRuntimeMXBean()
-        val rt  = Runtime.getRuntime()
+        val rt = Runtime.getRuntime()
         JvmInfo(
           id,
           pidHost = rmb.getName(),
@@ -78,7 +84,7 @@ object JvmInfo {
 
     def createHeap[F[_]: Sync]: F[MemoryUsage] =
       Sync[F].delay {
-        val mxb  = management.ManagementFactory.getMemoryMXBean()
+        val mxb = management.ManagementFactory.getMemoryMXBean()
         val heap = mxb.getHeapMemoryUsage()
         MemoryUsage(
           init = math.max(0, heap.getInit()),

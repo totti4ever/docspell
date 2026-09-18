@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.{NonEmptyList, OptionT}
@@ -55,7 +61,7 @@ object RUserEmail {
   ): F[RUserEmail] =
     for {
       now <- Timestamp.current[F]
-      id  <- Ident.randomId[F]
+      id <- Ident.randomId[F]
     } yield RUserEmail(
       id,
       uid,
@@ -71,8 +77,8 @@ object RUserEmail {
       now
     )
 
-  def fromAccount(
-      accId: AccountId,
+  def fromUser(
+      userId: Ident,
       name: Ident,
       smtpHost: String,
       smtpPort: Option[Int],
@@ -84,12 +90,11 @@ object RUserEmail {
       mailReplyTo: Option[MailAddress]
   ): OptionT[ConnectionIO, RUserEmail] =
     for {
-      now  <- OptionT.liftF(Timestamp.current[ConnectionIO])
-      id   <- OptionT.liftF(Ident.randomId[ConnectionIO])
-      user <- OptionT(RUser.findByAccount(accId))
+      now <- OptionT.liftF(Timestamp.current[ConnectionIO])
+      id <- OptionT.liftF(Ident.randomId[ConnectionIO])
     } yield RUserEmail(
       id,
-      user.uid,
+      userId,
       name,
       smtpHost,
       smtpPort,
@@ -105,18 +110,18 @@ object RUserEmail {
 
     val tableName = "useremail"
 
-    val id            = Column[Ident]("id", this)
-    val uid           = Column[Ident]("uid", this)
-    val name          = Column[Ident]("name", this)
-    val smtpHost      = Column[String]("smtp_host", this)
-    val smtpPort      = Column[Int]("smtp_port", this)
-    val smtpUser      = Column[String]("smtp_user", this)
-    val smtpPass      = Column[Password]("smtp_password", this)
-    val smtpSsl       = Column[SSLType]("smtp_ssl", this)
+    val id = Column[Ident]("id", this)
+    val uid = Column[Ident]("uid", this)
+    val name = Column[Ident]("name", this)
+    val smtpHost = Column[String]("smtp_host", this)
+    val smtpPort = Column[Int]("smtp_port", this)
+    val smtpUser = Column[String]("smtp_user", this)
+    val smtpPass = Column[Password]("smtp_password", this)
+    val smtpSsl = Column[SSLType]("smtp_ssl", this)
     val smtpCertCheck = Column[Boolean]("smtp_certcheck", this)
-    val mailFrom      = Column[MailAddress]("mail_from", this)
-    val mailReplyTo   = Column[MailAddress]("mail_replyto", this)
-    val created       = Column[Timestamp]("created", this)
+    val mailFrom = Column[MailAddress]("mail_from", this)
+    val mailReplyTo = Column[MailAddress]("mail_replyto", this)
+    val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](
       id,
@@ -171,11 +176,10 @@ object RUserEmail {
   }
 
   private def findByAccount0(
-      accId: AccountId,
+      userId: Ident,
       nameQ: Option[String],
       exact: Boolean
   ): Query0[RUserEmail] = {
-    val user  = RUser.as("u")
     val email = as("m")
 
     val nameFilter = nameQ.map(s =>
@@ -184,37 +188,31 @@ object RUserEmail {
 
     val sql = Select(
       select(email.all),
-      from(email).innerJoin(user, email.uid === user.uid),
-      user.cid === accId.collective && user.login === accId.user &&? nameFilter
+      from(email),
+      email.uid === userId &&? nameFilter
     ).orderBy(email.name)
 
     sql.build.query[RUserEmail]
   }
 
   def findByAccount(
-      accId: AccountId,
+      userId: Ident,
       nameQ: Option[String]
   ): ConnectionIO[Vector[RUserEmail]] =
-    findByAccount0(accId, nameQ, false).to[Vector]
+    findByAccount0(userId, nameQ, exact = false).to[Vector]
 
-  def getByName(accId: AccountId, name: Ident): ConnectionIO[Option[RUserEmail]] =
-    findByAccount0(accId, Some(name.id), true).option
+  def getByName(userId: Ident, name: Ident): ConnectionIO[Option[RUserEmail]] =
+    findByAccount0(userId, Some(name.id), exact = true).option
 
-  def delete(accId: AccountId, connName: Ident): ConnectionIO[Int] = {
-    val user = RUser.as("u")
-
-    val subsel = Select(
-      select(user.uid),
-      from(user),
-      user.cid === accId.collective && user.login === accId.user
-    )
-
+  def getById(id: Ident): ConnectionIO[Option[RUserEmail]] = {
     val t = Table(None)
-    DML.delete(t, t.uid.in(subsel) && t.name === connName)
+    run(select(t.all), from(t), t.id === id).query[RUserEmail].option
   }
 
-  def exists(accId: AccountId, name: Ident): ConnectionIO[Boolean] =
-    getByName(accId, name).map(_.isDefined)
+  def delete(userId: Ident, connName: Ident): ConnectionIO[Int] = {
+    val t = Table(None)
+    DML.delete(t, t.uid === userId && t.name === connName)
+  }
 
   def exists(userId: Ident, connName: Ident): ConnectionIO[Boolean] = {
     val t = Table(None)

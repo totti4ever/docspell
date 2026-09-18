@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.effect._
@@ -14,14 +20,14 @@ import org.http4s.dsl.Http4sDsl
 
 object CalEventCheckRoutes {
 
-  def apply[F[_]: Effect](): HttpRoutes[F] = {
+  def apply[F[_]: Async](): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F] {}
     import dsl._
 
     HttpRoutes.of { case req @ POST -> Root =>
       for {
         data <- req.as[CalEventCheck]
-        res  <- testEvent(data.event)
+        res <- testEvent(data.event)
         resp <- Ok(res)
       } yield resp
     }
@@ -34,9 +40,9 @@ object CalEventCheckRoutes {
           val next = ev
             .nextElapses(now.toUtcDateTime, 2)
             .map(Timestamp.atUtc)
-          CalEventCheckResult(true, "Valid.", ev.some, next)
+          CalEventCheckResult(success = true, "Valid.", ev.some, next)
         case Left(err) =>
-          CalEventCheckResult(false, err, None, Nil)
+          CalEventCheckResult(success = false, err, None, Nil)
       }
     }
 }

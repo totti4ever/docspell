@@ -1,41 +1,58 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.impl
 
-import cats.effect.Effect
+import javax.sql.DataSource
+
+import cats.arrow.FunctionK
+import cats.effect.Async
 import cats.implicits._
+import cats.~>
+import fs2.io.file.Files
 
-import docspell.common.Ident
+import docspell.store._
+import docspell.store.file.{FileRepository, FileRepositoryConfig}
 import docspell.store.migrate.FlywayMigrate
-import docspell.store.{AddResult, JdbcConfig, Store}
 
-import bitpeace.{Bitpeace, BitpeaceConfig, TikaMimetypeDetect}
 import doobie._
 import doobie.implicits._
 
-final class StoreImpl[F[_]: Effect](jdbc: JdbcConfig, xa: Transactor[F])
-    extends Store[F] {
-  val bitpeaceCfg =
-    BitpeaceConfig(
-      "filemeta",
-      "filechunk",
-      TikaMimetypeDetect,
-      Ident.randomId[F].map(_.id)
-    )
+final class StoreImpl[F[_]: Async: Files](
+    val fileRepo: FileRepository[F],
+    jdbc: JdbcConfig,
+    schemaCfg: SchemaMigrateConfig,
+    ds: DataSource,
+    val transactor: Transactor[F]
+) extends Store[F] {
+  private[this] val xa = transactor
+
+  val dbms: Db = jdbc.dbms
+
+  def createFileRepository(
+      cfg: FileRepositoryConfig,
+      withAttributeStore: Boolean
+  ): FileRepository[F] =
+    FileRepository(xa, ds, cfg, withAttributeStore)
+
+  def transform: ConnectionIO ~> F =
+    FunctionK.lift(transact)
 
   def migrate: F[Int] =
-    FlywayMigrate.run[F](jdbc).map(_.migrationsExecuted)
+    FlywayMigrate[F](jdbc, schemaCfg, xa).run.map(_.migrationsExecuted)
 
-  def transact[A](prg: doobie.ConnectionIO[A]): F[A] =
+  def transact[A](prg: ConnectionIO[A]): F[A] =
     prg.transact(xa)
 
-  def transact[A](prg: fs2.Stream[doobie.ConnectionIO, A]): fs2.Stream[F, A] =
+  def transact[A](prg: fs2.Stream[ConnectionIO, A]): fs2.Stream[F, A] =
     prg.transact(xa)
-
-  def bitpeace: Bitpeace[F] =
-    Bitpeace(bitpeaceCfg, xa)
 
   def add(insert: ConnectionIO[Int], exists: ConnectionIO[Boolean]): F[AddResult] =
     for {
-      save  <- transact(insert).attempt
+      save <- transact(insert).attempt
       exist <- save.swap.traverse(ex => transact(exists).map(b => (ex, b)))
     } yield exist.swap match {
       case Right(_) => AddResult.Success

@@ -1,4 +1,16 @@
-module Messages.Comp.EquipmentForm exposing (Texts, gb)
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
+module Messages.Comp.EquipmentForm exposing
+    ( Texts
+    , de
+    , fr
+    , gb
+    )
 
 import Data.EquipmentUse exposing (EquipmentUse)
 import Messages.Basics
@@ -22,5 +34,27 @@ gb =
     , useAsConcerning = "Use as concerning equipment"
     , useNotSuggestions = "Do not use for suggestions."
     , equipmentUseLabel = Messages.Data.EquipmentUse.gb
+    , notes = "Notes"
+    }
+
+
+de : Texts
+de =
+    { basics = Messages.Basics.de
+    , use = "Art"
+    , useAsConcerning = "Als betreffende Ausstattung verwenden"
+    , useNotSuggestions = "Nicht für Vorschläge verwenden"
+    , equipmentUseLabel = Messages.Data.EquipmentUse.de
+    , notes = "Notizen"
+    }
+
+
+fr : Texts
+fr =
+    { basics = Messages.Basics.fr
+    , use = "Rôle"
+    , useAsConcerning = "Equipement concerné"
+    , useNotSuggestions = "Ignorer dans les suggestions."
+    , equipmentUseLabel = Messages.Data.EquipmentUse.fr
     , notes = "Notes"
     }

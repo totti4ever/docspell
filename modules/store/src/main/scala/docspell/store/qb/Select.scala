@@ -1,24 +1,31 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import cats.data.{NonEmptyList => Nel}
+import cats.syntax.option._
 
 import docspell.store.qb.impl.SelectBuilder
 
 import doobie._
 
-/** A sql select statement that allows to change certain parts of the query.
-  */
+/** A sql select statement that allows to change certain parts of the query. */
 sealed trait Select {
 
-  /** Builds the sql select statement into a doobie fragment.
-    */
+  /** Builds the sql select statement into a doobie fragment. */
   def build: Fragment =
     SelectBuilder(this)
 
-  /** When using this as a sub-select, an alias is required.
-    */
+  /** When using this as a sub-select, an alias is required. */
   def as(alias: String): SelectExpr.SelectQuery =
     SelectExpr.SelectQuery(this, Some(alias))
+
+  def asSubSelect: SelectExpr.SelectQuery =
+    SelectExpr.SelectQuery(this, None)
 
   /** Adds one or more order-by definitions */
   def orderBy(ob: OrderBy, obs: OrderBy*): Select
@@ -68,35 +75,44 @@ sealed trait Select {
 }
 
 object Select {
+  def apply(projection: SelectExpr) =
+    SimpleSelect(distinctFlag = false, Nel.of(projection), None, Condition.unit, None)
+
   def apply(projection: Nel[SelectExpr], from: FromExpr) =
-    SimpleSelect(false, projection, from, Condition.unit, None)
+    SimpleSelect(distinctFlag = false, projection, from.some, Condition.unit, None)
 
   def apply(projection: SelectExpr, from: FromExpr) =
-    SimpleSelect(false, Nel.of(projection), from, Condition.unit, None)
+    SimpleSelect(
+      distinctFlag = false,
+      Nel.of(projection),
+      from.some,
+      Condition.unit,
+      None
+    )
 
   def apply(
       projection: Nel[SelectExpr],
       from: FromExpr,
       where: Condition
-  ) = SimpleSelect(false, projection, from, where, None)
+  ) = SimpleSelect(distinctFlag = false, projection, from.some, where, None)
 
   def apply(
       projection: SelectExpr,
       from: FromExpr,
       where: Condition
-  ) = SimpleSelect(false, Nel.of(projection), from, where, None)
+  ) = SimpleSelect(distinctFlag = false, Nel.of(projection), from.some, where, None)
 
   def apply(
       projection: Nel[SelectExpr],
       from: FromExpr,
       where: Condition,
       groupBy: GroupBy
-  ) = SimpleSelect(false, projection, from, where, Some(groupBy))
+  ) = SimpleSelect(distinctFlag = false, projection, from.some, where, Some(groupBy))
 
   case class SimpleSelect(
       distinctFlag: Boolean,
       projection: Nel[SelectExpr],
-      from: FromExpr,
+      from: Option[FromExpr],
       where: Condition,
       groupBy: Option[GroupBy]
   ) extends Select {
@@ -122,13 +138,16 @@ object Select {
       copy(projection = es)
 
     def changeFrom(f: FromExpr => FromExpr): SimpleSelect =
-      copy(from = f(from))
+      copy(from = from.map(f))
 
     def changeWhere(f: Condition => Condition): SimpleSelect =
       copy(where = f(where))
 
     def orderBy(ob: OrderBy, obs: OrderBy*): Ordered =
       Ordered(this, ob, obs.toVector)
+
+    def orderBy(ob: Nel[OrderBy]): Ordered =
+      Ordered(this, ob.head, ob.tail.toVector)
   }
 
   case class RawSelect(fragment: Fragment) extends Select {

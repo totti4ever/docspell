@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.queries
 
 object QueryWildcard {
@@ -25,5 +31,5 @@ object QueryWildcard {
 
   def addAtEnd(s: String): String =
     if (s.endsWith("*")) atEnd(s)
-    else s"${s}%"
+    else s"$s%"
 }

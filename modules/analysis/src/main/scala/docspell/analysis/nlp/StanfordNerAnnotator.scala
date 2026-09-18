@@ -1,29 +1,31 @@
-package docspell.analysis.nlp
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
-import java.nio.file.Path
+package docspell.analysis.nlp
 
 import scala.jdk.CollectionConverters._
 
 import cats.effect._
+import fs2.io.file.Path
 
 import docspell.common._
 
 import edu.stanford.nlp.pipeline.{CoreDocument, StanfordCoreNLP}
-import org.log4s.getLogger
 
 object StanfordNerAnnotator {
-  private[this] val logger = getLogger
+  private[this] val logger = docspell.logging.unsafeLogger
 
   /** Runs named entity recognition on the given `text`.
     *
     * This uses the classifier pipeline from stanford-nlp, see
-    * https://nlp.stanford.edu/software/CRF-NER.html. Creating these
-    * classifiers is quite expensive, it involves loading large model
-    * files. The classifiers are thread-safe and so they are cached.
-    * The `cacheKey` defines the "slot" where classifiers are stored
-    * and retrieved. If for a given `cacheKey` the `settings` change,
-    * a new classifier must be created. It will then replace the
-    * previous one.
+    * https://nlp.stanford.edu/software/CRF-NER.html. Creating these classifiers is quite
+    * expensive, it involves loading large model files. The classifiers are thread-safe
+    * and so they are cached. The `cacheKey` defines the "slot" where classifiers are
+    * stored and retrieved. If for a given `cacheKey` the `settings` change, a new
+    * classifier must be created. It will then replace the previous one.
     */
   def nerAnnotate(nerClassifier: StanfordCoreNLP, text: String): Vector[NerLabel] = {
     val doc = new CoreDocument(text)

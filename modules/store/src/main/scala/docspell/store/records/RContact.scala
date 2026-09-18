@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -24,12 +30,12 @@ object RContact {
     val tableName = "contact"
 
     val contactId = Column[Ident]("contactid", this)
-    val value     = Column[String]("value", this)
-    val kind      = Column[ContactKind]("kind", this)
-    val personId  = Column[Ident]("pid", this)
-    val orgId     = Column[Ident]("oid", this)
-    val created   = Column[Timestamp]("created", this)
-    val all       = NonEmptyList.of[Column[_]](contactId, value, kind, personId, orgId, created)
+    val value = Column[String]("value_", this)
+    val kind = Column[ContactKind]("kind", this)
+    val personId = Column[Ident]("pid", this)
+    val orgId = Column[Ident]("oid", this)
+    val created = Column[Timestamp]("created", this)
+    val all = NonEmptyList.of[Column[_]](contactId, value, kind, personId, orgId, created)
   }
 
   private val T = Table(None)

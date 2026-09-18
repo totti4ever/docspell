@@ -1,12 +1,25 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.SearchMenu exposing
     ( Model
     , Msg(..)
     , NextState
+    , SearchTab(..)
     , TextSearchModel
     , getItemQuery
     , init
+    , initFromStats
     , isFulltextSearch
     , isNamesSearch
+    , linkTargetMsg
+    , refreshBookmarks
+    , setFromStats
+    , setIncludeSelection
     , textSearchString
     , update
     , updateDrop
@@ -19,34 +32,42 @@ import Api.Model.EquipmentList exposing (EquipmentList)
 import Api.Model.FolderStats exposing (FolderStats)
 import Api.Model.IdName exposing (IdName)
 import Api.Model.ItemFieldValue exposing (ItemFieldValue)
-import Api.Model.ItemQuery exposing (ItemQuery)
+import Api.Model.ItemQuery as RQ
 import Api.Model.PersonList exposing (PersonList)
 import Api.Model.ReferenceList exposing (ReferenceList)
 import Api.Model.SearchStats exposing (SearchStats)
+import Comp.BookmarkChooser
 import Comp.CustomFieldMultiInput
 import Comp.DatePicker
 import Comp.Dropdown exposing (isDropdownChangeMsg)
 import Comp.FolderSelect
+import Comp.LinkTarget exposing (LinkTarget)
 import Comp.MenuBar as MB
 import Comp.Tabs
 import Comp.TagSelect
+import Data.Bookmarks exposing (AllBookmarks)
 import Data.CustomFieldChange exposing (CustomFieldValueCollect)
 import Data.Direction exposing (Direction)
 import Data.DropdownStyle as DS
+import Data.EquipmentOrder
 import Data.EquipmentUse
 import Data.Fields
 import Data.Flags exposing (Flags)
+import Data.ItemIds exposing (ItemIdChange, ItemIds)
 import Data.ItemQuery as Q exposing (ItemQuery)
+import Data.PersonOrder
 import Data.PersonUse
+import Data.SearchMode exposing (SearchMode)
 import Data.UiSettings exposing (UiSettings)
 import DatePicker exposing (DatePicker)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onInput)
 import Http
 import Messages.Comp.SearchMenu exposing (Texts)
 import Set exposing (Set)
 import Styles as S
+import Util.CustomField
 import Util.Html exposing (KeyCode(..))
 import Util.ItemDragDrop as DD
 import Util.Maybe
@@ -81,7 +102,12 @@ type alias Model =
     , customFieldModel : Comp.CustomFieldMultiInput.Model
     , customValues : CustomFieldValueCollect
     , sourceModel : Maybe String
+    , allBookmarks : Comp.BookmarkChooser.Model
+    , selectedBookmarks : Comp.BookmarkChooser.Selection
+    , selectedItems : List String
+    , includeSelection : Bool
     , openTabs : Set String
+    , searchMode : SearchMode
     }
 
 
@@ -90,9 +116,20 @@ type TextSearchModel
     | Names (Maybe String)
 
 
+tagsStatsQuery : RQ.ItemQuery
+tagsStatsQuery =
+    { offset = Nothing
+    , limit = Nothing
+    , withDetails = Nothing
+    , searchMode = Nothing
+    , query = ""
+    , statsProfile = Just "general"
+    }
+
+
 init : Flags -> Model
 init flags =
-    { tagSelectModel = Comp.TagSelect.init [] [] [] []
+    { tagSelectModel = Comp.TagSelect.init [] []
     , tagSelection = Comp.TagSelect.emptySelection
     , directionModel =
         Comp.Dropdown.makeSingleList
@@ -125,7 +162,12 @@ init flags =
     , customFieldModel = Comp.CustomFieldMultiInput.initWith []
     , customValues = Data.CustomFieldChange.emptyCollect
     , sourceModel = Nothing
+    , allBookmarks = Comp.BookmarkChooser.init Data.Bookmarks.empty
+    , selectedBookmarks = Comp.BookmarkChooser.emptySelection
+    , selectedItems = []
+    , includeSelection = False
     , openTabs = Set.fromList [ "Tags", "Inbox" ]
+    , searchMode = Data.SearchMode.Normal
     }
 
 
@@ -197,8 +239,8 @@ isNamesSearch model =
             True
 
 
-getItemQuery : Model -> Maybe ItemQuery
-getItemQuery model =
+getItemQuery : ItemIds -> Model -> Maybe ItemQuery
+getItemQuery selectedItems model =
     let
         when flag body =
             if flag then
@@ -226,16 +268,25 @@ getItemQuery model =
 
         textSearch =
             textSearchValue model.textSearchModel
+
+        bookmarks =
+            List.map .query (Comp.BookmarkChooser.getQueries model.allBookmarks model.selectedBookmarks)
+                |> List.map Q.Fragment
     in
     Q.and
         [ when model.inboxCheckbox (Q.Inbox True)
-        , whenNotEmpty (model.tagSelection.includeTags |> List.map (.tag >> .id))
+        , if model.includeSelection then
+            Data.ItemIds.toQuery selectedItems
+
+          else
+            Nothing
+        , whenNotEmpty (model.tagSelection.includeTags |> Set.toList)
             (Q.TagIds Q.AllMatch)
-        , whenNotEmpty (model.tagSelection.excludeTags |> List.map (.tag >> .id))
+        , whenNotEmpty (model.tagSelection.excludeTags |> Set.toList)
             (\ids -> Q.Not (Q.TagIds Q.AnyMatch ids))
-        , whenNotEmpty (model.tagSelection.includeCats |> List.map .name)
+        , whenNotEmpty (model.tagSelection.includeCats |> Set.toList)
             (Q.CatNames Q.AllMatch)
-        , whenNotEmpty (model.tagSelection.excludeCats |> List.map .name)
+        , whenNotEmpty (model.tagSelection.excludeCats |> Set.toList)
             (\ids -> Q.Not <| Q.CatNames Q.AnyMatch ids)
         , model.selectedFolder |> Maybe.map .id |> Maybe.map (Q.FolderId Q.Eq)
         , Comp.Dropdown.getSelected model.orgModel
@@ -272,6 +323,8 @@ getItemQuery model =
             |> Maybe.map Q.Dir
         , textSearch.fullText
             |> Maybe.map Q.Contents
+        , whenNotEmpty bookmarks Q.And
+        , whenNotEmpty model.selectedItems Q.ItemIdIn
         ]
 
 
@@ -316,6 +369,10 @@ resetModel model =
                 model.customFieldModel
         , customValues = Data.CustomFieldChange.emptyCollect
         , sourceModel = Nothing
+        , selectedBookmarks = Comp.BookmarkChooser.emptySelection
+        , selectedItems = []
+        , includeSelection = False
+        , searchMode = Data.SearchMode.Normal
     }
 
 
@@ -336,6 +393,7 @@ type Msg
     | FromDueDateMsg Comp.DatePicker.Msg
     | UntilDueDateMsg Comp.DatePicker.Msg
     | ToggleInbox
+    | ToggleSearchMode
     | GetOrgResp (Result Http.Error ReferenceList)
     | GetEquipResp (Result Http.Error EquipmentList)
     | GetPersonResp (Result Http.Error PersonList)
@@ -353,6 +411,8 @@ type Msg
     | SetConcEquip IdName
     | SetFolder IdName
     | SetTag String
+    | SetBookmark String
+    | SetSelectedItems (List String)
     | SetCustomField ItemFieldValue
     | CustomFieldMsg Comp.CustomFieldMultiInput.Msg
     | SetSource String
@@ -361,14 +421,77 @@ type Msg
     | GetAllTagsResp (Result Http.Error SearchStats)
     | ToggleAkkordionTab String
     | ToggleOpenAllAkkordionTabs
+    | AllBookmarksResp (Result Http.Error AllBookmarks)
+    | SelectBookmarkMsg Comp.BookmarkChooser.Msg
+    | SetIncludeSelection Bool
+    | ClearSelection
+
+
+setFromStats : SearchStats -> Msg
+setFromStats stats =
+    GetStatsResp (Ok stats)
+
+
+initFromStats : SearchStats -> Msg
+initFromStats stats =
+    GetAllTagsResp (Ok stats)
+
+
+setIncludeSelection : Bool -> Msg
+setIncludeSelection flag =
+    SetIncludeSelection flag
+
+
+linkTargetMsg : LinkTarget -> Maybe Msg
+linkTargetMsg linkTarget =
+    case linkTarget of
+        Comp.LinkTarget.LinkNone ->
+            Nothing
+
+        Comp.LinkTarget.LinkCorrOrg id ->
+            Just <| SetCorrOrg id
+
+        Comp.LinkTarget.LinkCorrPerson id ->
+            Just <| SetCorrPerson id
+
+        Comp.LinkTarget.LinkConcPerson id ->
+            Just <| SetConcPerson id
+
+        Comp.LinkTarget.LinkConcEquip id ->
+            Just <| SetConcEquip id
+
+        Comp.LinkTarget.LinkFolder id ->
+            Just <| SetFolder id
+
+        Comp.LinkTarget.LinkTag id ->
+            Just <| SetTag id.id
+
+        Comp.LinkTarget.LinkCustomField id ->
+            Just <| SetCustomField id
+
+        Comp.LinkTarget.LinkSource str ->
+            Just <| ResetToSource str
+
+        Comp.LinkTarget.LinkBookmark id ->
+            Just <| SetBookmark id
+
+        Comp.LinkTarget.LinkRelatedItems ids ->
+            Just <| SetSelectedItems ids
 
 
 type alias NextState =
     { model : Model
     , cmd : Cmd Msg
+    , sub : Sub Msg
     , stateChange : Bool
     , dragDrop : DD.DragDropData
+    , selectionChange : ItemIdChange
     }
+
+
+refreshBookmarks : Flags -> Cmd Msg
+refreshBookmarks flags =
+    Api.getBookmarks flags AllBookmarksResp
 
 
 update : Flags -> UiSettings -> Msg -> Model -> NextState
@@ -394,8 +517,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = set.model
             , cmd = set.cmd
+            , sub = Sub.none
             , stateChange = True
             , dragDrop = set.dragDrop
+            , selectionChange = Data.ItemIds.noChange
             }
     in
     case msg of
@@ -427,22 +552,27 @@ updateDrop ddm flags settings msg model =
             { model = mdp
             , cmd =
                 Cmd.batch
-                    [ Api.itemSearchStats flags Api.Model.ItemQuery.empty GetAllTagsResp
+                    [ Api.itemSearchStatsGeneral flags tagsStatsQuery GetAllTagsResp
                     , Api.getOrgLight flags GetOrgResp
-                    , Api.getEquipments flags "" GetEquipResp
-                    , Api.getPersons flags "" GetPersonResp
+                    , Api.getEquipments flags "" Data.EquipmentOrder.NameAsc GetEquipResp
+                    , Api.getPersons flags "" Data.PersonOrder.NameAsc GetPersonResp
                     , Cmd.map CustomFieldMsg (Comp.CustomFieldMultiInput.initCmd flags)
                     , cdp
+                    , Api.getBookmarks flags AllBookmarksResp
                     ]
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         ResetForm ->
             { model = resetModel model
-            , cmd = Api.itemSearchStats flags Api.Model.ItemQuery.empty GetAllTagsResp
+            , cmd = Api.itemSearchStatsGeneral flags tagsStatsQuery GetAllTagsResp
+            , sub = Sub.none
             , stateChange = True
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         SetCorrOrg id ->
@@ -462,8 +592,10 @@ updateDrop ddm flags settings msg model =
                 Nothing ->
                     { model = model
                     , cmd = Cmd.none
+                    , sub = Sub.none
                     , stateChange = False
                     , dragDrop = DD.DragDropData ddm Nothing
+                    , selectionChange = Data.ItemIds.noChange
                     }
 
         SetConcEquip id ->
@@ -480,24 +612,59 @@ updateDrop ddm flags settings msg model =
         SetTag id ->
             resetAndSet (TagSelectMsg (Comp.TagSelect.toggleTag id))
 
+        SetBookmark id ->
+            let
+                nextModel =
+                    resetModel model
+
+                sel =
+                    { bookmarks = Set.singleton id
+                    , shares = Set.empty
+                    }
+            in
+            { model = { nextModel | selectedBookmarks = sel }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = sel /= model.selectedBookmarks
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        SetSelectedItems ids ->
+            let
+                nextModel =
+                    resetModel model
+            in
+            { model = { nextModel | selectedItems = ids }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = ids /= model.selectedItems
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
         GetAllTagsResp (Ok stats) ->
             let
                 tagSel =
-                    Comp.TagSelect.modifyAll stats.tagCloud.items
+                    Comp.TagSelect.initAll stats.tagCloud.items
                         stats.tagCategoryCloud.items
                         model.tagSelectModel
             in
             { model = { model | tagSelectModel = tagSel }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         GetAllTagsResp (Err _) ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         GetStatsResp (Ok stats) ->
@@ -509,7 +676,43 @@ updateDrop ddm flags settings msg model =
                     List.sortBy .count stats.tagCategoryCloud.items
 
                 selectModel =
-                    Comp.TagSelect.modifyCount model.tagSelectModel tagCount catCount
+                    Comp.TagSelect.initCounts tagCount catCount model.tagSelectModel
+
+                orgOpts =
+                    Comp.Dropdown.update (Comp.Dropdown.SetOptions (List.map .ref stats.corrOrgStats))
+                        model.orgModel
+                        |> Tuple.first
+
+                corrPersOpts =
+                    Comp.Dropdown.update (Comp.Dropdown.SetOptions (List.map .ref stats.corrPersStats))
+                        model.corrPersonModel
+                        |> Tuple.first
+
+                concPersOpts =
+                    Comp.Dropdown.update (Comp.Dropdown.SetOptions (List.map .ref stats.concPersStats))
+                        model.concPersonModel
+                        |> Tuple.first
+
+                concEquipOpts =
+                    let
+                        mkEquip ref =
+                            Equipment ref.id ref.name 0 Nothing ""
+                    in
+                    Comp.Dropdown.update
+                        (Comp.Dropdown.SetOptions
+                            (List.map (.ref >> mkEquip) stats.concEquipStats)
+                        )
+                        model.concEquipmentModel
+                        |> Tuple.first
+
+                fields =
+                    Util.CustomField.statsToFields stats
+
+                fieldOpts =
+                    Comp.CustomFieldMultiInput.updateSearch flags
+                        (Comp.CustomFieldMultiInput.setOptions fields)
+                        model.customFieldModel
+                        |> .model
 
                 model_ =
                     { model
@@ -518,19 +721,28 @@ updateDrop ddm flags settings msg model =
                             Comp.FolderSelect.modify model.selectedFolder
                                 model.folderList
                                 stats.folderStats
+                        , orgModel = orgOpts
+                        , corrPersonModel = corrPersOpts
+                        , concPersonModel = concPersOpts
+                        , concEquipmentModel = concEquipOpts
+                        , customFieldModel = fieldOpts
                     }
             in
             { model = model_
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         GetStatsResp (Err _) ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         GetEquipResp (Ok equips) ->
@@ -543,8 +755,10 @@ updateDrop ddm flags settings msg model =
         GetEquipResp (Err _) ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         GetOrgResp (Ok orgs) ->
@@ -557,8 +771,10 @@ updateDrop ddm flags settings msg model =
         GetOrgResp (Err _) ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         GetPersonResp (Ok ps) ->
@@ -591,14 +807,16 @@ updateDrop ddm flags settings msg model =
         GetPersonResp (Err _) ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         TagSelectMsg m ->
             let
                 ( m_, sel, ddd ) =
-                    Comp.TagSelect.updateDrop ddm model.tagSelection m model.tagSelectModel
+                    Comp.TagSelect.update ddm model.tagSelection m model.tagSelectModel
             in
             { model =
                 { model
@@ -606,8 +824,10 @@ updateDrop ddm flags settings msg model =
                     , tagSelection = sel
                 }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = sel /= model.tagSelection
             , dragDrop = ddd
+            , selectionChange = Data.ItemIds.noChange
             }
 
         DirectionMsg m ->
@@ -617,8 +837,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | directionModel = m2 }
             , cmd = Cmd.map DirectionMsg c2
+            , sub = Sub.none
             , stateChange = isDropdownChangeMsg m
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         OrgMsg m ->
@@ -628,8 +850,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | orgModel = m2 }
             , cmd = Cmd.map OrgMsg c2
+            , sub = Sub.none
             , stateChange = isDropdownChangeMsg m
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         CorrPersonMsg m ->
@@ -639,8 +863,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | corrPersonModel = m2 }
             , cmd = Cmd.map CorrPersonMsg c2
+            , sub = Sub.none
             , stateChange = isDropdownChangeMsg m
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         ConcPersonMsg m ->
@@ -650,8 +876,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | concPersonModel = m2 }
             , cmd = Cmd.map ConcPersonMsg c2
+            , sub = Sub.none
             , stateChange = isDropdownChangeMsg m
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         ConcEquipmentMsg m ->
@@ -661,8 +889,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | concEquipmentModel = m2 }
             , cmd = Cmd.map ConcEquipmentMsg c2
+            , sub = Sub.none
             , stateChange = isDropdownChangeMsg m
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         ToggleInbox ->
@@ -672,8 +902,30 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | inboxCheckbox = not current }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = True
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        ToggleSearchMode ->
+            let
+                current =
+                    model.searchMode
+
+                next =
+                    if current == Data.SearchMode.Normal then
+                        Data.SearchMode.Trashed
+
+                    else
+                        Data.SearchMode.Normal
+            in
+            { model = { model | searchMode = next }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = True
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         FromDateMsg m ->
@@ -691,8 +943,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | fromDateModel = dp, fromDate = nextDate }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = model.fromDate /= nextDate
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         UntilDateMsg m ->
@@ -710,8 +964,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | untilDateModel = dp, untilDate = nextDate }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = model.untilDate /= nextDate
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         FromDueDateMsg m ->
@@ -729,8 +985,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | fromDueDateModel = dp, fromDueDate = nextDate }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = model.fromDueDate /= nextDate
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         UntilDueDateMsg m ->
@@ -748,8 +1006,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | untilDueDateModel = dp, untilDueDate = nextDate }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = model.untilDueDate /= nextDate
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         SetName str ->
@@ -759,30 +1019,38 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | nameModel = next }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         SetTextSearch str ->
             { model = { model | textSearchModel = updateTextSearch str model.textSearchModel }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         SwapTextSearch ->
             if flags.config.fullTextSearchEnabled then
                 { model = { model | textSearchModel = swapTextSearch model.textSearchModel }
                 , cmd = Cmd.none
+                , sub = Sub.none
                 , stateChange = False
                 , dragDrop = DD.DragDropData ddm Nothing
+                , selectionChange = Data.ItemIds.noChange
                 }
 
             else
                 { model = model
                 , cmd = Cmd.none
+                , sub = Sub.none
                 , stateChange = False
                 , dragDrop = DD.DragDropData ddm Nothing
+                , selectionChange = Data.ItemIds.noChange
                 }
 
         SetFulltextSearch ->
@@ -790,15 +1058,19 @@ updateDrop ddm flags settings msg model =
                 Fulltext _ ->
                     { model = model
                     , cmd = Cmd.none
+                    , sub = Sub.none
                     , stateChange = False
                     , dragDrop = DD.DragDropData ddm Nothing
+                    , selectionChange = Data.ItemIds.noChange
                     }
 
                 Names s ->
                     { model = { model | textSearchModel = Fulltext s }
                     , cmd = Cmd.none
+                    , sub = Sub.none
                     , stateChange = False
                     , dragDrop = DD.DragDropData ddm Nothing
+                    , selectionChange = Data.ItemIds.noChange
                     }
 
         SetNamesSearch ->
@@ -806,29 +1078,37 @@ updateDrop ddm flags settings msg model =
                 Fulltext s ->
                     { model = { model | textSearchModel = Names s }
                     , cmd = Cmd.none
+                    , sub = Sub.none
                     , stateChange = False
                     , dragDrop = DD.DragDropData ddm Nothing
+                    , selectionChange = Data.ItemIds.noChange
                     }
 
                 Names _ ->
                     { model = model
                     , cmd = Cmd.none
+                    , sub = Sub.none
                     , stateChange = False
                     , dragDrop = DD.DragDropData ddm Nothing
+                    , selectionChange = Data.ItemIds.noChange
                     }
 
         KeyUpMsg (Just Enter) ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = True
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         KeyUpMsg _ ->
             { model = model
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         FolderSelectMsg lm ->
@@ -842,8 +1122,10 @@ updateDrop ddm flags settings msg model =
                     , selectedFolder = sel
                 }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = model.selectedFolder /= sel
             , dragDrop = ddd
+            , selectionChange = Data.ItemIds.noChange
             }
 
         CustomFieldMsg lm ->
@@ -857,9 +1139,11 @@ updateDrop ddm flags settings msg model =
                     , customValues = Data.CustomFieldChange.collectValues res.result model.customValues
                 }
             , cmd = Cmd.map CustomFieldMsg res.cmd
+            , sub = Sub.map CustomFieldMsg res.sub
             , stateChange =
                 Data.CustomFieldChange.isValueChange res.result
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         SetCustomField cv ->
@@ -885,8 +1169,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | sourceModel = next }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         ResetToSource str ->
@@ -903,8 +1189,10 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | openTabs = tabs }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
             }
 
         ToggleOpenAllAkkordionTabs ->
@@ -922,8 +1210,60 @@ updateDrop ddm flags settings msg model =
             in
             { model = { model | openTabs = next }
             , cmd = Cmd.none
+            , sub = Sub.none
             , stateChange = False
             , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        AllBookmarksResp (Ok bm) ->
+            { model = { model | allBookmarks = Comp.BookmarkChooser.init bm }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = model.allBookmarks /= Comp.BookmarkChooser.init bm
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        AllBookmarksResp (Err _) ->
+            { model = model
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = False
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        SelectBookmarkMsg lm ->
+            let
+                ( next, sel ) =
+                    Comp.BookmarkChooser.update lm model.allBookmarks model.selectedBookmarks
+            in
+            { model = { model | allBookmarks = next, selectedBookmarks = sel }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = sel /= model.selectedBookmarks || model.allBookmarks /= next
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        SetIncludeSelection flag ->
+            { model =
+                { model | includeSelection = flag }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = True
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.noChange
+            }
+
+        ClearSelection ->
+            { model = { model | includeSelection = False }
+            , cmd = Cmd.none
+            , sub = Sub.none
+            , stateChange = True
+            , dragDrop = DD.DragDropData ddm Nothing
+            , selectionChange = Data.ItemIds.clearAll
             }
 
 
@@ -931,20 +1271,27 @@ updateDrop ddm flags settings msg model =
 --- View2
 
 
-viewDrop2 : Texts -> DD.DragDropData -> Flags -> UiSettings -> Model -> Html Msg
-viewDrop2 texts ddd flags settings model =
+type alias ViewConfig =
+    { overrideTabLook : SearchTab -> Comp.Tabs.Look -> Comp.Tabs.Look
+    , selectedItems : ItemIds
+    }
+
+
+viewDrop2 : Texts -> DD.DragDropData -> Flags -> ViewConfig -> UiSettings -> Model -> Html Msg
+viewDrop2 texts ddd flags cfg settings model =
     let
         akkordionStyle =
             Comp.Tabs.searchMenuStyle
     in
     Comp.Tabs.akkordion
         akkordionStyle
-        (searchTabState settings model)
-        (searchTabs texts ddd flags settings model)
+        (searchTabState settings cfg model)
+        (searchTabs texts ddd flags settings cfg.selectedItems model)
 
 
 type SearchTab
     = TabInbox
+    | TabBookmarks
     | TabTags
     | TabTagCategories
     | TabFolder
@@ -955,11 +1302,14 @@ type SearchTab
     | TabDueDate
     | TabSource
     | TabDirection
+    | TabTrashed
+    | TabSelection
 
 
 allTabs : List SearchTab
 allTabs =
     [ TabInbox
+    , TabBookmarks
     , TabTags
     , TabTagCategories
     , TabFolder
@@ -970,6 +1320,8 @@ allTabs =
     , TabDueDate
     , TabSource
     , TabDirection
+    , TabTrashed
+    , TabSelection
     ]
 
 
@@ -978,6 +1330,9 @@ tabName tab =
     case tab of
         TabInbox ->
             "inbox"
+
+        TabBookmarks ->
+            "bookmarks"
 
         TabTags ->
             "tags"
@@ -1009,12 +1364,21 @@ tabName tab =
         TabDirection ->
             "direction"
 
+        TabTrashed ->
+            "trashed"
+
+        TabSelection ->
+            "selection"
+
 
 findTab : Comp.Tabs.Tab msg -> Maybe SearchTab
 findTab tab =
     case tab.name of
         "inbox" ->
             Just TabInbox
+
+        "bookmarks" ->
+            Just TabBookmarks
 
         "tags" ->
             Just TabTags
@@ -1046,81 +1410,159 @@ findTab tab =
         "direction" ->
             Just TabDirection
 
+        "trashed" ->
+            Just TabTrashed
+
+        "selection" ->
+            Just TabSelection
+
         _ ->
             Nothing
 
 
-searchTabState : UiSettings -> Model -> Comp.Tabs.Tab Msg -> ( Comp.Tabs.State, Msg )
-searchTabState settings model tab =
+tabLook : UiSettings -> ItemIds -> Model -> SearchTab -> Comp.Tabs.Look
+tabLook settings selectedItems model tab =
     let
         isHidden f =
             Data.UiSettings.fieldHidden settings f
 
-        hidden =
-            case findTab tab of
-                Just TabTags ->
-                    isHidden Data.Fields.Tag
-
-                Just TabTagCategories ->
-                    isHidden Data.Fields.Tag
-
-                Just TabFolder ->
-                    isHidden Data.Fields.Folder
-
-                Just TabCorrespondent ->
-                    isHidden Data.Fields.CorrOrg && isHidden Data.Fields.CorrPerson
-
-                Just TabConcerning ->
-                    isHidden Data.Fields.ConcEquip && isHidden Data.Fields.ConcPerson
-
-                Just TabCustomFields ->
-                    isHidden Data.Fields.CustomFields
-                        || Comp.CustomFieldMultiInput.isEmpty model.customFieldModel
-
-                Just TabDate ->
-                    isHidden Data.Fields.Date
-
-                Just TabDueDate ->
-                    isHidden Data.Fields.DueDate
-
-                Just TabSource ->
-                    isHidden Data.Fields.SourceName
-
-                Just TabDirection ->
-                    isHidden Data.Fields.Direction
-
-                Just TabInbox ->
-                    False
-
-                Nothing ->
-                    False
-
-        state =
-            if hidden then
+        hiddenOr fields default =
+            if List.all isHidden fields then
                 Comp.Tabs.Hidden
 
-            else if Set.member tab.name model.openTabs then
+            else
+                default
+
+        activeWhen flag =
+            if flag then
+                Comp.Tabs.Active
+
+            else
+                Comp.Tabs.Normal
+
+        activeWhenNotEmpty list1 list2 =
+            if List.isEmpty list1 && List.isEmpty list2 then
+                Comp.Tabs.Normal
+
+            else
+                Comp.Tabs.Active
+
+        activeWhenNotEmptySet list1 list2 =
+            if Set.isEmpty list1 && Set.isEmpty list2 then
+                Comp.Tabs.Normal
+
+            else
+                Comp.Tabs.Active
+
+        activeWhenJust mx =
+            if mx == Nothing then
+                Comp.Tabs.Normal
+
+            else
+                Comp.Tabs.Active
+    in
+    case tab of
+        TabInbox ->
+            activeWhen model.inboxCheckbox
+
+        TabBookmarks ->
+            if Comp.BookmarkChooser.isEmpty model.allBookmarks then
+                Comp.Tabs.Hidden
+
+            else if not <| Comp.BookmarkChooser.isEmptySelection model.selectedBookmarks then
+                Comp.Tabs.Active
+
+            else
+                Comp.Tabs.Normal
+
+        TabTags ->
+            hiddenOr [ Data.Fields.Tag ]
+                (activeWhenNotEmptySet model.tagSelection.includeTags model.tagSelection.excludeTags)
+
+        TabTagCategories ->
+            hiddenOr [ Data.Fields.Tag ]
+                (activeWhenNotEmptySet model.tagSelection.includeCats model.tagSelection.excludeCats)
+
+        TabFolder ->
+            hiddenOr [ Data.Fields.Folder ]
+                (activeWhenJust model.selectedFolder)
+
+        TabCorrespondent ->
+            hiddenOr [ Data.Fields.CorrOrg, Data.Fields.CorrPerson ] <|
+                activeWhenNotEmpty (Comp.Dropdown.getSelected model.orgModel)
+                    (Comp.Dropdown.getSelected model.corrPersonModel)
+
+        TabConcerning ->
+            hiddenOr [ Data.Fields.ConcPerson, Data.Fields.ConcEquip ] <|
+                activeWhenNotEmpty (Comp.Dropdown.getSelected model.concPersonModel)
+                    (Comp.Dropdown.getSelected model.concEquipmentModel)
+
+        TabDate ->
+            hiddenOr [ Data.Fields.Date ] <|
+                activeWhenJust (Util.Maybe.or [ model.fromDate, model.untilDate ])
+
+        TabDueDate ->
+            hiddenOr [ Data.Fields.DueDate ] <|
+                activeWhenJust (Util.Maybe.or [ model.fromDueDate, model.untilDueDate ])
+
+        TabSource ->
+            hiddenOr [ Data.Fields.SourceName ] <|
+                activeWhenJust model.sourceModel
+
+        TabDirection ->
+            hiddenOr [ Data.Fields.Direction ] <|
+                activeWhenNotEmpty (Comp.Dropdown.getSelected model.directionModel) []
+
+        TabTrashed ->
+            activeWhen (model.searchMode == Data.SearchMode.Trashed)
+
+        TabSelection ->
+            if Data.ItemIds.isEmpty selectedItems then
+                Comp.Tabs.Hidden
+
+            else if model.includeSelection then
+                Comp.Tabs.Active
+
+            else
+                Comp.Tabs.Normal
+
+        _ ->
+            Comp.Tabs.Normal
+
+
+searchTabState : UiSettings -> ViewConfig -> Model -> Comp.Tabs.Tab Msg -> ( Comp.Tabs.State, Msg )
+searchTabState settings cfg model tab =
+    let
+        searchTab =
+            findTab tab
+
+        folded =
+            if Set.member tab.name model.openTabs then
                 Comp.Tabs.Open
 
             else
                 Comp.Tabs.Closed
+
+        state =
+            { folded = folded
+            , look =
+                Maybe.map (\t -> tabLook settings cfg.selectedItems model t |> cfg.overrideTabLook t) searchTab
+                    |> Maybe.withDefault Comp.Tabs.Normal
+            }
     in
     ( state, ToggleAkkordionTab tab.name )
 
 
-searchTabs : Texts -> DD.DragDropData -> Flags -> UiSettings -> Model -> List (Comp.Tabs.Tab Msg)
-searchTabs texts ddd flags settings model =
+searchTabs : Texts -> DD.DragDropData -> Flags -> UiSettings -> ItemIds -> Model -> List (Comp.Tabs.Tab Msg)
+searchTabs texts ddd flags settings selectedItems model =
     let
         isHidden f =
             Data.UiSettings.fieldHidden settings f
 
-        tagSelectWM =
-            Comp.TagSelect.makeWorkModel model.tagSelection model.tagSelectModel
-
         directionCfg =
             { makeOption =
                 \entry ->
-                    { text = Data.Direction.toString entry
+                    { text = texts.direction entry
                     , additional = ""
                     }
             , placeholder = texts.chooseDirection
@@ -1154,50 +1596,47 @@ searchTabs texts ddd flags settings model =
                     , label = texts.inbox
                     , tagger = \_ -> ToggleInbox
                     }
-            , div [ class "mt-2 hidden" ]
-                [ label [ class S.inputLabel ]
-                    [ text
-                        (case model.textSearchModel of
-                            Fulltext _ ->
-                                texts.fulltextSearch
-
-                            Names _ ->
-                                texts.searchInNames
-                        )
-                    , a
-                        [ classList
-                            [ ( "hidden", not flags.config.fullTextSearchEnabled )
-                            ]
-                        , class "float-right"
-                        , class S.link
-                        , href "#"
-                        , onClick SwapTextSearch
-                        , title texts.switchSearchModes
-                        ]
-                        [ i [ class "fa fa-exchange-alt" ] []
-                        ]
+            ]
+      }
+    , { name = tabName TabBookmarks
+      , title = texts.bookmarks
+      , titleRight = []
+      , info = Nothing
+      , body =
+            [ Html.map SelectBookmarkMsg
+                (Comp.BookmarkChooser.view texts.bookmarkChooser model.allBookmarks model.selectedBookmarks)
+            ]
+      }
+    , { name = tabName TabSelection
+      , title = texts.selection
+      , titleRight =
+            [ span [ class "flex items-center rounded-full bg-blue-100 dark:bg-sky-600 text-xs  px-2 py-0.5 " ]
+                [ text (String.fromInt (Data.ItemIds.size selectedItems)) ]
+            ]
+      , info = Nothing
+      , body =
+            [ div [ class "flex flex-col ml-1" ]
+                [ a
+                    [ class "flex flex-row items-center"
+                    , class "rounded px-1 py-1 hover:bg-blue-100 dark:hover:bg-slate-600"
+                    , href "#"
+                    , Html.Events.onClick (SetIncludeSelection (not model.includeSelection))
                     ]
-                , input
-                    [ type_ "text"
-                    , onInput SetTextSearch
-                    , Util.Html.onKeyUpCode KeyUpMsg
-                    , textSearchString model.textSearchModel |> Maybe.withDefault "" |> value
-                    , case model.textSearchModel of
-                        Fulltext _ ->
-                            placeholder texts.contentSearch
+                    [ if model.includeSelection then
+                        i [ class "fa fa-check mr-2" ] []
 
-                        Names _ ->
-                            placeholder texts.searchInNamesPlaceholder
-                    , class S.textInputSidebar
+                      else
+                        i [ class "fa fa-list-check mr-2" ] []
+                    , text texts.showSelection
                     ]
-                    []
-                , span [ class "opacity-50 text-sm" ]
-                    [ case model.textSearchModel of
-                        Fulltext _ ->
-                            text texts.fulltextSearchInfo
-
-                        Names _ ->
-                            text texts.nameSearchInfo
+                , a
+                    [ class "flex flex-row items-center"
+                    , class "rounded px-1 py-1 hover:bg-blue-100 dark:hover:bg-slate-600"
+                    , href "#"
+                    , Html.Events.onClick ClearSelection
+                    ]
+                    [ i [ class "fa fa-times mr-2" ] []
+                    , text texts.clearSelection
                     ]
                 ]
             ]
@@ -1208,11 +1647,11 @@ searchTabs texts ddd flags settings model =
       , info = Nothing
       , body =
             List.map (Html.map TagSelectMsg)
-                (Comp.TagSelect.viewTagsDrop2
+                (Comp.TagSelect.viewTags
                     texts.tagSelect
                     ddd.model
-                    tagSelectWM
                     settings
+                    model.tagSelection
                     model.tagSelectModel
                 )
       }
@@ -1222,9 +1661,10 @@ searchTabs texts ddd flags settings model =
       , info = Nothing
       , body =
             [ Html.map TagSelectMsg
-                (Comp.TagSelect.viewCats2
+                (Comp.TagSelect.viewCats
+                    texts.tagSelect
                     settings
-                    tagSelectWM
+                    model.tagSelection
                     model.tagSelectModel
                 )
             ]
@@ -1235,7 +1675,8 @@ searchTabs texts ddd flags settings model =
       , info = Nothing
       , body =
             [ Html.map FolderSelectMsg
-                (Comp.FolderSelect.viewDrop2 ddd.model
+                (Comp.FolderSelect.viewDrop2 texts.folderSelect
+                    ddd.model
                     settings.searchMenuFolderCount
                     model.folderList
                 )
@@ -1436,6 +1877,20 @@ searchTabs texts ddd flags settings model =
                     settings
                     model.directionModel
                 )
+            ]
+      }
+    , { name = tabName TabTrashed
+      , title = texts.trashcan
+      , titleRight = []
+      , info = Nothing
+      , body =
+            [ MB.viewItem <|
+                MB.Checkbox
+                    { id = "trashed"
+                    , value = model.searchMode == Data.SearchMode.Trashed
+                    , label = texts.trashcan
+                    , tagger = \_ -> ToggleSearchMode
+                    }
             ]
       }
     ]

@@ -131,12 +131,12 @@ page](@/docs/webapp/customfields.md) for more information.
 
 An important setting is the language of your documents. This helps OCR
 and text analysis. You can select between various languages. The
-language can also specified with each [upload
-request](@/docs/api/upload.md).
+language can also be specified with each [upload
+request](@/docs/api/upload.md) using ISO 639-3 codes (e.g. `eng`,
+`deu`) or ISO 639-1 (e.g. `en`, `de`).
 
 Go to the *Collective Settings* page and click *Document
-Language*. This will set the lanugage for all your documents. It is
-not (yet) possible to specify it when uploading.
+Language*. This will set the language for all your documents.
 
 The language has effects in several areas: text extraction, fulltext
 search and text analysis. When extracting text from images, tesseract
@@ -147,11 +147,11 @@ experience. The features of text analysis strongly depend on the
 language. Docspell uses the [Stanford NLP
 Library](https://nlp.stanford.edu/software/) for its great machine
 learning algorithms. Some of them, like certain NLP features, are only
-available for some languages – namely German, English and French. The
-reason is that the required statistical models are not available for
-other languages. However, docspell can still run other algorithms for
-the other languages, like classification and custom rules based on the
-address book.
+available for some languages – namely German, English, French and
+Spanish. The reason is that the required statistical models are not
+available for other languages. However, docspell can still run other
+algorithms for the other languages, like classification and custom
+rules based on the address book.
 
 More information about file processing and text analysis can be found
 [here](@/docs/joex/file-processing.md#text-analysis).

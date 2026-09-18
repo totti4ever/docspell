@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -6,8 +12,8 @@ import docspell.common._
 import docspell.store.qb.DSL._
 import docspell.store.qb.{Condition, Select}
 
-/** A helper class combining information from `RTag` and `RTagItem`.
-  * This is not a "record", there is no corresponding table.
+/** A helper class combining information from `RTag` and `RTagItem`. This is not a
+  * "record", there is no corresponding table.
   */
 case class TagItemName(
     tagId: Ident,
@@ -20,7 +26,7 @@ case class TagItemName(
 
 object TagItemName {
   private val ti = RTagItem.as("ti")
-  private val t  = RTag.as("t")
+  private val t = RTag.as("t")
 
   private val taggedItems =
     from(t).innerJoin(ti, t.tid === ti.tagId)

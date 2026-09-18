@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.qb
 
 import cats.data.{NonEmptyList => Nel}
@@ -41,6 +47,12 @@ trait DSL extends DoobieMeta {
   def select(e: SelectExpr, es: SelectExpr*): Nel[SelectExpr] =
     Nel(e, es.toList)
 
+  def combineNel[A](e: Nel[A], more: Nel[A]*): Nel[A] =
+    Nel
+      .fromFoldable(more)
+      .map(tail => tail.prepend(e).flatMap(identity))
+      .getOrElse(e)
+
   def select(c: Column[_], cs: Column[_]*): Nel[SelectExpr] =
     Nel(c, cs.toList).map(col => SelectExpr.SelectColumn(col, None))
 
@@ -49,6 +61,9 @@ trait DSL extends DoobieMeta {
 
   def union(s1: Select, sn: Select*): Select =
     Select.Union(s1, sn.toVector)
+
+  def union(selects: Nel[Select]): Select =
+    Select.Union(selects.head, selects.tail.toVector)
 
   def intersect(s1: Select, sn: Select*): Select =
     Select.Intersect(s1, sn.toVector)
@@ -63,10 +78,10 @@ trait DSL extends DoobieMeta {
     FromExpr.From(sel, alias)
 
   def count(c: Column[_]): DBFunction =
-    DBFunction.Count(c, false)
+    DBFunction.Count(c, distinct = false)
 
   def countDistinct(c: Column[_]): DBFunction =
-    DBFunction.Count(c, true)
+    DBFunction.Count(c, distinct = true)
 
   def countAll: DBFunction =
     DBFunction.CountAll
@@ -106,6 +121,9 @@ trait DSL extends DoobieMeta {
 
   def concat(expr: SelectExpr, exprs: SelectExpr*): DBFunction =
     DBFunction.Concat(Nel.of(expr, exprs: _*))
+
+  def rawFunction(name: String, expr: SelectExpr, more: SelectExpr*): DBFunction =
+    DBFunction.Raw(name, Nel.of(expr, more: _*))
 
   def const[A](value: A)(implicit P: Put[A]): SelectExpr.SelectConstant[A] =
     SelectExpr.SelectConstant(value, None)
@@ -147,6 +165,15 @@ trait DSL extends DoobieMeta {
     if (cs.isEmpty) c
     else and(c, cs: _*)
 
+  implicit final class StringColumnOps(col: Column[String]) {
+    def lowerEq(value: String): Condition =
+      Condition.CompareVal(col, Operator.LowerEq, value.toLowerCase)
+
+    def like(value: String): Condition =
+      Condition.CompareVal(col, Operator.LowerLike, value.toLowerCase)
+
+  }
+
   implicit final class ColumnOps[A](col: Column[A]) {
     def s: SelectExpr =
       SelectExpr.SelectColumn(col, None)
@@ -176,13 +203,13 @@ trait DSL extends DoobieMeta {
     def ===(value: A)(implicit P: Put[A]): Condition =
       Condition.CompareVal(col, Operator.Eq, value)
 
-    def lowerEq(value: A)(implicit P: Put[A]): Condition =
+    def lowerEqA(value: A)(implicit P: Put[A]): Condition =
       Condition.CompareVal(col, Operator.LowerEq, value)
 
     def ====(value: String): Condition =
       Condition.CompareVal(col.cast[String], Operator.Eq, value)
 
-    def like(value: A)(implicit P: Put[A]): Condition =
+    def likeA(value: A)(implicit P: Put[A]): Condition =
       Condition.CompareVal(col, Operator.LowerLike, value)
 
     def likes(value: String): Condition =
@@ -206,20 +233,39 @@ trait DSL extends DoobieMeta {
     def in(subsel: Select): Condition =
       Condition.InSubSelect(col, subsel)
 
+    def >(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Gt, subsel)
+    def <(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Lt, subsel)
+    def >=(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Gte, subsel)
+    def <=(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Lte, subsel)
+    def ===(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Eq, subsel)
+    def !==(subsel: Select): Condition =
+      Condition.CompareSelect(col.s, Operator.Neq, subsel)
+
     def notIn(subsel: Select): Condition =
       in(subsel).negate
 
     def in(values: Nel[A])(implicit P: Put[A]): Condition =
-      Condition.InValues(col.s, values, false)
+      Condition.InValues(col.s, values, lower = false)
 
     def notIn(values: Nel[A])(implicit P: Put[A]): Condition =
       in(values).negate
 
-    def inLower(values: Nel[A])(implicit P: Put[A]): Condition =
-      Condition.InValues(col.s, values, true)
+    def inLower(values: Nel[String]): Condition =
+      Condition.InValues(col.s, values.map(_.toLowerCase), lower = true)
 
-    def notInLower(values: Nel[A])(implicit P: Put[A]): Condition =
-      Condition.InValues(col.s, values, true).negate
+    def inLowerA(values: Nel[A])(implicit P: Put[A]): Condition =
+      Condition.InValues(col.s, values, lower = true)
+
+    def notInLower(values: Nel[String]): Condition =
+      Condition.InValues(col.s, values.map(_.toLowerCase), lower = true).negate
+
+    def notInLowerA(values: Nel[A])(implicit P: Put[A]): Condition =
+      Condition.InValues(col.s, values, lower = true).negate
 
     def isNull: Condition =
       Condition.IsNull(col.s)
@@ -268,6 +314,12 @@ trait DSL extends DoobieMeta {
 
     def as(otherCol: Column[_]): SelectExpr =
       SelectExpr.SelectFun(dbf, Some(otherCol.name))
+
+    def asc: OrderBy =
+      OrderBy(SelectExpr.SelectFun(dbf, None), OrderBy.OrderType.Asc)
+
+    def desc: OrderBy =
+      OrderBy(SelectExpr.SelectFun(dbf, None), OrderBy.OrderType.Desc)
 
     def ===[A](value: A)(implicit P: Put[A]): Condition =
       Condition.CompareFVal(dbf.s, Operator.Eq, value)
@@ -330,7 +382,7 @@ trait DSL extends DoobieMeta {
       Condition.CompareFVal(sel, Operator.Neq, value)
 
     def in[A](values: Nel[A])(implicit P: Put[A]): Condition =
-      Condition.InValues(sel, values, false)
+      Condition.InValues(sel, values, lower = false)
   }
 }
 

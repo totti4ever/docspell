@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -13,31 +19,31 @@ import doobie.implicits._
 
 final case class RClassifierModel(
     id: Ident,
-    cid: Ident,
+    cid: CollectiveId,
     name: String,
-    fileId: Ident,
+    fileId: FileKey,
     created: Timestamp
 ) {}
 
 object RClassifierModel {
 
   def createNew[F[_]: Sync](
-      cid: Ident,
+      cid: CollectiveId,
       name: String,
-      fileId: Ident
+      fileId: FileKey
   ): F[RClassifierModel] =
     for {
-      id  <- Ident.randomId[F]
+      id <- Ident.randomId[F]
       now <- Timestamp.current[F]
     } yield RClassifierModel(id, cid, name, fileId, now)
 
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "classifier_model"
 
-    val id      = Column[Ident]("id", this)
-    val cid     = Column[Ident]("cid", this)
-    val name    = Column[String]("name", this)
-    val fileId  = Column[Ident]("file_id", this)
+    val id = Column[Ident]("id", this)
+    val cid = Column[CollectiveId]("coll_id", this)
+    val name = Column[String]("name", this)
+    val fileId = Column[FileKey]("file_id", this)
     val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](id, cid, name, fileId, created)
@@ -55,7 +61,7 @@ object RClassifierModel {
       fr"${v.id},${v.cid},${v.name},${v.fileId},${v.created}"
     )
 
-  def updateFile(coll: Ident, name: String, fid: Ident): ConnectionIO[Int] =
+  def updateFile(coll: CollectiveId, name: String, fid: FileKey): ConnectionIO[Int] =
     for {
       now <- Timestamp.current[ConnectionIO]
       n <- DML.update(
@@ -79,13 +85,16 @@ object RClassifierModel {
         0.pure[ConnectionIO]
     }
 
-  def findByName(cid: Ident, name: String): ConnectionIO[Option[RClassifierModel]] =
+  def findByName(
+      cid: CollectiveId,
+      name: String
+  ): ConnectionIO[Option[RClassifierModel]] =
     Select(select(T.all), from(T), T.cid === cid && T.name === name).build
       .query[RClassifierModel]
       .option
 
   def findAllByName(
-      cid: Ident,
+      cid: CollectiveId,
       names: NonEmptyList[String]
   ): ConnectionIO[List[RClassifierModel]] =
     Select(select(T.all), from(T), T.cid === cid && T.name.in(names)).build
@@ -93,7 +102,7 @@ object RClassifierModel {
       .to[List]
 
   def findAllByQuery(
-      cid: Ident,
+      cid: CollectiveId,
       nameQuery: String
   ): ConnectionIO[List[RClassifierModel]] =
     Select(select(T.all), from(T), T.cid === cid && T.name.like(nameQuery)).build

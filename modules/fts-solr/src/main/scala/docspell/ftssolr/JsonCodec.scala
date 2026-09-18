@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.ftssolr
 
 import cats.implicits._
@@ -11,18 +17,19 @@ import io.circe.syntax._
 trait JsonCodec {
 
   implicit def attachmentEncoder(implicit
-      enc: Encoder[Ident]
+      enc: Encoder[Ident],
+      encCid: Encoder[CollectiveId]
   ): Encoder[TextData.Attachment] =
     new Encoder[TextData.Attachment] {
       final def apply(td: TextData.Attachment): Json = {
         val cnt =
-          (Field.contentField(td.lang).name, Json.fromString(td.text.getOrElse("")))
+          (Field.contentField(td.language).name, Json.fromString(td.text.getOrElse("")))
 
         Json.fromFields(
           cnt :: List(
             (Field.id.name, enc(td.id)),
             (Field.itemId.name, enc(td.item)),
-            (Field.collectiveId.name, enc(td.collective)),
+            (Field.collectiveId.name, encCid(td.collective)),
             (Field.folderId.name, td.folder.getOrElse(Ident.unsafe("")).asJson),
             (Field.attachmentId.name, enc(td.attachId)),
             (Field.attachmentName.name, Json.fromString(td.name.getOrElse(""))),
@@ -33,13 +40,16 @@ trait JsonCodec {
       }
     }
 
-  implicit def itemEncoder(implicit enc: Encoder[Ident]): Encoder[TextData.Item] =
+  implicit def itemEncoder(implicit
+      enc: Encoder[Ident],
+      encCid: Encoder[CollectiveId]
+  ): Encoder[TextData.Item] =
     new Encoder[TextData.Item] {
       final def apply(td: TextData.Item): Json =
         Json.obj(
           (Field.id.name, enc(td.id)),
           (Field.itemId.name, enc(td.item)),
-          (Field.collectiveId.name, enc(td.collective)),
+          (Field.collectiveId.name, encCid(td.collective)),
           (Field.folderId.name, td.folder.getOrElse(Ident.unsafe("")).asJson),
           (Field.itemName.name, Json.fromString(td.name.getOrElse(""))),
           (Field.itemNotes.name, Json.fromString(td.notes.getOrElse(""))),
@@ -52,6 +62,37 @@ trait JsonCodec {
       ie: Encoder[TextData.Item]
   ): Encoder[TextData] =
     Encoder(_.fold(ae.apply, ie.apply))
+
+  implicit def versionDocEncoder: Encoder[VersionDoc] =
+    new Encoder[VersionDoc] {
+      final def apply(d: VersionDoc): Json =
+        Json.fromFields(
+          List(
+            (VersionDoc.Fields.id.name, d.id.asJson),
+            (
+              VersionDoc.Fields.currentVersion.name,
+              Map("set" -> d.currentVersion.asJson).asJson
+            )
+          )
+        )
+    }
+
+  implicit def decoderVersionDoc: Decoder[VersionDoc] =
+    new Decoder[VersionDoc] {
+      final def apply(c: HCursor): Decoder.Result[VersionDoc] =
+        for {
+          id <- c.get[String](VersionDoc.Fields.id.name)
+          version <- c.get[Int](VersionDoc.Fields.currentVersion.name)
+        } yield VersionDoc(id, version)
+    }
+
+  implicit def versionDocDecoder: Decoder[Option[VersionDoc]] =
+    new Decoder[Option[VersionDoc]] {
+      final def apply(c: HCursor): Decoder.Result[Option[VersionDoc]] =
+        c.downField("response")
+          .get[List[VersionDoc]]("docs")
+          .map(_.headOption)
+    }
 
   implicit def docIdResultsDecoder: Decoder[DocIdResult] =
     new Decoder[DocIdResult] {
@@ -69,10 +110,10 @@ trait JsonCodec {
     new Decoder[FtsResult] {
       final def apply(c: HCursor): Decoder.Result[FtsResult] =
         for {
-          qtime       <- c.downField("responseHeader").get[Duration]("QTime")
-          count       <- c.downField("response").get[Int]("numFound")
-          maxScore    <- c.downField("response").get[Double]("maxScore")
-          results     <- c.downField("response").get[List[FtsResult.ItemMatch]]("docs")
+          qtime <- c.downField("responseHeader").get[Duration]("QTime")
+          count <- c.downField("response").get[Int]("numFound")
+          maxScore <- c.downField("response").get[Double]("maxScore")
+          results <- c.downField("response").get[List[FtsResult.ItemMatch]]("docs")
           highlightng <- c.get[Map[Ident, Map[String, List[String]]]]("highlighting")
           highlight = highlightng.map(kv => kv._1 -> kv._2.values.flatten.toList)
         } yield FtsResult(qtime, count, maxScore, highlight, results)
@@ -83,10 +124,10 @@ trait JsonCodec {
       final def apply(c: HCursor): Decoder.Result[FtsResult.ItemMatch] =
         for {
           itemId <- c.get[Ident](Field.itemId.name)
-          id     <- c.get[Ident](Field.id.name)
-          coll   <- c.get[Ident](Field.collectiveId.name)
-          score  <- c.get[Double]("score")
-          md     <- decodeMatchData(c)
+          id <- c.get[Ident](Field.id.name)
+          coll <- c.get[CollectiveId](Field.collectiveId.name)
+          score <- c.get[Double]("score")
+          md <- decodeMatchData(c)
         } yield FtsResult.ItemMatch(id, itemId, coll, score, md)
     }
 
@@ -98,7 +139,7 @@ trait JsonCodec {
           md <-
             if ("attachment" == disc)
               for {
-                aId   <- c.get[Ident](Field.attachmentId.name)
+                aId <- c.get[Ident](Field.attachmentId.name)
                 aName <- c.get[String](Field.attachmentName.name)
               } yield FtsResult.AttachmentData(aId, aName)
             else Right(FtsResult.ItemData)
@@ -128,7 +169,7 @@ trait JsonCodec {
         val setter = List(
           td.name.map(n => (Field.attachmentName.name, Map("set" -> n.asJson).asJson)),
           td.text.map(txt =>
-            (Field.contentField(td.lang).name, Map("set" -> txt.asJson).asJson)
+            (Field.contentField(td.language).name, Map("set" -> txt.asJson).asJson)
           )
         ).flatten
         Json.fromFields(

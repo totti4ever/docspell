@@ -15,6 +15,7 @@ object Cmd {
   }
 
   def run(cmd: Seq[String], wd: File, logger: Logger): Unit = {
+    logger.info(s"Running ${cmd.mkString(" ")}")
     val res = Cmd.exec(cmd, Some(wd))
     logger.info(res.out)
     logger.error(res.err)
@@ -22,8 +23,14 @@ object Cmd {
   }
 
   def exec(cmd: Seq[String], wd: Option[File]): Result = {
+    val command =
+      sys.props.get("os.name") match {
+        case Some(name) if name.toLowerCase.startsWith("windows") =>
+          Seq("cmd", "/C") ++ cmd
+        case _ => cmd
+      }
     val capt = new Capture
-    val rc   = Process(cmd, wd).!(capt.logger)
+    val rc = Process(command, wd).!(capt.logger)
     Result(rc, capt.out.get.mkString("\n"), capt.err.get.mkString("\n"))
   }
 

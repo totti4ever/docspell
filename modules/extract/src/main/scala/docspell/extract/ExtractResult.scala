@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.extract
 
 import docspell.common.MimeType
@@ -14,14 +20,14 @@ object ExtractResult {
 
   case class UnsupportedFormat(mime: MimeType) extends ExtractResult {
     val textOption = None
-    val pdfMeta    = None
+    val pdfMeta = None
   }
   def unsupportedFormat(mt: MimeType): ExtractResult =
     UnsupportedFormat(mt)
 
   case class Failure(ex: Throwable) extends ExtractResult {
     val textOption = None
-    val pdfMeta    = None
+    val pdfMeta = None
   }
   def failure(ex: Throwable): ExtractResult =
     Failure(ex)

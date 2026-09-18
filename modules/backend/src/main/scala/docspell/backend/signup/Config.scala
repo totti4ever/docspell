@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.backend.signup
 
 import docspell.common.{Duration, Password}
@@ -35,7 +41,7 @@ object Config {
       Decoder.decodeString.emap(fromString)
   }
 
-  def open: Mode   = Mode.Open
+  def open: Mode = Mode.Open
   def invite: Mode = Mode.Invite
   def closed: Mode = Mode.Closed
 

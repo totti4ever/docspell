@@ -7,11 +7,13 @@ insert_anchor_links = "right"
 mktoc = true
 +++
 
+# File Processing
+
 When uploading a file, it is only saved to the database together with
-the given meta information. The file is not visible in the ui yet.
-Then joex takes the next such file (or files in case you uploaded
-many) and starts processing it. When processing finished, the item and
-its files will show up in the ui.
+the given meta information as a "job". The file is not visible in the
+ui yet. Then joex takes the next such job and starts processing it.
+When processing finished, the item and its files will show up in the
+ui.
 
 If an error occurs during processing, the item will be created
 anyways, so you can see it. Depending on the error, some information
@@ -78,7 +80,7 @@ line are required. As you see for `wkhtmltopdf` the page size is fixed
 to DIN A4. Other commands are configured like this as well.
 
 For the default values, please see the [configuration
-page](@/docs/configure/_index.md#joex).
+page](@/docs/configure/defaults.md#joex).
 
 ## Duplicate Check
 
@@ -249,8 +251,8 @@ machine/setup.
 Another limit is `max-image-size` which defines the size of an image
 in pixel (`width * height`) where processing is skipped.
 
-Then [ghostscript](http://pages.cs.wisc.edu/~ghost/) is used to
-extract single pages into image files and
+Then [ghostscript](https://www.ghostscript.com/) is used to extract
+single pages into image files and
 [unpaper](https://github.com/Flameeyes/unpaper) is used to optimize
 the images for ocr. Unpaper is optional, if it is not found, it is
 skipped, which may be a compromise on slow machines.
@@ -319,12 +321,12 @@ docspell.joex {
 }
 ```
 
-{% infobubble(mode="warning", title="Please note") %}
+{% warningbubble(title="Please note") %}
 
 When this is changed, you must re-generate all preview images. Check
 the api for this, there is an endpoint to regenerate all preview
-images for a collective. There is also a bash script provided in the
-`tools/` directory that can be used to call this endpoint.
+images for a collective. The [cli tool](../../tools/cli/) can be
+used for this.
 
 {% end %}
 
@@ -400,7 +402,7 @@ names etc. This also requires a statistical model, but this time for a
 whole language. These are also provided by [Stanford
 NLP](https://nlp.stanford.edu/software/), but not for all languages.
 So whether this can be used depends on the document language. Models
-exist for German, English and French currently.
+exist for German, English, French and Spanish currently.
 
 Then [Stanford NLP](https://nlp.stanford.edu/software/) also allows to
 run custom rules against a text. This can be used as a fallback for

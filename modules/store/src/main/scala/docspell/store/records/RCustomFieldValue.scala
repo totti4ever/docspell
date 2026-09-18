@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.NonEmptyList
@@ -20,10 +26,10 @@ object RCustomFieldValue {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "custom_field_value"
 
-    val id     = Column[Ident]("id", this)
+    val id = Column[Ident]("id", this)
     val itemId = Column[Ident]("item_id", this)
-    val field  = Column[Ident]("field", this)
-    val value  = Column[String]("field_value", this)
+    val field = Column[Ident]("field", this)
+    val value = Column[String]("field_value", this)
 
     val all = NonEmptyList.of[Column[_]](id, itemId, field, value)
   }

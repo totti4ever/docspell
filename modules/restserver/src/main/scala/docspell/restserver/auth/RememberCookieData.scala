@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.auth
 
 import docspell.backend.auth._
@@ -9,7 +15,7 @@ case class RememberCookieData(token: RememberToken) {
   def asString: String = token.asString
 
   def asCookie(config: Login.RememberMe, baseUrl: LenientUri): ResponseCookie = {
-    val sec  = baseUrl.scheme.exists(_.endsWith("s"))
+    val sec = baseUrl.scheme.exists(_.endsWith("s"))
     val path = baseUrl.path / "api" / "v1"
     ResponseCookie(
       name = RememberCookieData.cookieName,
@@ -18,7 +24,8 @@ case class RememberCookieData(token: RememberToken) {
       path = Some(path.asString),
       httpOnly = true,
       secure = sec,
-      maxAge = Some(config.valid.seconds)
+      maxAge = Some(config.valid.seconds),
+      sameSite = Some(SameSite.Strict)
     )
   }
 
@@ -33,7 +40,7 @@ object RememberCookieData {
 
   def fromCookie[F[_]](req: Request[F]): Option[String] =
     for {
-      header <- headers.Cookie.from(req.headers)
+      header <- req.headers.get[headers.Cookie]
       cookie <- header.values.toList.find(_.name == cookieName)
     } yield cookie.content
 

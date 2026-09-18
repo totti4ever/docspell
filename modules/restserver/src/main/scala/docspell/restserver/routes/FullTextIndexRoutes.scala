@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.restserver.routes
 
 import cats.effect._
@@ -15,7 +21,7 @@ import org.http4s.dsl.Http4sDsl
 
 object FullTextIndexRoutes {
 
-  def secured[F[_]: Effect](
+  def secured[F[_]: Async](
       cfg: Config,
       backend: BackendApp[F],
       user: AuthToken
@@ -27,13 +33,15 @@ object FullTextIndexRoutes {
 
       HttpRoutes.of { case POST -> Root / "reIndex" =>
         for {
-          res  <- backend.fulltext.reindexCollective(user.account).attempt
+          res <- backend.fulltext
+            .reindexCollective(user.account.collectiveId, user.account.userId.some)
+            .attempt
           resp <- Ok(Conversions.basicResult(res, "Full-text index will be re-created."))
         } yield resp
       }
     }
 
-  def admin[F[_]: Effect](cfg: Config, backend: BackendApp[F]): HttpRoutes[F] =
+  def admin[F[_]: Async](cfg: Config, backend: BackendApp[F]): HttpRoutes[F] =
     if (!cfg.fullTextSearch.enabled) notFound[F]
     else {
       val dsl = Http4sDsl[F]
@@ -41,12 +49,12 @@ object FullTextIndexRoutes {
 
       HttpRoutes.of { case POST -> Root / "reIndexAll" =>
         for {
-          res  <- backend.fulltext.reindexAll.attempt
+          res <- backend.fulltext.reindexAll.attempt
           resp <- Ok(Conversions.basicResult(res, "Full-text index will be re-created."))
         } yield resp
       }
     }
 
-  private def notFound[F[_]: Effect]: HttpRoutes[F] =
+  private def notFound[F[_]: Async]: HttpRoutes[F] =
     Responses.notFoundRoute[F]
 }

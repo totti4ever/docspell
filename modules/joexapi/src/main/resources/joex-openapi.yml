@@ -2,67 +2,92 @@ openapi: 3.0.0
 
 info:
   title: Docspell JOEX
-  version: 0.23.0-SNAPSHOT
+  version: 0.44.0-SNAPSHOT
+  description: |
+    This is the remote API to the job executor component of Docspell.
+    Docspell is a free document management system focused on small
+    groups or families.
+
+    The routes are not protected by the application. This api is meant
+    to be used by the server component of Docspell.
+  license:
+    name: AGPLv3
+    url: https://spdx.org/licenses/AGPL-3.0-or-later.html
 
 servers:
   - url: /api/v1
     description: Current host
 
+security: []
+
 paths:
   /api/info/version:
     get:
+      operationId: "info-version"
       tags: [ Api Info ]
       summary: Get basic information about this software.
       description: |
         Returns the version and project name and other properties of the build.
       responses:
+        422:
+          description: BadRequest
         200:
           description: Ok
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/VersionInfo"
-  /api/v1/notify:
+  /notify:
     post:
+      operationId: "v1-notify"
       tags: [ Job Executor ]
       summary: Notify the job executor.
       description: |
         Notifies the job executor to wake up and look for jobs in th queue.
       responses:
+        422:
+          description: BadRequest
         200:
           description: Ok
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/BasicResult"
-  /api/v1/running:
+  /running:
     get:
+      operationId: "v1-running"
       tags: [ Job Executor ]
       summary: Get a list of currently executing jobs.
       description: |
         Returns all jobs this executor is currently executing.
       responses:
+        422:
+          description: BadRequest
         200:
           description: Ok
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobList"
-  /api/v1/shutdownAndExit:
+  /shutdownAndExit:
     post:
+      operationId: "v1-shutdown-and-exit"
       tags: [ Job Executor ]
       summary: Stops this component and exits.
       description: |
         Gracefully stops the scheduler and also stops the process.
       responses:
+        422:
+          description: BadRequest
         200:
           description: Ok
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/BasicResult"
-  /api/v1/job/{id}:
+  /job/{id}:
     get:
+      operationId: "v1-job-by-id"
       tags: [ Current Jobs ]
       summary: Get a job by its id.
       description: |
@@ -70,14 +95,17 @@ paths:
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
+        422:
+          description: BadRequest
         200:
           description: Ok
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobAndLog"
-  /api/v1/job/{id}/cancel:
+  /job/{id}/cancel:
     post:
+      operationId: "v1-job-cancel"
       tags: [ Current Jobs ]
       summary: Request to cancel a running job.
       description: |
@@ -87,6 +115,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
+        422:
+          description: BadRequest
         200:
           description: Ok
           content:
@@ -94,8 +124,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/BasicResult"
 
+  /addon/config:
+    get:
+      operationId: "v1-addon-config-get"
+      tags: [ Addons ]
+      summary: What is supported running addons
+      description: |
+        Return what this joex supports when executing addons.
+      responses:
+        422:
+          description: BadRequest
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddonSupport"
+
 components:
   schemas:
+    AddonSupport:
+      description: |
+        How this joex supports executing addons.
+      required:
+        - nodeId
+        - runners
+      properties:
+        nodeId:
+          type: string
+          format: ident
+        runners:
+          type: array
+          items:
+            type: string
+            format: addon-runner-type
+            enum:
+              - nix-flake
+              - docker
+              - trivial
+
     JobAndLog:
       description: |
         Some more details about the job.

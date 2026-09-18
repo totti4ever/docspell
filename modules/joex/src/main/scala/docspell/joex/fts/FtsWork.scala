@@ -1,30 +1,41 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.joex.fts
 
 import cats._
 import cats.data.{Kleisli, NonEmptyList}
 import cats.implicits._
 
+import docspell.backend.fulltext.CreateIndex
 import docspell.common._
 import docspell.ftsclient._
 import docspell.joex.Config
-import docspell.joex.scheduler.Context
-import docspell.store.queries.{QAttachment, QItem}
+import docspell.logging.Logger
+import docspell.scheduler.Context
+import docspell.store.Store
 
 object FtsWork {
+  import syntax._
+
   def apply[F[_]](f: FtsContext[F] => F[Unit]): FtsWork[F] =
     Kleisli(f)
 
-  /** Runs all migration tasks unconditionally and inserts all data as last step. */
+  /** Runs migration tasks to re-create the index. */
   def reInitializeTasks[F[_]: Monad]: FtsWork[F] =
     FtsWork { ctx =>
-      val migrations =
-        ctx.fts.initialize.map(fm => fm.changeResult(_ => FtsMigration.Result.workDone))
-
+      val migrations = ctx.fts.initializeNew
       NonEmptyList.fromList(migrations) match {
         case Some(nel) =>
           nel
-            .map(fm => from[F](fm.task))
-            .append(insertAll[F](None))
+            .map(fm =>
+              log[F](_.debug(s"Apply (${fm.engine.id}): ${fm.description}")) ++ from[F](
+                fm.task
+              )
+            )
             .reduce(semigroup[F])
             .run(ctx)
         case None =>
@@ -32,8 +43,6 @@ object FtsWork {
       }
     }
 
-  /**
-    */
   def from[F[_]: FlatMap: Applicative](t: F[FtsMigration.Result]): FtsWork[F] =
     Kleisli.liftF(t).flatMap(transformResult[F])
 
@@ -65,48 +74,24 @@ object FtsWork {
   def log[F[_]](f: Logger[F] => F[Unit]): FtsWork[F] =
     FtsWork(ctx => f(ctx.logger))
 
-  def clearIndex[F[_]](coll: Option[Ident]): FtsWork[F] =
+  def clearIndex[F[_]: FlatMap](coll: Option[CollectiveId]): FtsWork[F] =
     coll match {
       case Some(cid) =>
-        FtsWork(ctx => ctx.fts.clear(ctx.logger, cid))
+        log[F](_.debug(s"Clearing index data for collective '${cid.value}'")) ++ FtsWork(
+          ctx => ctx.fts.clear(ctx.logger, cid)
+        )
       case None =>
-        FtsWork(ctx => ctx.fts.clearAll(ctx.logger))
+        log[F](_.debug("Clearing all index data!")) ++ FtsWork(ctx =>
+          ctx.fts.clearAll(ctx.logger)
+        )
     }
 
-  def insertAll[F[_]: FlatMap](coll: Option[Ident]): FtsWork[F] =
-    FtsWork
+  def insertAll[F[_]: FlatMap](coll: Option[CollectiveId]): FtsWork[F] =
+    log[F](_.info("Inserting all data to index")) ++ FtsWork
       .all(
         FtsWork(ctx =>
-          ctx.fts.indexData(
-            ctx.logger,
-            ctx.store
-              .transact(
-                QAttachment
-                  .allAttachmentMetaAndName(coll, ctx.cfg.migration.indexAllChunk)
-              )
-              .map(caa =>
-                TextData
-                  .attachment(
-                    caa.item,
-                    caa.id,
-                    caa.collective,
-                    caa.folder,
-                    caa.lang,
-                    caa.name,
-                    caa.content
-                  )
-              )
-          )
-        ),
-        FtsWork(ctx =>
-          ctx.fts.indexData(
-            ctx.logger,
-            ctx.store
-              .transact(QItem.allNameAndNotes(coll, ctx.cfg.migration.indexAllChunk * 5))
-              .map(nn =>
-                TextData.item(nn.id, nn.collective, nn.folder, Option(nn.name), nn.notes)
-              )
-          )
+          ctx.fulltext
+            .reIndexData(ctx.logger, coll, None, ctx.cfg.migration.indexAllChunk)
         )
       )
 
@@ -118,13 +103,15 @@ object FtsWork {
       def recoverWith(
           other: FtsWork[F]
       )(implicit ev: ApplicativeError[F, Throwable]): FtsWork[F] =
-        Kleisli(ctx => mt.run(ctx).onError({ case _ => other.run(ctx) }))
+        Kleisli(ctx => mt.run(ctx).onError { case _ => other.run(ctx) })
 
       def forContext(
           cfg: Config.FullTextSearch,
-          fts: FtsClient[F]
+          store: Store[F],
+          fts: FtsClient[F],
+          fulltext: CreateIndex[F]
       ): Kleisli[F, Context[F, _], Unit] =
-        mt.local(ctx => FtsContext(cfg, fts, ctx))
+        mt.local(ctx => FtsContext(cfg, store, fulltext, fts, ctx.logger))
     }
   }
 }

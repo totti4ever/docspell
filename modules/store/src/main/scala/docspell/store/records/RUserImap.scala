@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.store.records
 
 import cats.data.{NonEmptyList, OptionT}
@@ -54,7 +60,7 @@ object RUserImap {
   ): F[RUserImap] =
     for {
       now <- Timestamp.current[F]
-      id  <- Ident.randomId[F]
+      id <- Ident.randomId[F]
     } yield RUserImap(
       id,
       uid,
@@ -69,8 +75,8 @@ object RUserImap {
       now
     )
 
-  def fromAccount(
-      accId: AccountId,
+  def fromUser(
+      userId: Ident,
       name: Ident,
       imapHost: String,
       imapPort: Option[Int],
@@ -81,12 +87,11 @@ object RUserImap {
       imapOAuth2: Boolean
   ): OptionT[ConnectionIO, RUserImap] =
     for {
-      now  <- OptionT.liftF(Timestamp.current[ConnectionIO])
-      id   <- OptionT.liftF(Ident.randomId[ConnectionIO])
-      user <- OptionT(RUser.findByAccount(accId))
+      now <- OptionT.liftF(Timestamp.current[ConnectionIO])
+      id <- OptionT.liftF(Ident.randomId[ConnectionIO])
     } yield RUserImap(
       id,
-      user.uid,
+      userId,
       name,
       imapHost,
       imapPort,
@@ -101,17 +106,17 @@ object RUserImap {
   final case class Table(alias: Option[String]) extends TableDef {
     val tableName = "userimap"
 
-    val id            = Column[Ident]("id", this)
-    val uid           = Column[Ident]("uid", this)
-    val name          = Column[Ident]("name", this)
-    val imapHost      = Column[String]("imap_host", this)
-    val imapPort      = Column[Int]("imap_port", this)
-    val imapUser      = Column[String]("imap_user", this)
-    val imapPass      = Column[Password]("imap_password", this)
-    val imapSsl       = Column[SSLType]("imap_ssl", this)
+    val id = Column[Ident]("id", this)
+    val uid = Column[Ident]("uid", this)
+    val name = Column[Ident]("name", this)
+    val imapHost = Column[String]("imap_host", this)
+    val imapPort = Column[Int]("imap_port", this)
+    val imapUser = Column[String]("imap_user", this)
+    val imapPass = Column[Password]("imap_password", this)
+    val imapSsl = Column[SSLType]("imap_ssl", this)
     val imapCertCheck = Column[Boolean]("imap_certcheck", this)
-    val imapOAuth2    = Column[Boolean]("imap_oauth2", this)
-    val created       = Column[Timestamp]("created", this)
+    val imapOAuth2 = Column[Boolean]("imap_oauth2", this)
+    val created = Column[Timestamp]("created", this)
 
     val all = NonEmptyList.of[Column[_]](
       id,
@@ -165,12 +170,11 @@ object RUserImap {
   }
 
   private def findByAccount0(
-      accId: AccountId,
+      userId: Ident,
       nameQ: Option[String],
       exact: Boolean
   ): Query0[RUserImap] = {
     val m = RUserImap.as("m")
-    val u = RUser.as("u")
 
     val nameFilter =
       nameQ.map { str =>
@@ -180,36 +184,36 @@ object RUserImap {
 
     val sql = Select(
       select(m.all),
-      from(m).innerJoin(u, m.uid === u.uid),
-      u.cid === accId.collective && u.login === accId.user &&? nameFilter
+      from(m),
+      m.uid === userId &&? nameFilter
     ).orderBy(m.name).build
 
     sql.query[RUserImap]
   }
 
   def findByAccount(
-      accId: AccountId,
+      userId: Ident,
       nameQ: Option[String]
   ): ConnectionIO[Vector[RUserImap]] =
-    findByAccount0(accId, nameQ, false).to[Vector]
+    findByAccount0(userId, nameQ, exact = false).to[Vector]
 
-  def getByName(accId: AccountId, name: Ident): ConnectionIO[Option[RUserImap]] =
-    findByAccount0(accId, Some(name.id), true).option
+  def getByName(
+      userId: Ident,
+      name: Ident
+  ): ConnectionIO[Option[RUserImap]] =
+    findByAccount0(userId, Some(name.id), exact = true).option
 
-  def delete(accId: AccountId, connName: Ident): ConnectionIO[Int] = {
+  def delete(
+      userId: Ident,
+      connName: Ident
+  ): ConnectionIO[Int] = {
     val t = Table(None)
-    val u = RUser.as("u")
-    val subsel =
-      Select(select(u.uid), from(u), u.cid === accId.collective && u.login === accId.user)
 
     DML.delete(
       t,
-      t.uid.in(subsel) && t.name === connName
+      t.uid === userId && t.name === connName
     )
   }
-
-  def exists(accId: AccountId, name: Ident): ConnectionIO[Boolean] =
-    getByName(accId, name).map(_.isDefined)
 
   def exists(userId: Ident, connName: Ident): ConnectionIO[Boolean] = {
     val t = Table(None)

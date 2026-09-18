@@ -1,13 +1,20 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.analysis.nlp
 
 import docspell.analysis.Env
 import docspell.common.Language.NLPLanguage
 import docspell.common._
 import docspell.files.TestFiles
+import docspell.logging.TestLoggingConfig
 
 import munit._
 
-class BaseCRFAnnotatorSuite extends FunSuite {
+class BaseCRFAnnotatorSuite extends FunSuite with TestLoggingConfig {
 
   def annotate(language: NLPLanguage): String => Vector[NerLabel] =
     BasicCRFAnnotator.nerAnnotate(BasicCRFAnnotator.Cache.getAnnotator(language))

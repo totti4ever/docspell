@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Eike K. & Contributors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 package docspell.common
 
 import java.net.HttpURLConnection
@@ -6,7 +12,7 @@ import java.net.URLEncoder
 
 import cats.data.NonEmptyList
 import cats.effect.Resource
-import cats.effect.{Blocker, ContextShift, Sync}
+import cats.effect._
 import cats.implicits._
 import fs2.Stream
 
@@ -66,20 +72,21 @@ case class LenientUri(
         )
     }
 
-  def readURL[F[_]: Sync: ContextShift](
-      chunkSize: Int,
-      blocker: Blocker
-  ): Stream[F, Byte] =
+  def readURL[F[_]: Sync](chunkSize: Int): Stream[F, Byte] =
     Stream
       .emit(Either.catchNonFatal(new URL(asString)))
       .covary[F]
       .rethrow
       .flatMap(url =>
-        fs2.io.readInputStream(Sync[F].delay(url.openStream()), chunkSize, blocker, true)
+        fs2.io.readInputStream(
+          Sync[F].delay(url.openStream()),
+          chunkSize,
+          closeAfterUse = true
+        )
       )
 
-  def readText[F[_]: Sync: ContextShift](chunkSize: Int, blocker: Blocker): F[String] =
-    readURL[F](chunkSize, blocker).through(fs2.text.utf8Decode).compile.foldMonoid
+  def readText[F[_]: Sync](chunkSize: Int): F[String] =
+    readURL[F](chunkSize).through(fs2.text.utf8.decode).compile.foldMonoid
 
   def host: Option[String] =
     authority.map(a =>
@@ -94,12 +101,14 @@ case class LenientUri(
 
   def asString: String = {
     val schemePart = scheme.toList.mkString(":")
-    val authPart   = authority.map(a => s"//$a").getOrElse("")
-    val pathPart   = path.asString
-    val queryPart  = query.map(q => s"?$q").getOrElse("")
-    val fragPart   = fragment.map(f => s"#$f").getOrElse("")
+    val authPart = authority.map(a => s"//$a").getOrElse("")
+    val pathPart = path.asString
+    val queryPart = query.map(q => s"?$q").getOrElse("")
+    val fragPart = fragment.map(f => s"#$f").getOrElse("")
     s"$schemePart:$authPart$pathPart$queryPart$fragPart"
   }
+  override def toString(): String =
+    asString
 }
 
 object LenientUri {
@@ -113,31 +122,33 @@ object LenientUri {
   }
   case object RootPath extends Path {
     val segments = Nil
-    val isRoot   = true
-    val isEmpty  = false
+    val isRoot = true
+    val isEmpty = false
     def /(seg: String): Path =
-      NonEmptyPath(NonEmptyList.of(seg))
+      NonEmptyPath(NonEmptyList.of(seg), trailingSlash = false)
     def asString = "/"
   }
   case object EmptyPath extends Path {
     val segments = Nil
-    val isRoot   = false
-    val isEmpty  = true
+    val isRoot = false
+    val isEmpty = true
     def /(seg: String): Path =
-      NonEmptyPath(NonEmptyList.of(seg))
+      NonEmptyPath(NonEmptyList.of(seg), trailingSlash = false)
     def asString = ""
   }
-  case class NonEmptyPath(segs: NonEmptyList[String]) extends Path {
+  case class NonEmptyPath(segs: NonEmptyList[String], trailingSlash: Boolean)
+      extends Path {
     def segments = segs.toList
-    val isEmpty  = false
-    val isRoot   = false
+    val isEmpty = false
+    val isRoot = false
+    private val slashSuffix = if (trailingSlash) "/" else ""
     def /(seg: String): Path =
       copy(segs = segs.append(seg))
     def asString =
       segs.head match {
-        case "."  => segments.map(percentEncode).mkString("/")
-        case ".." => segments.map(percentEncode).mkString("/")
-        case _    => "/" + segments.map(percentEncode).mkString("/")
+        case "."  => segments.map(percentEncode).mkString("/") + slashSuffix
+        case ".." => segments.map(percentEncode).mkString("/") + slashSuffix
+        case _    => "/" + segments.map(percentEncode).mkString("/") + slashSuffix
       }
   }
 
@@ -152,14 +163,14 @@ object LenientUri {
       str.trim match {
         case "/" => Right(RootPath)
         case ""  => Right(EmptyPath)
-        case _ =>
+        case uriStr =>
           Either.fromOption(
-            stripLeading(str, '/')
+            stripLeading(uriStr, '/')
               .split('/')
               .toList
               .traverse(percentDecode)
               .flatMap(NonEmptyList.fromList)
-              .map(NonEmptyPath.apply),
+              .map(NonEmptyPath(_, uriStr.endsWith("/"))),
             s"Invalid path: $str"
           )
       }
@@ -212,7 +223,7 @@ object LenientUri {
           case -1 =>
             Left(s"No scheme found: $str")
           case n =>
-            val scheme              = makeScheme(p0.substring(0, n))
+            val scheme = makeScheme(p0.substring(0, n))
             val (path, query, frag) = splitPathQF(p0.substring(n + 1))
             scheme match {
               case None =>

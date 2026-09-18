@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ScanMailboxForm exposing
     ( Action(..)
     , Model
@@ -9,14 +16,12 @@ module Comp.ScanMailboxForm exposing
     )
 
 import Api
-import Api.Model.BasicResult exposing (BasicResult)
 import Api.Model.FolderItem exposing (FolderItem)
 import Api.Model.FolderList exposing (FolderList)
 import Api.Model.IdName exposing (IdName)
 import Api.Model.ImapSettingsList exposing (ImapSettingsList)
 import Api.Model.ScanMailboxSettings exposing (ScanMailboxSettings)
 import Api.Model.StringList exposing (StringList)
-import Api.Model.Tag exposing (Tag)
 import Api.Model.TagList exposing (TagList)
 import Comp.Basic as B
 import Comp.CalEventInput
@@ -26,12 +31,16 @@ import Comp.IntField
 import Comp.MenuBar as MB
 import Comp.StringListInput
 import Comp.Tabs
+import Comp.TagDropdown
 import Comp.YesNoDimmer
 import Data.CalEvent exposing (CalEvent)
 import Data.Direction exposing (Direction(..))
 import Data.DropdownStyle as DS
 import Data.Flags exposing (Flags)
+import Data.FolderOrder
 import Data.Language exposing (Language)
+import Data.TagOrder
+import Data.TimeZone exposing (TimeZone)
 import Data.UiSettings exposing (UiSettings)
 import Data.Validated exposing (Validated(..))
 import Html exposing (..)
@@ -43,11 +52,9 @@ import Messages.Comp.ScanMailboxForm exposing (Texts)
 import Messages.Data.Language
 import Set exposing (Set)
 import Styles as S
-import Util.Folder exposing (mkFolderOption)
-import Util.Http
+import Util.Folder
 import Util.List
 import Util.Maybe
-import Util.Tag
 import Util.Update
 
 
@@ -61,16 +68,17 @@ type alias Model =
     , targetFolder : Maybe String
     , foldersModel : Comp.StringListInput.Model
     , folders : List String
+    , scanRecursively : Bool
     , direction : Maybe Direction
-    , schedule : Validated CalEvent
+    , schedule : Maybe CalEvent
     , scheduleModel : Comp.CalEventInput.Model
-    , formMsg : Maybe BasicResult
+    , formState : FormState
     , loading : Int
     , yesNoDelete : Comp.YesNoDimmer.Model
     , folderModel : Comp.Dropdown.Model IdName
     , allFolders : List FolderItem
     , itemFolderId : Maybe String
-    , tagModel : Comp.Dropdown.Model Tag
+    , tagModel : Comp.TagDropdown.Model
     , existingTags : List String
     , fileFilter : Maybe String
     , subjectFilter : Maybe String
@@ -78,8 +86,21 @@ type alias Model =
     , language : Maybe Language
     , postHandleAll : Bool
     , summary : Maybe String
+    , attachmentsOnly : Bool
     , openTabs : Set String
     }
+
+
+type FormState
+    = FormStateInitial
+    | FormStateHttpError Http.Error
+    | FormStateInvalid ValidateError
+
+
+type ValidateError
+    = ValidateNoProcessingFolders
+    | ValidateConnectionMissing
+    | ValidateCalEventInvalid
 
 
 type Action
@@ -136,12 +157,13 @@ type Msg
     | ReceivedHoursMsg Comp.IntField.Msg
     | SetTargetFolder String
     | FoldersMsg Comp.StringListInput.Msg
+    | ToggleScanRecursively
     | DirectionMsg (Maybe Direction)
     | YesNoDeleteMsg Comp.YesNoDimmer.Msg
     | GetFolderResp (Result Http.Error FolderList)
     | FolderDropdownMsg (Comp.Dropdown.Msg IdName)
     | GetTagResp (Result Http.Error TagList)
-    | TagDropdownMsg (Comp.Dropdown.Msg Tag)
+    | TagDropdownMsg Comp.TagDropdown.Msg
     | SetFileFilter String
     | SetSubjectFilter String
     | LanguageMsg (Comp.FixedDropdown.Msg Language)
@@ -149,6 +171,7 @@ type Msg
     | TogglePostHandleAll
     | ToggleAkkordionTab String
     | SetSummary String
+    | ToggleAttachmentsOnly
 
 
 initWith : Flags -> ScanMailboxSettings -> ( Model, Cmd Msg )
@@ -163,7 +186,7 @@ initWith flags s =
                 |> Maybe.withDefault []
 
         ( nm, _, nc ) =
-            update flags (ConnMsg (Comp.Dropdown.SetSelection imap)) im
+            update flags Data.TimeZone.utc (ConnMsg (Comp.Dropdown.SetSelection imap)) im
 
         newSchedule =
             Data.CalEvent.fromEvent s.schedule
@@ -179,13 +202,14 @@ initWith flags s =
         , receivedHours = s.receivedSinceHours
         , targetFolder = s.targetFolder
         , folders = s.folders
-        , schedule = Data.Validated.Unknown newSchedule
+        , scanRecursively = s.scanRecursively
+        , schedule = Just newSchedule
         , direction = Maybe.andThen Data.Direction.fromString s.direction
         , scheduleModel = sm
-        , formMsg = Nothing
+        , formState = FormStateInitial
         , yesNoDelete = Comp.YesNoDimmer.emptyModel
         , itemFolderId = s.itemFolder
-        , tagModel = Util.Tag.makeDropdownModel
+        , tagModel = Comp.TagDropdown.initWith [] []
         , existingTags =
             Maybe.map .items s.tags
                 |> Maybe.withDefault []
@@ -195,14 +219,15 @@ initWith flags s =
             Comp.FixedDropdown.init Data.Language.all
         , language = Maybe.andThen Data.Language.fromString s.language
         , postHandleAll = Maybe.withDefault False s.postHandleAll
+        , attachmentsOnly = Maybe.withDefault False s.attachmentsOnly
         , summary = s.summary
       }
     , Cmd.batch
         [ Api.getImapSettings flags "" ConnResp
         , nc
         , Cmd.map CalEventMsg sc
-        , Api.getFolders flags "" False GetFolderResp
-        , Api.getTags flags "" GetTagResp
+        , Api.getFolders flags "" Data.FolderOrder.NameAsc False GetFolderResp
+        , Api.getTags flags "" Data.TagOrder.NameAsc GetTagResp
         ]
     )
 
@@ -211,10 +236,10 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         initialSchedule =
-            Data.Validated.Valid Data.CalEvent.everyMonth
+            Data.CalEvent.everyMonth
 
-        sm =
-            Comp.CalEventInput.initDefault
+        ( sm, scmd ) =
+            Comp.CalEventInput.init flags initialSchedule
     in
     ( { settings = Api.Model.ScanMailboxSettings.empty
       , connectionModel = Comp.Dropdown.makeSingle
@@ -224,17 +249,18 @@ init flags =
       , receivedHoursModel = Comp.IntField.init (Just 1) Nothing True
       , foldersModel = Comp.StringListInput.init
       , folders = []
+      , scanRecursively = False
       , targetFolder = Nothing
       , direction = Nothing
-      , schedule = initialSchedule
+      , schedule = Just initialSchedule
       , scheduleModel = sm
-      , formMsg = Nothing
+      , formState = FormStateInitial
       , loading = 3
       , yesNoDelete = Comp.YesNoDimmer.emptyModel
       , folderModel = Comp.Dropdown.makeSingle
       , allFolders = []
       , itemFolderId = Nothing
-      , tagModel = Util.Tag.makeDropdownModel
+      , tagModel = Comp.TagDropdown.initWith [] []
       , existingTags = []
       , fileFilter = Nothing
       , subjectFilter = Nothing
@@ -243,12 +269,14 @@ init flags =
       , language = Nothing
       , postHandleAll = False
       , summary = Nothing
+      , attachmentsOnly = False
       , openTabs = Set.singleton (tabName TabGeneral)
       }
     , Cmd.batch
         [ Api.getImapSettings flags "" ConnResp
-        , Api.getFolders flags "" False GetFolderResp
-        , Api.getTags flags "" GetTagResp
+        , Api.getFolders flags "" Data.FolderOrder.NameAsc False GetFolderResp
+        , Api.getTags flags "" Data.TagOrder.NameAsc GetTagResp
+        , Cmd.map CalEventMsg scmd
         ]
     )
 
@@ -257,7 +285,7 @@ init flags =
 --- Update
 
 
-makeSettings : Model -> Validated ScanMailboxSettings
+makeSettings : Model -> Result ValidateError ScanMailboxSettings
 makeSettings model =
     let
         prev =
@@ -266,15 +294,23 @@ makeSettings model =
         conn =
             Comp.Dropdown.getSelected model.connectionModel
                 |> List.head
-                |> Maybe.map Valid
-                |> Maybe.withDefault (Invalid [ "Connection missing" ] "")
+                |> Maybe.map Ok
+                |> Maybe.withDefault (Err ValidateConnectionMissing)
 
         infolders =
             if model.folders == [] then
-                Invalid [ "No processing folders given" ] []
+                Err ValidateNoProcessingFolders
 
             else
-                Valid model.folders
+                Ok model.folders
+
+        schedule_ =
+            case model.schedule of
+                Just s ->
+                    Ok s
+
+                Nothing ->
+                    Err ValidateCalEventInvalid
 
         make imap timer folders =
             { prev
@@ -284,13 +320,14 @@ makeSettings model =
                 , deleteMail = model.deleteMail
                 , targetFolder = model.targetFolder
                 , folders = folders
-                , direction = Maybe.map Data.Direction.toString model.direction
+                , scanRecursively = model.scanRecursively
+                , direction = Maybe.map Data.Direction.asString model.direction
                 , schedule = Data.CalEvent.makeEvent timer
                 , itemFolder = model.itemFolderId
                 , fileFilter = model.fileFilter
                 , subjectFilter = model.subjectFilter
                 , tags =
-                    case Comp.Dropdown.getSelected model.tagModel of
+                    case Comp.TagDropdown.getSelected model.tagModel of
                         [] ->
                             Nothing
 
@@ -301,55 +338,44 @@ makeSettings model =
                 , language = Maybe.map Data.Language.toIso3 model.language
                 , postHandleAll = Just model.postHandleAll
                 , summary = model.summary
+                , attachmentsOnly = Just model.attachmentsOnly
             }
     in
-    Data.Validated.map3 make
-        conn
-        model.schedule
-        infolders
+    Result.map3 make conn schedule_ infolders
 
 
 withValidSettings : (ScanMailboxSettings -> Action) -> Model -> ( Model, Action, Cmd Msg )
 withValidSettings mkAction model =
     case makeSettings model of
-        Valid set ->
-            ( { model | formMsg = Nothing }
+        Ok set ->
+            ( { model | formState = FormStateInitial }
             , mkAction set
             , Cmd.none
             )
 
-        Invalid errs _ ->
-            let
-                errMsg =
-                    String.join ", " errs
-            in
-            ( { model | formMsg = Just (BasicResult False errMsg) }
-            , NoAction
-            , Cmd.none
-            )
-
-        Unknown _ ->
-            ( { model | formMsg = Just (BasicResult False "An unknown error occured") }
+        Err errs ->
+            ( { model | formState = FormStateInvalid errs }
             , NoAction
             , Cmd.none
             )
 
 
-update : Flags -> Msg -> Model -> ( Model, Action, Cmd Msg )
-update flags msg model =
+update : Flags -> TimeZone -> Msg -> Model -> ( Model, Action, Cmd Msg )
+update flags tz msg model =
     case msg of
         CalEventMsg lmsg ->
             let
                 ( cm, cc, cs ) =
                     Comp.CalEventInput.update flags
-                        (Data.Validated.value model.schedule)
+                        tz
+                        model.schedule
                         lmsg
                         model.scheduleModel
             in
             ( { model
                 | schedule = cs
                 , scheduleModel = cm
-                , formMsg = Nothing
+                , formState = FormStateInitial
               }
             , NoAction
             , Cmd.map CalEventMsg cc
@@ -362,7 +388,7 @@ update flags msg model =
             in
             ( { model
                 | connectionModel = cm
-                , formMsg = Nothing
+                , formState = FormStateInitial
               }
             , NoAction
             , Cmd.map ConnMsg cc
@@ -394,15 +420,12 @@ update flags msg model =
             ( { model
                 | connectionModel = cm
                 , loading = model.loading - 1
-                , formMsg =
+                , formState =
                     if names == [] then
-                        Just
-                            (BasicResult False
-                                "No E-Mail connections configured. Goto E-Mail Settings to add one."
-                            )
+                        FormStateInvalid ValidateConnectionMissing
 
                     else
-                        Nothing
+                        FormStateInitial
               }
             , NoAction
             , Cmd.none
@@ -410,7 +433,7 @@ update flags msg model =
 
         ConnResp (Err err) ->
             ( { model
-                | formMsg = Just (BasicResult False (Util.Http.errorToString err))
+                | formState = FormStateHttpError err
                 , loading = model.loading - 1
               }
             , NoAction
@@ -420,7 +443,7 @@ update flags msg model =
         ToggleEnabled ->
             ( { model
                 | enabled = not model.enabled
-                , formMsg = Nothing
+                , formState = FormStateInitial
               }
             , NoAction
             , Cmd.none
@@ -429,7 +452,7 @@ update flags msg model =
         ToggleDeleteMail ->
             ( { model
                 | deleteMail = not model.deleteMail
-                , formMsg = Nothing
+                , formState = FormStateInitial
               }
             , NoAction
             , Cmd.none
@@ -443,7 +466,7 @@ update flags msg model =
             ( { model
                 | receivedHoursModel = pm
                 , receivedHours = val
-                , formMsg = Nothing
+                , formState = FormStateInitial
               }
             , NoAction
             , Cmd.none
@@ -475,6 +498,12 @@ update flags msg model =
                 | foldersModel = fm
                 , folders = newList
               }
+            , NoAction
+            , Cmd.none
+            )
+
+        ToggleScanRecursively ->
+            ( { model | scanRecursively = not model.scanRecursively }
             , NoAction
             , Cmd.none
             )
@@ -569,8 +598,8 @@ update flags msg model =
                     ( a, NoAction, b )
             in
             Util.Update.andThen1
-                [ update flags (FolderDropdownMsg opts) >> removeAction
-                , update flags (FolderDropdownMsg (Comp.Dropdown.SetSelection sel)) >> removeAction
+                [ update flags tz (FolderDropdownMsg opts) >> removeAction
+                , update flags tz (FolderDropdownMsg (Comp.Dropdown.SetSelection sel)) >> removeAction
                 ]
                 model_
                 |> addNoAction
@@ -611,17 +640,9 @@ update flags msg model =
 
                 selected =
                     List.filter isExistingTag list.items
-                        |> Comp.Dropdown.SetSelection
 
-                opts =
-                    Comp.Dropdown.SetOptions list.items
-
-                ( tagModel_, tagcmd ) =
-                    Util.Update.andThen1
-                        [ Comp.Dropdown.update selected
-                        , Comp.Dropdown.update opts
-                        ]
-                        model.tagModel
+                tagModel_ =
+                    Comp.TagDropdown.initWith list.items selected
 
                 nextModel =
                     { model
@@ -631,7 +652,7 @@ update flags msg model =
             in
             ( nextModel
             , NoAction
-            , Cmd.map TagDropdownMsg tagcmd
+            , Cmd.none
             )
 
         GetTagResp (Err _) ->
@@ -643,7 +664,7 @@ update flags msg model =
         TagDropdownMsg lm ->
             let
                 ( m2, c2 ) =
-                    Comp.Dropdown.update lm model.tagModel
+                    Comp.TagDropdown.update lm model.tagModel
 
                 newModel =
                     { model | tagModel = m2 }
@@ -687,6 +708,12 @@ update flags msg model =
             , Cmd.none
             )
 
+        ToggleAttachmentsOnly ->
+            ( { model | attachmentsOnly = not model.attachmentsOnly }
+            , NoAction
+            , Cmd.none
+            )
+
         ToggleAkkordionTab name ->
             let
                 tabs =
@@ -714,15 +741,17 @@ update flags msg model =
 
 isFormError : Model -> Bool
 isFormError model =
-    Maybe.map .success model.formMsg
-        |> Maybe.map not
-        |> Maybe.withDefault False
+    case model.formState of
+        FormStateInitial ->
+            False
+
+        _ ->
+            True
 
 
 isFormSuccess : Model -> Bool
 isFormSuccess model =
-    Maybe.map .success model.formMsg
-        |> Maybe.withDefault False
+    not (isFormError model)
 
 
 isFolderMember : Model -> Bool
@@ -750,12 +779,22 @@ view2 texts flags extraClasses settings model =
                 , icon = Just "fa fa-play"
                 }
 
-        tabActive t =
+        tabLook t =
             if Set.member t.name model.openTabs then
-                ( Comp.Tabs.Open, ToggleAkkordionTab t.name )
+                { folded = Comp.Tabs.Open
+                , look = Comp.Tabs.Normal
+                }
 
             else
-                ( Comp.Tabs.Closed, ToggleAkkordionTab t.name )
+                { folded = Comp.Tabs.Closed
+                , look = Comp.Tabs.Normal
+                }
+
+        tabActive t =
+            ( tabLook t, ToggleAkkordionTab t.name )
+
+        isNew =
+            model.settings.id == ""
     in
     div
         [ class extraClasses
@@ -765,19 +804,24 @@ view2 texts flags extraClasses settings model =
             { start =
                 [ MB.PrimaryButton
                     { tagger = Submit
-                    , label = texts.basics.submit
-                    , title = texts.basics.submitThisForm
+                    , label = texts.save
+                    , title =
+                        if isNew then
+                            texts.saveNewTitle
+
+                        else
+                            texts.updateTitle
                     , icon = Just "fa fa-save"
                     }
                 , MB.SecondaryButton
                     { tagger = Cancel
-                    , label = texts.basics.cancel
+                    , label = texts.basics.back
                     , title = texts.basics.backToList
                     , icon = Just "fa fa-arrow-left"
                     }
                 ]
             , end =
-                if model.settings.id /= "" then
+                if not isNew then
                     [ startOnceBtn
                     , MB.DeleteButton
                         { tagger = RequestDelete
@@ -791,17 +835,30 @@ view2 texts flags extraClasses settings model =
                     [ startOnceBtn
                     ]
             , rootClasses = "mb-4"
+            , sticky = True
             }
         , div
             [ classList
                 [ ( S.successMessage, isFormSuccess model )
                 , ( S.errorMessage, isFormError model )
-                , ( "hidden", model.formMsg == Nothing )
+                , ( "hidden", model.formState == FormStateInitial )
                 ]
             ]
-            [ Maybe.map .message model.formMsg
-                |> Maybe.withDefault ""
-                |> text
+            [ case model.formState of
+                FormStateInitial ->
+                    text ""
+
+                FormStateHttpError err ->
+                    text (texts.httpError err)
+
+                FormStateInvalid ValidateConnectionMissing ->
+                    text texts.connectionMissing
+
+                FormStateInvalid ValidateNoProcessingFolders ->
+                    text texts.noProcessingFolders
+
+                FormStateInvalid ValidateCalEventInvalid ->
+                    text texts.invalidCalEvent
             ]
         , Comp.Tabs.akkordion
             Comp.Tabs.defaultStyle
@@ -915,6 +972,17 @@ viewGeneral2 texts settings model =
 viewProcessing2 : Texts -> Model -> List (Html Msg)
 viewProcessing2 texts model =
     [ div [ class "mb-4" ]
+        [ MB.viewItem <|
+            MB.Checkbox
+                { id = "scanmail-scan-recursively"
+                , value = model.scanRecursively
+                , label = texts.scanRecursivelyLabel
+                , tagger = \_ -> ToggleScanRecursively
+                }
+            , span [ class "opacity-50 text-sm mt-1" ]
+            [ Markdown.toHtml [] texts.scanRecursivelyInfo ]
+        ]
+    , div [ class "mb-4" ]
         [ label [ class S.inputLabel ]
             [ text texts.folders
             , B.inputRequired
@@ -961,6 +1029,18 @@ viewAdditionalFilter2 texts model =
             []
         , div [ class "opacity-50 text-sm" ]
             [ Markdown.toHtml [] texts.fileFilterInfo
+            ]
+        ]
+    , div [ class "mb-4" ]
+        [ MB.viewItem <|
+            MB.Checkbox
+                { id = "scanmail-attachments-only"
+                , value = model.attachmentsOnly
+                , label = texts.attachmentsOnlyLabel
+                , tagger = \_ -> ToggleAttachmentsOnly
+                }
+        , span [ class "opacity-50 text-sm mt-1" ]
+            [ Markdown.toHtml [] texts.attachmentsOnlyInfo
             ]
         ]
     , div
@@ -1106,16 +1186,17 @@ viewMetadata2 texts flags settings model =
                 ]
             , class S.message
             ]
-            [ Markdown.toHtml [] texts.folderOwnerWarning
+            [ Markdown.toHtml [] texts.basics.folderNotOwnerWarning
             ]
         ]
     , div [ class "mb-4" ]
         [ label [ class S.inputLabel ]
             [ text texts.basics.tags ]
         , Html.map TagDropdownMsg
-            (Comp.Dropdown.view2
-                (Util.Tag.tagSettings texts.basics.chooseTag DS.mainStyle)
+            (Comp.TagDropdown.view
+                texts.tagDropdown
                 settings
+                DS.mainStyle
                 model.tagModel
             )
         , div [ class "opacity-50 text-sm" ]
@@ -1172,7 +1253,7 @@ viewSchedule2 texts model =
             (Comp.CalEventInput.view2
                 texts.calEventInput
                 ""
-                (Data.Validated.value model.schedule)
+                model.schedule
                 model.scheduleModel
             )
         , span [ class "opacity-50 text-sm" ]

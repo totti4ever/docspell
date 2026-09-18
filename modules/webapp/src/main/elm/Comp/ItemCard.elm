@@ -1,3 +1,10 @@
+{-
+   Copyright 2020 Eike K. & Contributors
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+-}
+
+
 module Comp.ItemCard exposing
     ( Model
     , Msg
@@ -5,17 +12,19 @@ module Comp.ItemCard exposing
     , ViewConfig
     , init
     , update
-    , view2
+    , view
     )
 
-import Api
 import Api.Model.AttachmentLight exposing (AttachmentLight)
 import Api.Model.HighlightEntry exposing (HighlightEntry)
 import Api.Model.ItemLight exposing (ItemLight)
 import Comp.LinkTarget exposing (LinkTarget(..))
 import Data.Direction
 import Data.Fields
+import Data.Flags exposing (Flags)
 import Data.Icons as Icons
+import Data.ItemArrange exposing (ItemArrange)
+import Data.ItemIds exposing (ItemIdChange, ItemIds)
 import Data.ItemSelection exposing (ItemSelection)
 import Data.ItemTemplate as IT
 import Data.UiSettings exposing (UiSettings)
@@ -25,7 +34,6 @@ import Html.Events exposing (onClick)
 import Markdown
 import Messages.Comp.ItemCard exposing (Texts)
 import Page exposing (Page(..))
-import Set exposing (Set)
 import Styles as S
 import Util.CustomField
 import Util.ItemDragDrop as DD
@@ -41,22 +49,30 @@ type alias Model =
 
 type Msg
     = CyclePreview ItemLight
-    | ToggleSelectItem (Set String) String
+    | ToggleSelectItem ItemIds String
     | ItemDDMsg DD.Msg
     | SetLinkTarget LinkTarget
+    | ToggleRowOpen String
 
 
 type alias ViewConfig =
     { selection : ItemSelection
     , extraClasses : String
+    , previewUrl : AttachmentLight -> String
+    , previewUrlFallback : ItemLight -> String
+    , attachUrl : AttachmentLight -> String
+    , detailPage : ItemLight -> Page
+    , isRowOpen : Bool
+    , arrange : ItemArrange
     }
 
 
 type alias UpdateResult =
     { model : Model
     , dragModel : DD.Model
-    , selection : ItemSelection
+    , selection : ItemIdChange
     , linkTarget : LinkTarget
+    , toggleRow : Maybe String
     }
 
 
@@ -100,23 +116,22 @@ currentPosition model item =
 update : DD.Model -> Msg -> Model -> UpdateResult
 update ddm msg model =
     case msg of
+        ToggleRowOpen id ->
+            UpdateResult model ddm Data.ItemIds.noChange LinkNone (Just id)
+
         ItemDDMsg lm ->
             let
                 ddd =
                     DD.update lm ddm
             in
-            UpdateResult model ddd.model Data.ItemSelection.Inactive LinkNone
+            UpdateResult model ddd.model Data.ItemIds.noChange LinkNone Nothing
 
         ToggleSelectItem ids id ->
             let
                 newSet =
-                    if Set.member id ids then
-                        Set.remove id ids
-
-                    else
-                        Set.insert id ids
+                    Data.ItemIds.toggle ids id
             in
-            UpdateResult model ddm (Data.ItemSelection.Active newSet) LinkNone
+            UpdateResult model ddm newSet LinkNone Nothing
 
         CyclePreview item ->
             let
@@ -128,43 +143,345 @@ update ddm msg model =
             in
             UpdateResult { model | previewAttach = next }
                 ddm
-                Data.ItemSelection.Inactive
+                Data.ItemIds.noChange
                 LinkNone
+                Nothing
 
         SetLinkTarget target ->
-            UpdateResult model ddm Data.ItemSelection.Inactive target
+            UpdateResult model ddm Data.ItemIds.noChange target Nothing
 
 
 
 --- View2
 
 
-view2 : Texts -> ViewConfig -> UiSettings -> Model -> ItemLight -> Html Msg
-view2 texts cfg settings model item =
+view : Texts -> ViewConfig -> UiSettings -> Flags -> Model -> ItemLight -> Html Msg
+view texts cfg settings flags model item =
+    case cfg.arrange of
+        Data.ItemArrange.List ->
+            viewRow texts cfg settings flags model item
+
+        Data.ItemArrange.Cards ->
+            viewCard texts cfg settings flags model item
+
+
+viewRow : Texts -> ViewConfig -> UiSettings -> Flags -> Model -> ItemLight -> Html Msg
+viewRow texts cfg settings flags model item =
     let
-        isConfirmed =
-            item.state /= "created"
+        isCreated =
+            item.state == "created"
+
+        isDeleted =
+            item.state == "deleted"
 
         cardColor =
-            if not isConfirmed then
-                "text-blue-500 dark:text-lightblue-500"
+            if isCreated then
+                "text-blue-500 dark:text-sky-500"
+
+            else if isDeleted then
+                "text-red-600 dark:text-orange-600"
 
             else
                 ""
 
+        attachCount =
+            List.length item.attachments
+
+        rowOpen =
+            cfg.isRowOpen
+
+        mkAttachUrl attach =
+            Data.UiSettings.pdfUrl settings flags (cfg.attachUrl attach)
+
+        mainAttach =
+            currentAttachment model item
+
+        attachUrl =
+            Maybe.map mkAttachUrl mainAttach
+                |> Maybe.withDefault "/api/v1/sec/attachment/none"
+
         fieldHidden f =
             Data.UiSettings.fieldHidden settings f
 
-        cardAction =
-            case cfg.selection of
-                Data.ItemSelection.Inactive ->
-                    [ Page.href (ItemDetailPage item.id)
+        expandCollapseLink =
+            a
+                [ classList
+                    [ ( "my-auto flex text-lg w-4 text-left w-1 mr-2", not rowOpen )
+                    , ( "flex w-full block text-xl bg-gray-50 dark:bg-slate-700 mb-2 rounded ", rowOpen )
+                    , ( "invisible", isSelected cfg item.id )
                     ]
+                , href "#"
+                , onClick (ToggleRowOpen item.id)
+                ]
+                [ if rowOpen then
+                    i [ class "fa fa-caret-down pl-1" ] []
 
-                Data.ItemSelection.Active ids ->
-                    [ onClick (ToggleSelectItem ids item.id)
-                    , href "#"
+                  else
+                    i [ class "fa fa-caret-right" ] []
+                ]
+
+        titleTemplate =
+            settings.cardTitleTemplate.template
+
+        subtitleTemplate =
+            settings.cardSubtitleTemplate.template
+
+        dirIcon =
+            i
+                [ class (Data.Direction.iconFromMaybe2 item.direction)
+                , class "mr-2 w-4 text-center"
+                , classList [ ( "hidden", fieldHidden Data.Fields.Direction ) ]
+                , IT.render IT.direction (templateCtx texts) item |> title
+                ]
+                []
+
+        newIcon =
+            i
+                [ class "fa fa-exclamation-circle mr-1"
+                , class cardColor
+                , title texts.new
+                , classList [ ( "hidden", not isCreated ) ]
+                ]
+                []
+
+        trashIcon =
+            i
+                [ class Icons.trash
+                , class "mr-1"
+                , classList [ ( "hidden", not isDeleted ) ]
+                ]
+                []
+
+        dueDateLong =
+            IT.render IT.dueDateLong (templateCtx texts) item
+
+        selectedDimmer =
+            div
+                [ classList
+                    [ ( "hidden", not (isSelected cfg item.id) )
                     ]
+                , class S.dimmerRow
+                ]
+                [ div [ class "text-2xl font-bold text-blue-100 hover:text-blue-200 dark:text-sky-300 dark:hover:text-sky-200" ]
+                    [ a
+                        (mkCardAction texts cfg settings item)
+                        [ i [ class "fa fa-check-circle" ] []
+                        ]
+                    ]
+                ]
+
+        cardAction =
+            mkCardAction texts cfg settings item
+    in
+    div
+        ([ classList [ ( "border border-gray-800 border-dashed dark:border-sky-500", isMultiSelectMode cfg ) ]
+         , class "flex flex-col dark:border-slate-600 ds-item-row relative "
+         , class cfg.extraClasses
+         , id item.id
+         ]
+            ++ DD.draggable ItemDDMsg item.id
+        )
+        [ div
+            [ class "h-14 flex flex-row space-x-1 justify-items-start truncate"
+            , classList [ ( "hidden", rowOpen ) ]
+            ]
+            [ div [ class "flex flex-row mr-1" ]
+                [ expandCollapseLink
+                , div
+                    [ class "flex  pt-0.5 w-12"
+                    , classList [ ( "hidden", fieldHidden Data.Fields.PreviewImage ) ]
+                    ]
+                    [ previewImage2 texts cfg settings model item
+                    ]
+                ]
+            , div [ class "flex flex-grow flex-col truncate text-left" ]
+                [ div
+                    [ class "truncate w-full text-black dark:text-white pointer font-medium pt-1"
+                    ]
+                    [ trashIcon
+                    , newIcon
+                    , i
+                        [ class Icons.dueDate2
+                        , class "mr-1"
+                        , title (texts.dueOn ++ " " ++ dueDateLong)
+                        , classList [ ( "hidden", item.dueDate == Nothing ) ]
+                        ]
+                        []
+                    , a (href "#" :: cardAction)
+                        [ IT.render titleTemplate (templateCtx texts) item |> text
+                        ]
+                    , a
+                        [ classList [ ( "hidden", List.length item.attachments == 1 ) ]
+                        , class "ml-2 opacity-50 text-xs hover:opacity-75"
+                        , title texts.cycleAttachments
+                        , href "#"
+                        , onClick (CyclePreview item)
+                        ]
+                        [ currentPosition model item
+                            |> String.fromInt
+                            |> text
+                        , text "/"
+                        , text (attachCount |> String.fromInt)
+                        ]
+                    ]
+                , div
+                    [ class "opacity-75  truncate flex flex-row items-center text-sm -mt-1"
+                    , classList
+                        [ ( "hidden", IT.render subtitleTemplate (templateCtx texts) item == "" )
+                        ]
+                    ]
+                    [ div [ class "flex mr-2 flex-grow items-center" ]
+                        [ dirIcon
+                        , IT.render subtitleTemplate (templateCtx texts) item |> text
+                        ]
+                    , div [ class "opacity-90" ]
+                        [ mainTagsAndFields2 texts settings "flex truncate overflow-hidden flex-nowrap text-xs justify-start hidden md:flex" item
+                        ]
+                    ]
+                ]
+            , div [ class "flex items-end" ]
+                [ a
+                    [ class S.secondaryBasicButtonPlain
+                    , class "px-2 py-1 border rounded "
+                    , href attachUrl
+                    , target "_blank"
+                    , title texts.openAttachmentFile
+                    ]
+                    [ i [ class "fa fa-eye" ] []
+                    ]
+                , a
+                    [ class S.secondaryBasicButtonPlain
+                    , class "px-2 py-1 border rounded ml-2"
+                    , Page.href (cfg.detailPage item)
+                    , title texts.gotoDetail
+                    ]
+                    [ i [ class "fa fa-edit" ] []
+                    ]
+                ]
+            ]
+        , div
+            [ class "flex flex-col py-1"
+            , classList [ ( "hidden", not rowOpen ) ]
+            ]
+            [ expandCollapseLink
+            , div [ class "flex flex-col sm:flex-row ml-2" ]
+                [ div
+                    [ class "flex max-w-sm flex-col max-h-96 sm:max-h-full"
+                    , classList [ ( "hidden", fieldHidden Data.Fields.PreviewImage ) ]
+                    ]
+                    [ previewImage2 texts cfg settings model item
+                    , previewMenu2 texts settings flags cfg model item (currentAttachment model item)
+                    ]
+                , div [ class "flex flex-grow flex-col ml-2 text-base" ]
+                    [ h3 [ class "text-xl tracking-wide font-bold" ]
+                        [ newIcon
+                        , trashIcon
+                        , IT.render titleTemplate (templateCtx texts) item |> text
+                        ]
+                    , h4 [ class "opacity-75 font-normal mb-3" ]
+                        [ dirIcon
+                        , IT.render subtitleTemplate (templateCtx texts) item |> text
+                        ]
+                    , div [ class "space-y-1 mb-3" ]
+                        [ div
+                            [ classList
+                                [ ( "hidden"
+                                  , fieldHidden Data.Fields.CorrOrg
+                                        && fieldHidden Data.Fields.CorrPerson
+                                  )
+                                ]
+                            , title texts.basics.correspondent
+                            ]
+                            (Icons.correspondentIcon2 "mr-2 w-4 text-center"
+                                :: Comp.LinkTarget.makeCorrLink item [ ( "hover:opacity-75", True ) ] SetLinkTarget
+                            )
+                        , div
+                            [ classList
+                                [ ( "hidden"
+                                  , fieldHidden Data.Fields.ConcPerson
+                                        && fieldHidden Data.Fields.ConcEquip
+                                  )
+                                ]
+                            , title texts.basics.concerning
+                            ]
+                            (Icons.concernedIcon2 "mr-2 w-4 text-center"
+                                :: Comp.LinkTarget.makeConcLink item [ ( "hover:opacity-75", True ) ] SetLinkTarget
+                            )
+                        , div
+                            [ classList
+                                [ ( "hidden", fieldHidden Data.Fields.Folder )
+                                ]
+                            , class "hover:opacity-60"
+                            , title texts.basics.folder
+                            ]
+                            [ Icons.folderIcon "mr-2"
+                            , Comp.LinkTarget.makeFolderLink item
+                                [ ( "hover:opacity-60", True ) ]
+                                SetLinkTarget
+                            ]
+                        , div
+                            [ classList
+                                [ ( "hidden", fieldHidden Data.Fields.Date ) ]
+                            ]
+                            [ Icons.dateIcon2 "mr-2"
+                            , IT.render IT.dateLong (templateCtx texts) item
+                                |> Util.String.withDefault "-"
+                                |> text
+                            ]
+                        , div
+                            [ classList
+                                [ ( "hidden", fieldHidden Data.Fields.DueDate ) ]
+                            ]
+                            [ Icons.dueDateIcon2 "mr-2"
+                            , dueDateLong
+                                |> Util.String.withDefault "-"
+                                |> text
+                            ]
+                        , div
+                            [ classList
+                                [ ( "hidden", fieldHidden Data.Fields.SourceName ) ]
+                            ]
+                            [ Icons.sourceIcon2 "mr-2"
+                            , Comp.LinkTarget.makeSourceLink
+                                [ ( "hover:opacity-60", True ) ]
+                                SetLinkTarget
+                                (IT.render IT.source (templateCtx texts) item)
+                            ]
+                        ]
+                    , mainTagsAndFields2 texts settings "justify-start text-sm" item
+                    , notesContent2 settings item
+                    ]
+                ]
+            ]
+        , fulltextResultsContent2 item
+        , selectedDimmer
+        ]
+
+
+viewCard : Texts -> ViewConfig -> UiSettings -> Flags -> Model -> ItemLight -> Html Msg
+viewCard texts cfg settings flags model item =
+    let
+        isCreated =
+            item.state == "created"
+
+        isDeleted =
+            item.state == "deleted"
+
+        cardColor =
+            if isCreated then
+                "text-blue-500 dark:text-sky-500"
+
+            else if isDeleted then
+                "text-red-600 dark:text-orange-600"
+
+            else
+                ""
+
+        cardAction =
+            mkCardAction texts cfg settings item
+
+        fieldHidden f =
+            Data.UiSettings.fieldHidden settings f
 
         selectedDimmer =
             div
@@ -174,7 +491,7 @@ view2 texts cfg settings model item =
                 , class S.dimmerCard
                 , class "rounded-lg"
                 ]
-                [ div [ class "text-9xl text-blue-400 hover:text-blue-500 dark:text-lightblue-300 dark:hover:text-lightblue-200" ]
+                [ div [ class "text-9xl text-blue-400 hover:text-blue-500 dark:text-sky-300 dark:hover:text-sky-200" ]
                     [ a
                         cardAction
                         [ i [ class "fa fa-check-circle font-thin" ] []
@@ -186,8 +503,8 @@ view2 texts cfg settings model item =
         ([ class cfg.extraClasses
          , class "ds-item-card relative hover:shadow-lg rounded-lg flex flex-col break-all"
          , classList
-            [ ( "border border-gray-400 dark:border-bluegray-600 dark:hover:border-bluegray-500", not (isMultiSelectMode cfg) )
-            , ( "border-2 border-gray-800 border-dashed dark:border-lightblue-500", isMultiSelectMode cfg )
+            [ ( "border border-gray-400 dark:border-slate-600 dark:hover:border-slate-500", not (isMultiSelectMode cfg) )
+            , ( "border-2 border-gray-800 border-dashed dark:border-sky-500", isMultiSelectMode cfg )
             ]
          , id item.id
          ]
@@ -197,23 +514,50 @@ view2 texts cfg settings model item =
             []
 
           else
-            [ previewImage2 settings cardAction model item
+            [ previewImage2 texts cfg settings model item
             ]
          )
-            ++ [ mainContent2 texts cardAction cardColor isConfirmed settings cfg item
+            ++ [ mainContent2 texts cardAction cardColor isCreated isDeleted settings cfg item
                , metaDataContent2 texts settings item
                , notesContent2 settings item
                , fulltextResultsContent2 item
-               , previewMenu2 texts settings model item (currentAttachment model item)
+               , previewMenu2 texts settings flags cfg model item (currentAttachment model item)
                , selectedDimmer
                ]
         )
 
 
+mkCardAction : Texts -> ViewConfig -> UiSettings -> ItemLight -> List (Attribute Msg)
+mkCardAction texts cfg _ item =
+    case cfg.selection of
+        Data.ItemSelection.Inactive ->
+            case cfg.arrange of
+                Data.ItemArrange.List ->
+                    if cfg.isRowOpen then
+                        [ Page.href (cfg.detailPage item)
+                        , title texts.gotoDetail
+                        ]
+
+                    else
+                        [ onClick (ToggleRowOpen item.id)
+                        , href "#"
+                        ]
+
+                Data.ItemArrange.Cards ->
+                    [ Page.href (cfg.detailPage item)
+                    , title texts.gotoDetail
+                    ]
+
+        Data.ItemSelection.Active ids ->
+            [ onClick (ToggleSelectItem ids item.id)
+            , href "#"
+            ]
+
+
 fulltextResultsContent2 : ItemLight -> Html Msg
 fulltextResultsContent2 item =
     div
-        [ class "ds-card-search-hl flex flex-col text-sm px-2 bg-yellow-50 dark:bg-indigo-800 dark:bg-opacity-60 "
+        [ class "ds-card-search-hl flex flex-col text-sm px-2 bg-yellow-50 dark:bg-indigo-800 dark:bg-opacity-10 bg-opacity-50"
         , classList
             [ ( "hidden", item.highlighting == [] )
             ]
@@ -244,7 +588,7 @@ metaDataContent2 texts settings item =
                 , class "hover:opacity-60"
                 , title texts.basics.folder
                 ]
-                [ Icons.folderIcon2 "mr-2"
+                [ Icons.folderIcon "mr-2"
                 , Comp.LinkTarget.makeFolderLink item
                     [ ( "hover:opacity-60", True ) ]
                     SetLinkTarget
@@ -273,7 +617,7 @@ notesContent2 settings item =
                     || Util.String.isNothingOrBlank item.notes
               )
             ]
-        , class "px-2 py-2 border-t  dark:border-bluegray-600 opacity-50 text-sm"
+        , class "px-2 py-2 border-t  dark:border-slate-600 opacity-50 text-sm"
         ]
         [ Maybe.withDefault "" item.notes
             |> Util.String.ellipsis settings.itemSearchNoteLength
@@ -286,11 +630,12 @@ mainContent2 :
     -> List (Attribute Msg)
     -> String
     -> Bool
+    -> Bool
     -> UiSettings
     -> ViewConfig
     -> ItemLight
     -> Html Msg
-mainContent2 texts cardAction cardColor isConfirmed settings _ item =
+mainContent2 texts _ cardColor isCreated isDeleted settings _ item =
     let
         dirIcon =
             i
@@ -346,11 +691,21 @@ mainContent2 texts cardAction cardColor isConfirmed settings _ item =
             [ classList
                 [ ( "absolute right-1 top-1 text-4xl", True )
                 , ( cardColor, True )
-                , ( "hidden", isConfirmed )
+                , ( "hidden", not isCreated )
                 ]
             , title texts.new
             ]
             [ i [ class "ml-2 fa fa-exclamation-circle" ] []
+            ]
+        , div
+            [ classList
+                [ ( "absolute right-1 top-1 text-4xl", True )
+                , ( cardColor, True )
+                , ( "hidden", not isDeleted )
+                ]
+            , title texts.basics.deleted
+            ]
+            [ i [ class "ml-2 fa fa-trash-alt" ] []
             ]
         , div
             [ classList
@@ -362,13 +717,13 @@ mainContent2 texts cardAction cardColor isConfirmed settings _ item =
             , IT.render subtitlePattern (templateCtx texts) item |> text
             ]
         , div [ class "" ]
-            [ mainTagsAndFields2 settings item
+            [ mainTagsAndFields2 texts settings "justify-end text-xs" item
             ]
         ]
 
 
-mainTagsAndFields2 : UiSettings -> ItemLight -> Html Msg
-mainTagsAndFields2 settings item =
+mainTagsAndFields2 : Texts -> UiSettings -> String -> ItemLight -> Html Msg
+mainTagsAndFields2 texts settings extraCss item =
     let
         fieldHidden f =
             Data.UiSettings.fieldHidden settings f
@@ -409,38 +764,73 @@ mainTagsAndFields2 settings item =
 
             else
                 List.map showTag item.tags
+
+        renderRelated =
+            if List.isEmpty item.relatedItems then
+                []
+
+            else
+                [ a
+                    [ class "label ml-1 mt-1 font-semibold hover:opacity-75 py-1"
+                    , class "border-gray-500 dark:border-slate-300"
+                    , href "#"
+                    , onClick (SetLinkTarget <| Comp.LinkTarget.LinkRelatedItems (item.id :: item.relatedItems))
+                    , title texts.showRelatedItems
+                    ]
+                    [ i [ class "fa fa-link" ] []
+                    ]
+                ]
     in
     div
         [ classList
-            [ ( "flex flex-row items-center flex-wrap justify-end text-xs font-medium my-1", True )
-            , ( "hidden", hideTags && hideFields )
+            [ ( "flex flex-row items-center flex-wrap font-medium", True )
+            , ( "hidden", hideTags && hideFields && List.isEmpty item.relatedItems )
             ]
+        , class extraCss
         ]
-        (renderFields ++ renderTags)
+        (renderFields ++ renderTags ++ renderRelated)
 
 
-previewImage2 : UiSettings -> List (Attribute Msg) -> Model -> ItemLight -> Html Msg
-previewImage2 settings cardAction model item =
+previewImage2 : Texts -> ViewConfig -> UiSettings -> Model -> ItemLight -> Html Msg
+previewImage2 texts cfg settings model item =
     let
         mainAttach =
             currentAttachment model item
 
         previewUrl =
-            Maybe.map .id mainAttach
-                |> Maybe.map Api.attachmentPreviewURL
-                |> Maybe.withDefault (Api.itemBasePreviewURL item.id)
+            Maybe.map cfg.previewUrl mainAttach
+                |> Maybe.withDefault (cfg.previewUrlFallback item)
+
+        isCardView =
+            case cfg.arrange of
+                Data.ItemArrange.List ->
+                    False
+
+                Data.ItemArrange.Cards ->
+                    True
+
+        isRowOpen =
+            cfg.isRowOpen
+
+        isListView =
+            not isCardView
     in
     a
-        ([ class "overflow-hidden block bg-gray-50 dark:bg-bluegray-700 dark:bg-opacity-40  border-gray-400 dark:hover:border-bluegray-500 rounded-t-lg"
-         , class (Data.UiSettings.cardPreviewSize2 settings)
+        ([ class "overflow-hidden block bg-gray-50 dark:bg-slate-700 dark:bg-opacity-40  border-gray-400 dark:hover:border-slate-500 w-full"
+         , classList
+            [ ( "rounded-t-lg", isCardView )
+            , ( Data.UiSettings.cardPreviewSize2 settings, isCardView )
+            ]
          ]
-            ++ cardAction
+            ++ mkCardAction texts cfg settings item
         )
         [ img
-            [ class "preview-image mx-auto pt-1"
+            [ class "preview-image mx-auto"
             , classList
-                [ ( "rounded-t-lg w-full -mt-1", settings.cardPreviewFullWidth )
-                , ( Data.UiSettings.cardPreviewSize2 settings, not settings.cardPreviewFullWidth )
+                [ ( "rounded-t-lg w-full -mt-1", settings.cardPreviewFullWidth && isCardView )
+                , ( Data.UiSettings.cardPreviewSize2 settings, not settings.cardPreviewFullWidth && isCardView )
+                , ( "h-12", isListView && not isRowOpen )
+                , ( "border-t border-r border-l dark:border-slate-600", isListView && isRowOpen )
                 ]
             , src previewUrl
             ]
@@ -448,8 +838,8 @@ previewImage2 settings cardAction model item =
         ]
 
 
-previewMenu2 : Texts -> UiSettings -> Model -> ItemLight -> Maybe AttachmentLight -> Html Msg
-previewMenu2 texts settings model item mainAttach =
+previewMenu2 : Texts -> UiSettings -> Flags -> ViewConfig -> Model -> ItemLight -> Maybe AttachmentLight -> Html Msg
+previewMenu2 texts settings flags cfg model item mainAttach =
     let
         pageCount =
             Maybe.andThen .pageCount mainAttach
@@ -461,16 +851,11 @@ previewMenu2 texts settings model item mainAttach =
         fieldHidden f =
             Data.UiSettings.fieldHidden settings f
 
-        mkAttachUrl id =
-            if settings.nativePdfPreview then
-                Api.fileURL id
-
-            else
-                Api.fileURL id ++ "/view"
+        mkAttachUrl attach =
+            Data.UiSettings.pdfUrl settings flags (cfg.attachUrl attach)
 
         attachUrl =
-            Maybe.map .id mainAttach
-                |> Maybe.map mkAttachUrl
+            Maybe.map mkAttachUrl mainAttach
                 |> Maybe.withDefault "/api/v1/sec/attachment/none"
 
         dueDate =
@@ -485,14 +870,34 @@ previewMenu2 texts settings model item mainAttach =
                             || fieldHidden Data.Fields.DueDate
                       )
                     ]
-                , class "label font-semibold text-sm border-gray-300 dark:border-bluegray-600"
+                , class "label font-semibold text-sm border-gray-300 dark:border-slate-600"
                 , title (texts.dueOn ++ " " ++ dueDate)
                 ]
                 [ Icons.dueDateIcon2 "mr-2"
                 , text (" " ++ dueDate)
                 ]
+
+        isCardView =
+            case cfg.arrange of
+                Data.ItemArrange.List ->
+                    False
+
+                Data.ItemArrange.Cards ->
+                    True
+
+        isRowOpen =
+            cfg.isRowOpen
+
+        isListView =
+            not isCardView
     in
-    div [ class "px-2 py-1 flex flex-row flex-wrap bg-gray-50 dark:bg-bluegray-700 dark:bg-opacity-40 border-0 rounded-b-lg md:text-sm" ]
+    div
+        [ class "px-2 py-1 flex flex-row flex-wrap bg-gray-50 dark:bg-slate-700 dark:bg-opacity-40 rounded-b-lg md:text-sm"
+        , classList
+            [ ( "border-0", isCardView || not isRowOpen )
+            , ( "border-b border-l border-r dark:border-slate-600", isListView && isRowOpen )
+            ]
+        ]
         [ a
             [ class S.secondaryBasicButtonPlain
             , class "px-2 py-1 border rounded "
@@ -505,7 +910,7 @@ previewMenu2 texts settings model item mainAttach =
         , a
             [ class S.secondaryBasicButtonPlain
             , class "px-2 py-1 border rounded ml-2"
-            , Page.href (ItemDetailPage item.id)
+            , Page.href (cfg.detailPage item)
             , title texts.gotoDetail
             ]
             [ i [ class "fa fa-edit" ] []
@@ -514,7 +919,7 @@ previewMenu2 texts settings model item mainAttach =
             [ classList [ ( "hidden", attachCount > 1 && not (fieldHidden Data.Fields.PreviewImage) ) ]
             , class "ml-2"
             ]
-            [ div [ class "px-2 rounded border border-gray-300 dark:border-bluegray-600 py-1" ]
+            [ div [ class "px-2 rounded border border-gray-300 dark:border-slate-600 py-1" ]
                 [ text (String.fromInt pageCount)
                 , text "p."
                 ]
@@ -532,7 +937,7 @@ previewMenu2 texts settings model item mainAttach =
                 ]
                 [ i [ class "fa fa-arrow-right" ] []
                 ]
-            , div [ class "px-2 rounded-r border-t border-r border-b border-gray-500 dark:border-bluegray-500 py-1" ]
+            , div [ class "px-2 rounded-r border-t border-r border-b border-gray-500 dark:border-slate-500 py-1" ]
                 [ currentPosition model item
                     |> String.fromInt
                     |> text
@@ -564,7 +969,7 @@ renderHighlightEntry2 entry =
     in
     div [ class "content" ]
         (div [ class "font-semibold" ]
-            [ i [ class "fa fa-caret-right mr-1 " ] []
+            [ i [ class "fa fa-file font-thin mr-1 " ] []
             , text (entry.name ++ ":")
             ]
             :: List.map
@@ -584,7 +989,7 @@ isSelected : ViewConfig -> String -> Bool
 isSelected cfg id =
     case cfg.selection of
         Data.ItemSelection.Active ids ->
-            Set.member id ids
+            Data.ItemIds.isMember ids id
 
         Data.ItemSelection.Inactive ->
             False
